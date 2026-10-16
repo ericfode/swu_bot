@@ -29,7 +29,8 @@ that nobody else can write: on the games machine the folder is root's, root comp
 user only reads it. A cache this run cannot write is no error: what it compiled runs from memory (--warm fails).
 Run it with python3 -I, so nothing from the user's HOME or the environment loads into the process that runs the bot.
 
-Until the bot's first reply, this process and the threads wasmtime starts run on one CPU (not with SWU_WASM_PIN=off).
+On Linux, until the bot's first reply, this process and the threads wasmtime starts run on one CPU (not with
+SWU_WASM_PIN=off).
 wasmtime hands every WASI file call to a thread of its pool and waits for it, and in a VM a hand-off to another CPU
 costs about eight times one on the same CPU: a bot that reads the card data at start (2,479 files) took 4.3 s to its
 first reply, 1.1 s pinned. Its first reply puts every thread back on all the CPUs it had.
@@ -314,7 +315,7 @@ def main():
 
 def pin_to_current_cpu():
     """Puts this thread on the one CPU it runs on; returns the CPUs it had, or None when it stays as it is."""
-    if os.environ.get("SWU_WASM_PIN") == "off":
+    if os.environ.get("SWU_WASM_PIN") == "off" or not hasattr(os, "sched_setaffinity"):  # Linux only
         return None
     try:
         cpus = os.sched_getaffinity(0)
