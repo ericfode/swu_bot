@@ -9,6 +9,8 @@ COPY . .
 RUN node app/build.mjs --public --shell --data /nonexistent
 
 FROM node:22-bookworm-slim
+# cwebp: the window makes the CDN's card art (~270 KB a card) into WebPs of ~70 KB for /play and /tables (bot/arena/art.js)
+RUN apt-get update && apt-get install -y --no-install-recommends webp && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production ARENA_MODE=window WINDOW_HOME=/data/window PORT=8080
 WORKDIR /app
 COPY --from=build /src/package.json ./

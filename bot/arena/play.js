@@ -7,7 +7,7 @@
  * When it ends, the tab sends the replay here, and the window keeps it in the run "play" (Eric, 2026-10-15: "post game
  * histories back to my system"). Games are unrated: the person's own tab played them and could have changed them.
  *
- *   const play = createPlay({ store, swarm, auth, kitFile, wake });
+ *   const play = createPlay({ store, swarm, auth, kitFile, statics, wake });   // statics: static.js, shared with the window
  *   if (await play.route(req, res, url, who, { sendJson, sendText, readBody })) return;
  *   play.openTo(next)   // whether GitHub sign-in may return a login with no role to `next` (auth.js openTo)
  *
@@ -40,15 +40,15 @@
  * brings files, [{url, path, bytes, wire}] (the page fetches each and sends [[path, bytes]] with its first game); kind
  * 'arena' is a WebAssembly version that brings bundle, {url, hex, bytes, wire}, runtime ('wasi-p1', or an interpreter of
  * runtimes the page also fetches) and capMs, its time per game; it needs a cross-origin isolated page. bytes: what the
- * bot itself is, unzipped, its runtime not counted; wire: about what it downloads (gzipped), null when the window does
- * not know yet. Every name, title and number is data from the arena: set them with textContent.
+ * bot itself is, unzipped, its runtime not counted; wire: about what it downloads (brotli or gzip), null when the window
+ * does not know yet. Every name, title and number is data from the arena: set them with textContent.
  */
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const zlib = require('zlib');
 const { atLeast, LOGIN } = require('./auth');
 const { normalizeDeck } = require('../decklists');
+const { createStatic } = require('./static');
 
 const RUN = 'play';
 const BOT = 'jepa-tx-gate';
@@ -184,7 +184,7 @@ function rowOf(id, { header, end, bot = BOT }, { sha256, bytes, at }) {
     };
 }
 
-function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode = process.env.ARENA_PLAY || 'invited', page = path.join(__dirname, 'web', 'play.html'), decksFile = DECKS, now = Date.now } = {}) {
+function createPlay({ store, swarm, auth, kitFile, statics = createStatic(), wake = () => undefined, mode = process.env.ARENA_PLAY || 'invited', page = path.join(__dirname, 'web', 'play.html'), decksFile = DECKS, now = Date.now } = {}) {
     const on = MODES.has(mode) ? mode : 'invited';
     // the versus screen shows the lists before the engine is in the tab: {name, leader, base, style} each
     let decks = [];
@@ -196,7 +196,6 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
     }
     const sent = new Map(); // login -> times of the games they sent, the last day
     let woke = 0;
-    let kit = null; // {mtimeMs, raw, gz}
 
     /** The GitHub login of a person signed in on this site who may play, or null. */
     const player = (who) => {
@@ -229,11 +228,12 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
         }
         return { build: m?.build ?? swarm.cachedBuild(READY), m };
     }
-    // bytes: as the page reads it (unzipped); wire: about what it downloads (gzipped), null when not known
+    // bytes: as the page reads it (unzipped); wire: about what it downloads (brotli or gzip), null when not known
     const fileOf = (build, name) => ({ url: `/play/${name}?b=${encodeURIComponent(build)}`, bytes: swarm.fileSize(build, name), wire: swarm.fileSize(build, name, { gz: true }) });
     const wireOf = (hex) => {
         const f = swarm.botHere(hex);
-        return f ? (typeof f.gz === 'string' ? fs.statSync(f.gz).size : f.gz.length) : null;
+        const z = f && (f.br ?? f.gz);
+        return z ? (typeof z === 'string' ? fs.statSync(z).size : z.length) : null;
     };
     // bundle sha256 -> the runtime its arena.json names, read once the window has the bundle (null until then)
     const runtimes = new Map();
@@ -282,21 +282,11 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
         return swarm.sendBot(req, res, hex, { sendJson });
     }
 
-    function sendKit(req, res, sendText) {
-        let st;
-        try {
-            st = fs.statSync(kitFile);
-        } catch {
+    // compressed once and 304 on a reload (static.js), one copy with the window's /kit.js and /tables/kit.js
+    async function sendKit(req, res, sendText) {
+        if (!(await statics.send(req, res, kitFile, 'text/javascript'))) {
             sendText(res, req, 404, 'text/plain', 'not found');
-            return true;
         }
-        if (!kit || kit.mtimeMs !== st.mtimeMs) {
-            const raw = fs.readFileSync(kitFile);
-            kit = { mtimeMs: st.mtimeMs, raw, gz: zlib.gzipSync(raw) };
-        }
-        const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
-        res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-cache', vary: 'accept-encoding', ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
-        res.end(gzip ? kit.gz : kit.raw);
         return true;
     }
 

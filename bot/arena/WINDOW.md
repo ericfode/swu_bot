@@ -193,11 +193,14 @@ has no `credentialless`. Under `require-corp` the CDN's card art is blocked, so 
   `bot-worker.js`, the JEPA bot's `tx-t10.safetensors` and `tx-t10-e.safetensors`, `python-lib.json` and `python.wasm`
   (the games machine's files of that build, kept on the window's disk so they load while it sleeps; with none kept and
   the machine asleep, the page asks for them, which wakes it at most every 15 minutes). Every answer has
-  `x-raw-length`, the unzipped size, which is what a page reading the body counts.
+  `x-raw-length`, the unzipped size, which is what a page reading the body counts. A URL with `?b=` names its build,
+  so browsers keep the file a year; it goes brotli to a browser that takes it (made once, in the background, next to
+  the gzip on the window's disk: the engine pack is 1.0 MB that way, 1.5 MB gzipped), else gzipped.
 - `GET /play/bundle/<sha256>`: an arena version's canonical tar, only for a version of the latest round. The swarm
   relay (`lineup()`, `sendBot()`) gets the lineup (`GET /v1/swarm/lineup.json`) and each of its bundles
   (`GET /v1/swarm/bot/<sha256>`) from the games machine as soon as it learns the lineup, checks each sha256 and keeps
-  the tars with their gzips in `<home>/swarm-bots` (the latest round's only), so they load while the machine sleeps.
+  the tars with their gzips and brotlis in `<home>/swarm-bots` (the latest round's only), so they load while the
+  machine sleeps. Browsers keep a bundle a year (its URL names it).
   503 while the machine is asleep and the window does not have it yet (it is woken, at most every 15 minutes).
 - `GET /api/play/info`: the files to load (`pack`, `worker`, `botWorker`, each `{url, bytes}`) and the person's last
   20 games; an admin also gets the last 200 games of everyone, with who played them.
@@ -208,7 +211,7 @@ has no `credentialless`. Under `require-corp` the CDN's card art is blocked, so 
   (`python-3.14-wasi`: `{lib, wasm}`). The lineup is the swarm relay's (above), asked again when it is over a minute
   old. `runtime` is what the bundle's `arena.json` names, read once the window has the bundle (null before); `capMs` is
   that round's time per bot per game, which the tab plays the version under. `bytes` and `wire` (about what a file
-  downloads, gzipped) are null when the window does not know a size yet.
+  downloads, brotli or gzip) are null when the window does not know a size yet.
 - `POST /api/play/games {replay}`: the tab sends the finished game. Only from this site's own page (Origin) and as JSON;
   the header must seat `person` in seat 1 and `jepa-tx-gate` or an arena version in seat 2, with step lines and an
   end line; at most 16 MB
@@ -223,8 +226,24 @@ has no `credentialless`. Under `require-corp` the CDN's card art is blocked, so 
 `https://cdn.swu-db.com/images/cards/<SET>/<NNN>.png`, fetched by the window. `/play` and `/tables` point the viewer
 kit's art here (`SWUViewer.setArtResolver`) because their isolation (`require-corp`) blocks images from a site that
 does not allow it, and the CDN sends no CORP or CORS header. It answers anyone signed in with GitHub, a view link's
-guest or a token. Browsers keep each image a year; the window keeps about 48 MB of them in memory and none on disk,
-and remembers for an hour that a card has no art (404).
+guest or a token. Browsers keep each image a year, and the window remembers for an hour that a card has no art (404).
+
+The CDN's images are ~270 KB JPEGs of 1120x1560. After the first request for a card, the window makes it a WebP of at
+most 1000 px on its long side (~70 KB, the same look at the largest size Holotable shows a card) with `cwebp` (the
+Debian package `webp`, in the image), one at a time in the background, and keeps it in `<home>/art` (up to 150 MB,
+oldest out first; none written when the volume has under 200 MB free) and in memory (48 MB, with the CDN images it
+has not made smaller yet). A browser whose `Accept` names `image/webp` (Chrome, Firefox, Safari 16+) gets the WebP once
+it is made and the CDN's image until then; others always get the CDN's image (`Vary: Accept`). Without `cwebp` every
+image goes as the CDN has it.
+
+## Files sent as they are (static.js)
+
+The app (`/`, 2.7 MB), the viewer kit (`/kit.js`, `/play/kit.js`, `/tables/kit.js`: one file, 2.4 MB), the kit's
+license list and `/strategy-diagram.js` are read and compressed once per version (gzip at once, brotli in the
+background: the app is 622 KB that way, 785 KB gzipped), not for every request, and carry an `ETag` that names their
+content, so a reload is a 304 with no body. Their `cache-control` stays `no-cache`: the URLs stay the same when a deploy
+changes the file. Before 2026-10-16 each visit gzipped the app and the kit again (~75 ms of the window's one CPU each)
+and sent them in full.
 
 ## The open tables (tables.js)
 
