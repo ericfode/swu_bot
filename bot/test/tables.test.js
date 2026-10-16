@@ -18,7 +18,7 @@ Object.assign(process.env, { ARENA_HOME: path.join(tmp, 'arena-home'), ARENA_RES
 const { createWindow, Store } = require('../arena/window');
 const { createAuth } = require('../arena/auth');
 const { createSwarmRelay } = require('../arena/swarm-relay');
-const { checkReplay, isoWeek } = require('../arena/tables');
+const { checkReplay, isoWeek, pageOf } = require('../arena/tables');
 const { createLobby, QUEUE_BYTES, KEEP_BYTES } = require('../arena/lobby');
 const { swudbId, fromSwudbApi, deckFromJson, fetchSwudb } = require('../arena/swudb');
 
@@ -398,6 +398,21 @@ test('the queue pairs the two people who waited longest, and the one who waited 
         }
         await close();
     }
+});
+
+test('a page of the open API never splits games played at the same time', () => {
+    const rows = ['a', 'b', 'b', 'b', 'c'].map((t, i) => ({ id: `g${i}`, playedAt: t }));
+    const pages = [];
+    for (let since = null, guard = 0; guard < 9; guard++) {
+        const p = pageOf(rows, since, 2);
+        pages.push(p.games.map((g) => g.id));
+        if (!p.next) {
+            break;
+        }
+        since = p.next;
+    }
+    assert.deepStrictEqual(pages, [['g0', 'g1', 'g2', 'g3'], ['g4']]);
+    assert.deepStrictEqual(pageOf(rows, 'b', 200), { games: [rows[4]], next: null });
 });
 
 test('the lobby counts only what waits for a side: a side that reads takes a long game, a stalled stream does not', () => {

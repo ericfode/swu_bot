@@ -183,6 +183,19 @@ function rowOf(id, { header, end }, { sha256, bytes, at }) {
     };
 }
 
+/**
+ * A page of the kept games after `since` (oldest first): at most `limit`, and more when the games after the last one
+ * share its playedAt, since the next page starts after that time. `next` is that time, or null on the last page.
+ */
+function pageOf(rows, since, limit) {
+    const after = since ? rows.filter((r) => String(r.playedAt) > since) : rows;
+    let end = Math.min(limit, after.length);
+    while (end < after.length && after[end].playedAt === after[end - 1].playedAt) {
+        end++;
+    }
+    return { games: after.slice(0, end), next: end < after.length ? after[end - 1].playedAt : null };
+}
+
 /** One file of a ustar archive: its header, its data and the padding after it. An archive ends with TAR_END. */
 function tarEntry(name, data, mtime = Math.floor(Date.now() / 1000)) {
     const h = Buffer.alloc(512);
@@ -484,11 +497,9 @@ function createTables({
         }
         const rows = runDoc().games;
         if (p === '/api/open/games') {
-            const since = url.searchParams.get('since');
             const limit = Math.min(1000, Math.max(1, Number(url.searchParams.get('limit')) || 200));
-            const after = since ? rows.filter((r) => String(r.playedAt) > since) : rows;
-            const page = after.slice(0, limit).map(({ sha256, ...r }) => ({ ...r, sha256, week: isoWeek(r.playedAt) }));
-            sendJson(res, 200, { result: { games: page, next: after.length > limit ? page[page.length - 1].playedAt : null } }, req);
+            const { games, next } = pageOf(rows, url.searchParams.get('since'), limit);
+            sendJson(res, 200, { result: { games: games.map(({ sha256, ...r }) => ({ ...r, sha256, week: isoWeek(r.playedAt) })), next } }, req);
             return true;
         }
         const g = /^\/api\/open\/games\/([\w-]+)\.jsonl$/.exec(p);
@@ -712,4 +723,4 @@ function createTables({
     return { route, openRoute, openTo, mode: on, lobby, close: () => lobby.close() };
 }
 
-module.exports = { createTables, checkReplay, rowOf, isoWeek, tarEntry, RUN };
+module.exports = { createTables, checkReplay, rowOf, isoWeek, pageOf, tarEntry, RUN };

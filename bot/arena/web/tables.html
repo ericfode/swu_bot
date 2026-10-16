@@ -333,7 +333,11 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       g.over = true;
       playing = false;
       const links = g.links?.() ?? [];
-      setTimeout(() => { for (const l of links) l?.close?.(); }, 15000);
+      // a while after the end, once what this tab still sends (the end and its replay, in parts) has gone
+      setTimeout(async () => {
+        await Promise.race([Promise.all(links.map((l) => l?.idle?.())), new Promise((ok) => setTimeout(ok, 300000))]);
+        for (const l of links) l?.close?.();
+      }, 15000);
       if (m.replay) {
         g.replay = m.replay;
         g.url = URL.createObjectURL(new Blob([m.replay], { type: 'application/x-ndjson' }));
@@ -450,6 +454,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       return chain;
     };
     link.signal = (m) => post(m);
+    link.idle = () => chain; // settles once every message sent so far has been posted
     // a part is escaped twice on its way (in its part, then in the POST body), so it stays well under the lobby's 256 KB
     link.game = framer((s) => post({ g: s }), 50000);
     link.close = (leave = true) => {
@@ -478,6 +483,10 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     dc.onclose = down;
     pc.addEventListener('connectionstatechange', () => { if (['failed', 'closed'].includes(pc.connectionState)) down(); });
     link.game = framer((s) => { if (dc.readyState === 'open') dc.send(s); }, 16000);
+    link.idle = () => new Promise((ok) => {
+      const check = () => (dc.readyState !== 'open' || dc.bufferedAmount === 0 ? ok() : setTimeout(check, 200));
+      check();
+    });
     link.close = () => { link.closed = true; try { dc.close(); pc.close(); } catch { /* gone */ } };
     return link;
   }
@@ -575,6 +584,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     let joined = null;
     let joinedWait = null;
     const log = []; // every message for the guest, numbered from 1
+    let lastAct = 0; // the guest numbers its actions and sends unanswered ones again on a new link
     let g = null;
     const toGuest = (m) => {
       log.push(m);
@@ -587,8 +597,10 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
         if (o.t === 'join' && !joined) {
           joined = o;
         } else if (o.t === 'join' || o.t === 'resume') {
+          if (o.t === 'join') lastAct = 0; // a new page numbers its actions from 1 again
           for (let i = (o.have ?? 0); i < log.length; i++) l.game({ n: i + 1, m: log[i] });
-        } else if (o.t === 'act' && g) {
+        } else if (o.t === 'act' && g && Number.isInteger(o.a) && o.a > lastAct) {
+          lastAct = o.a;
           eng.peerAct(o.a, o.act);
         } else if (o.t === 'concede' && g) {
           eng.peerConcede();
@@ -638,7 +650,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       let have = 0;
       let g = null;
       let a = 0;
-      const acts = new Map();
+      const acts = new Map(); // actions the host has not answered yet, by number
       let cur = link;
       const attach = (l, again = false) => {
         cur = l;
@@ -654,7 +666,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
             g.links = () => [cur];
             g.act = (act) => new Promise((ok2, no2) => {
               const k = ++a;
-              acts.set(k, { ok: ok2, no: no2 });
+              acts.set(k, { ok: ok2, no: no2, act });
               cur.game({ t: 'act', a: k, act });
             });
             g.concede = () => cur.game({ t: 'concede' });
@@ -674,7 +686,11 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
             for (const s of g.subs) s.onError(true);
           }
         };
-        if (again) l.game({ t: 'resume', have });
+        if (again) {
+          // what the host sent and this tab missed, then the actions it may never have had (it plays each one once)
+          l.game({ t: 'resume', have });
+          for (const [k, w] of acts) l.game({ t: 'act', a: k, act: w.act });
+        }
       };
       attach(link);
       setLink?.((l) => attach(l, true));
