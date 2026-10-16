@@ -75,16 +75,20 @@ function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () 
         }
         if (!kit || kit.mtimeMs !== st.mtimeMs) {
             const raw = fs.readFileSync(kitFile);
-            kit = { mtimeMs: st.mtimeMs, raw, gz: zlib.gzipSync(raw), etag: `"${crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32)}"` };
+            const hash = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32);
+            kit = { mtimeMs: st.mtimeMs, raw, gz: zlib.gzipSync(raw), etag: `"${hash}"`, etagGz: `"${hash}-gz"` };
         }
-        if (req.headers['if-none-match'] === kit.etag) {
-            res.writeHead(304, { etag: kit.etag, 'cache-control': 'no-cache' });
+        // q values, as the window's own answers (required on use: server.js requires the window); each encoding has its
+        // own ETag, so a browser never revalidates one with the other
+        const gzip = require('./server').acceptsGzip(req.headers['accept-encoding']);
+        const etag = gzip ? kit.etagGz : kit.etag;
+        const head = { 'cache-control': 'no-cache', etag, vary: 'accept-encoding' };
+        if (String(req.headers['if-none-match'] ?? '').split(/\s*,\s*/).map((t) => t.replace(/^W\//, '')).includes(etag)) {
+            res.writeHead(304, head);
             res.end();
             return;
         }
-        // q values, as the window's own answers (required on use: server.js requires the window)
-        const gzip = require('./server').acceptsGzip(req.headers['accept-encoding']);
-        res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-cache', etag: kit.etag, vary: 'accept-encoding', ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
+        res.writeHead(200, { 'content-type': 'text/javascript', ...head, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
         res.end(gzip ? kit.gz : kit.raw);
     }
 

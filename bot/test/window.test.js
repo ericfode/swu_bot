@@ -447,9 +447,16 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         const kit = await fetch(kitAt);
         assert.strictEqual(kit.status, 200);
         assert.match(kit.headers.get('content-type'), /javascript/);
-        assert.strictEqual((await fetch(kitAt, { headers: { 'if-none-match': kit.headers.get('etag') } })).status, 304);
-        assert.strictEqual((await fetch(kitAt, { headers: { 'accept-encoding': 'gzip;q=0, br' } })).headers.get('content-encoding'), null, 'a client that refuses gzip gets the kit plain');
-        assert.strictEqual((await fetch(kitAt, { headers: { 'accept-encoding': 'gzip' } })).headers.get('content-encoding'), 'gzip');
+        const kept = await fetch(kitAt, { headers: { 'if-none-match': kit.headers.get('etag') } });
+        assert.strictEqual(kept.status, 304);
+        assert.strictEqual(kept.headers.get('vary'), 'accept-encoding');
+        const gz = await fetch(kitAt, { headers: { 'accept-encoding': 'gzip' } });
+        assert.strictEqual(gz.headers.get('content-encoding'), 'gzip');
+        const plain = await fetch(kitAt, { headers: { 'accept-encoding': 'gzip;q=0, br', 'if-none-match': gz.headers.get('etag') } });
+        assert.strictEqual(plain.status, 200, 'the gzip copy never stands in for the plain one');
+        assert.strictEqual(plain.headers.get('content-encoding'), null, 'a client that refuses gzip gets the kit plain');
+        assert.notStrictEqual(plain.headers.get('etag'), gz.headers.get('etag'));
+        assert.strictEqual((await fetch(kitAt, { headers: { 'accept-encoding': 'identity', 'if-none-match': `W/${plain.headers.get('etag')}` } })).status, 304);
 
         // nothing else: no game, a bad id, another method, and the rest of the arena still needs sign-in
         for (const p of ['/g/arena-t1-r1/nope', '/g/nope/g1', '/g/arena-t1-r1/nope/game.jsonl', '/g/..%2Fx/g1', '/g/arena-t1-r1', '/g', '/g/a/b/c']) {
