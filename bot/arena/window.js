@@ -17,6 +17,8 @@
  *   MCP clients      POST /mcp                             each person's own app (Claude, Claude Code...), signed in
  *                                                          with GitHub through OAuth (oauth.js, /oauth/*); it reads
  *   Build a bot page GET, POST /api/apps                   a person's connected apps; {disconnect: id}
+ *   every page       GET /feedback.js, GET, POST /api/feedback   the feedback button and ` key (feedback.js); notes are kept in
+ *                                                          `feedback`, which the project token and admins read
  *
  * push.js is the client and CLI for the push side. Who may do what is in auth.js: friends read, the project's token
  * pushes. Storage is WINDOW_HOME (the Fly volume): docs/<ns>/<id>.json and replays/<run>/<game>.jsonl.gz.
@@ -37,6 +39,7 @@ const { createArt } = require('./art');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
 const { builderName, ownsName, notYours } = require('./api');
+const { createFeedback } = require('./feedback');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
 const acceptsGzip = (req) => require('./server').acceptsGzip(req.headers['accept-encoding']);
@@ -45,7 +48,8 @@ const ROOT = path.join(__dirname, '..', '..');
 // the collections a part may push; a friend reads the FRIEND ones raw, and the rest only through the app's public model
 // submissions: bots people send through /mcp (arena_submit), each kept until the arena's intake (intake.js) has checked
 // it; friends never read the collection raw, only their own through arena_my_submissions
-const NS = new Set(['arena', 'runs', 'ladders', 'league', 'experiments', 'evals', 'panels', 'bots', 'threads', 'lens', 'meta', 'research', 'admin', 'submissions']);
+// feedback: notes people send from the window's pages (feedback.js); the project token and admins read them
+const NS = new Set(['arena', 'runs', 'ladders', 'league', 'experiments', 'evals', 'panels', 'bots', 'threads', 'lens', 'meta', 'research', 'admin', 'submissions', 'feedback']);
 const FRIEND_NS = new Set(['arena', 'runs', 'evals', 'lens', 'meta']);
 const FEED_NS = new Set(['runs', 'lens', 'replays']);
 const ID = /^[A-Za-z0-9][\w.#@+-]{0,159}$/;
@@ -685,6 +689,8 @@ function createWindow(opts = {}) {
         ...(opts.tablesFetch ? { fetchImpl: opts.tablesFetch } : {}),
         ...(opts.tablesLimits ?? {}) // tests: {perDay, maxRows}
     });
+    // the feedback button and key on every page (feedback.js): who may send follows who may use a page here
+    const feedback = createFeedback({ store, origin: auth.origin, mayPlay: () => play.mode === 'github' || tables.mode === 'github', ...(opts.feedbackLimits ?? {}) }); // tests: {now, perDay, allPerDay}
     const arenaMethods = {
         status: () => arenaDoc('status') ?? { tournament: null, round: null, phase: 'idle', competitors: [] },
         standings: () => arenaDoc('standings') ?? { rounds: [], global: {} },
@@ -943,6 +949,10 @@ function createWindow(opts = {}) {
     }
 
     function sendText(res, req, code, type, text, headers = {}) {
+        // every page this site sends gets the feedback button and key (feedback.js), so no page has to add it
+        if (/^text\/html\b/.test(type)) {
+            text = feedback.inject(text);
+        }
         const gzip = req && acceptsGzip(req) && text.length > 1024;
         res.writeHead(code, { 'content-type': type, 'cache-control': 'no-cache', vary: 'accept-encoding', ...headers, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
         res.end(gzip ? zlib.gzipSync(text) : text);
@@ -1253,6 +1263,10 @@ function createWindow(opts = {}) {
                 return undefined;
             }
             if (await swarm.route(req, res, url, who, { sendJson, sendText, readBody })) {
+                return undefined;
+            }
+            // feedback (feedback.js): anyone who may use a page here, invited or not, so before the invite check
+            if (await feedback.route(req, res, url, who, { sendJson, sendText, readBody })) {
                 return undefined;
             }
             if (url.pathname.startsWith('/api')) {
