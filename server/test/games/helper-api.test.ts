@@ -222,6 +222,15 @@ test("the swarm's files: other names, missing files and no token are refused", a
   assert.equal((await call(m, "POST", "/v1/swarm/manifest.json")).status, 404)
 })
 
+test("the swarm's files: the tables' worker is one of them", async () => {
+  const m = await setup()
+  writeFileSync(path.join(m.dir, "app", "build", "swarm", "tables-worker.js"), "postMessage(1)")
+  const a = await call(m, "GET", "/v1/swarm/tables-worker.js", { build: null })
+  assert.equal(a.status, 200)
+  assert.equal(a.text, "postMessage(1)")
+  assert.equal(a.headers["content-type"], "text/javascript")
+})
+
 test("the swarm's files: the JEPA bot's models are two of them", async () => {
   const m = await setup()
   writeFileSync(path.join(m.dir, "app", "build", "swarm", "tx-t10.safetensors"), "model")

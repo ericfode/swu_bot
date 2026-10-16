@@ -216,6 +216,35 @@ not isolate it (Safari) can play only the JEPA bot.
   `admin/people` as `@<login>`. The games are unrated: the person's tab played them.
 - `GET /api/play/games/<id>.jsonl`: a game's replay, for the person who played it and admins.
 
+## The open tables (tables.js)
+
+`/tables` lets people play each other or any arena bot on Holotable's play screen (`bot/table/README.md`). Every game
+runs in a player's tab (`tables-worker.js`); the window puts people in touch, lists the bots, reads SWUDB decks and
+keeps the finished games, readable by anyone signed in with GitHub (`spec/open-tables.md`).
+
+- `ARENA_TABLES` says who may play: `invited` (the default), `github` or `off`, as `ARENA_PLAY` does. The logs page and
+  reader tokens are for anyone signed in with GitHub whatever the mode. The page is cross-origin isolated (COOP
+  same-origin, COEP credentialless, so the CDN's card art still loads) because arena bots block on a SharedArrayBuffer
+  stdin; a browser without that (Safari) gets only the JEPA bot.
+- `GET /tables`, `/tables/kit.js`, `/tables/<file>?b=` (`engine.json`, `tables-worker.js`, `bot-worker.js`,
+  `python-lib.json`, `python.wasm`), `/tables/bot/<sha256>.tar` (an arena bundle of the games machine's latest round,
+  `swarm-relay.js` `lineup()` and `sendBot()`, kept on the window's disk in `swarm-bots/`), `/tables/logs`.
+- `GET /api/tables/info`: the files, the deck lists, the bots (JEPA first, then the latest round's versions with the
+  arena's title, owner, rating and note), the person's random id (`pl_` and 6 hex, `admin/tables-ids`) and games.
+- `POST /api/tables/deck {text}`: a SWUDB link (read from SWUDB's deck API on the window, `swudb.js`) or a pasted deck
+  list, as the arena's deck form; the host's worker checks it against the card data.
+- The lobby (`lobby.js`, rooms in memory): `POST /api/tables/invite` (a room and a 6-letter code), `POST
+  /api/tables/join {code}`, `POST /api/tables/queue` (the two who waited longest are paired; the one who waited longer
+  hosts), `GET /api/tables/stream` (server-sent events, resumed with Last-Event-ID), `POST /api/tables/send {msg}` and
+  `POST /api/tables/leave`. The tabs send the WebRTC handshake through it, then the game itself when they cannot link
+  directly. At most 256 KB a message and 8 MB waiting for one side; a room goes after 30 minutes unread or 12 hours.
+- `POST /api/tables/games {replay, seat}`: each tab sends the finished game; the same replay is kept once (run
+  `tables`, a people run, unrated) and each sender adds who played their seat to `admin/tables-people`. At most 80
+  games a day per person. `GET /api/tables/games` and `/api/tables/games/<id>.jsonl` give a person their own games (an
+  admin every game, with who played it). `POST /api/tables/me {renew: true}` gives a new random id.
+- `POST /api/tables/token` (from the logs page) makes a reader token; `/api/open/*` reads the kept games with it
+  (`spec/open-tables.md`).
+
 ## Deploys
 
 Code reaches Fly only through GitHub: `.github/workflows/deploy-arena.yml` runs the window's tests (pull requests

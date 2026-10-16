@@ -43,6 +43,12 @@ the page is cross-origin isolated, with `credentialless` so the card art still l
 files of their own next to `engine.json` (`pack.js` MODELS), downloaded only by a person who picks that bot, and
 `build.js` adds every file's size to `manifest.json` for the page's progress bar. The page plays no arena games.
 
+The open tables (`/tables`, `bot/arena/tables.js`) load it with `tables-worker.js`: the referee, the JEPA bot, the
+WASI host and the bot workers' spawn, so a person plays an arena bundle (compiled or Python) in their own tab, unpacked
+under `ARENA_HOME` as the referee worker unpacks a lease's bundles; or two people play, this tab hosting the game for
+both (`bot/table/open.js`). The JEPA bot's models come with the first game against it, as on the play page. That
+page is cross-origin isolated like the swarm page.
+
 Not the same as a helper: no memory cap per bot (a browser cannot cap a memory the module defines itself), and thinking
 time is the tab's wall clock, so a slow or busy computer gives clock bots less search (the report's ms/decision shows
 it, as it does for helpers). Nobody checks a swarm result twice: the swarm is for people Eric trusts (spec/executor.md).

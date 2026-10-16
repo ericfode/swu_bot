@@ -1,0 +1,1144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SWU Open Tables</title>
+<style>
+/* The open tables (bot/arena/tables.js): a bar over Holotable's play screen (SWUViewer.mountPlay). Every game runs in
+   a player's tab (tables-worker.js): a bot game here, a people game in the host's tab, with the guest's tab linked to
+   it directly (WebRTC) or through the window's lobby. Finished games go back to the window. Dark like Holotable. */
+:root {
+  --bg: #060a13; --panel: #0f1829; --line: #1d2a44; --ink: #e6ecf8; --dim: #8494b8;
+  --p1: #56c8ff; --p2: #ff5f6d; --gold: #f6c454; --good: #4fe0a8; --bad: #ff7b72;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --display: "Oxanium", "Eurostile", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); }
+.bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: color-mix(in oklab, var(--panel) 88%, transparent); backdrop-filter: blur(8px); }
+.brand { font: 600 12px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); text-decoration: none; }
+.title { font: 650 17px/1.2 var(--display); }
+.grow { flex: 1; }
+.status { display: inline-flex; align-items: center; gap: 8px; font: 500 13px/1.3 var(--mono); color: var(--dim); min-width: 0; }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; }
+.status[data-tone="good"] i { background: var(--good); box-shadow: 0 0 8px var(--good); }
+.status[data-tone="busy"] i { background: var(--p1); animation: pulse 1s ease-in-out infinite alternate; }
+.status[data-tone="bad"] i { background: var(--bad); }
+.status[data-tone="bad"] { color: var(--ink); }
+.progress { width: 120px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; flex: none; }
+.progress b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--p1), var(--gold)); transition: width .2s; }
+@keyframes pulse { from { opacity: .35; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .status[data-tone="busy"] i { animation: none; } .progress b { transition: none; } }
+button, a.btn { font: 600 14px/1 var(--sans); color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; cursor: pointer; text-decoration: none; }
+button:hover, a.btn:hover { border-color: color-mix(in oklab, var(--p1) 50%, var(--line)); }
+button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.who { font: 500 13px/1 var(--mono); color: var(--dim); }
+#table { min-height: calc(100dvh - 58px); }
+#viewer-wrap { padding: 12px 16px 24px; display: grid; gap: 12px; }
+#viewer { min-height: calc(100dvh - 140px); }
+.panel { max-width: 860px; margin: 0 auto; padding: 20px 16px 48px; display: grid; gap: 18px; }
+.panel h2 { margin: 0; font: 650 20px/1.2 var(--display); }
+.panel p { margin: 0; color: var(--dim); }
+.list { display: grid; gap: 8px; }
+.game { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.game .head { font-weight: 600; }
+.game .head.won { color: var(--good); }
+.game .head.lost { color: var(--p2); }
+.game .meta { grid-column: 1; font: 500 12px/1.4 var(--mono); color: var(--dim); overflow-wrap: anywhere; }
+.game button { grid-row: 1 / span 2; grid-column: 2; }
+.wait { max-width: 560px; margin: 12vh auto 0; padding: 0 16px; display: grid; gap: 10px; }
+.wait h1 { margin: 0; font: 650 26px/1.2 var(--display); }
+.wait p { margin: 0; color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="bar">
+  <a class="brand" href="/tables">SWU Arena</a>
+  <span class="title">Open tables</span>
+  <span class="grow"></span>
+  <span class="status" id="status" data-tone="busy" role="status" aria-live="polite"><i></i><span>Loading…</span></span>
+  <span class="progress" id="progress" hidden aria-hidden="true"><b></b></span>
+  <button id="games-btn" type="button" hidden>Your games</button>
+  <a class="btn" href="/tables/logs">Logs</a>
+  <span class="who" id="who"></span>
+</div>
+<div id="wait" class="wait" hidden><h1>Getting the tables ready</h1><p id="wait-text"></p></div>
+<div id="table"></div>
+<div id="viewer-wrap" hidden>
+  <div><button id="back" type="button">Back to the table</button></div>
+  <div id="viewer"></div>
+</div>
+<div id="games" class="panel" hidden>
+  <div><button id="games-back" type="button">Back to the table</button></div>
+  <h2>Your games</h2>
+  <p>Every game you finish here is kept for training, unrated, under your player id. <a href="/tables/logs">Anyone signed in with GitHub can read the logs.</a></p>
+  <div class="list" id="mine"></div>
+  <h2 id="all-h" hidden>Every game played here</h2>
+  <div class="list" id="all" hidden></div>
+</div>
+<script src="/tables/kit.js"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const JEPA = 'jepa-tx-gate';
+  const RANDOM = 'random';
+  const CUSTOM_KEY = 'swu-tables-decks';
+  const SESSION_KEY = 'swu-tables-link';
+  const STUN = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }];
+  let info = null;
+  let saving = 0;
+  let playing = false;
+
+  // ---------------------------------------------------------------- the bar
+  function status(text, tone = 'idle') {
+    $('status').dataset.tone = tone;
+    $('status').lastElementChild.textContent = text;
+  }
+  function progress(frac) {
+    $('progress').hidden = frac == null;
+    if (frac != null) $('progress').firstElementChild.style.width = `${Math.round(Math.max(0, Math.min(1, frac)) * 100)}%`;
+  }
+  const mb = (n) => `${(n / 1048576).toFixed(n > 10485760 ? 0 : 1)} MB`;
+
+  function show(which) {
+    $('table').hidden = which !== 'table';
+    $('viewer-wrap').hidden = which !== 'viewer';
+    $('games').hidden = which !== 'games';
+    $('games-btn').hidden = which === 'games' || !info;
+    window.scrollTo(0, 0);
+  }
+  let viewer = null;
+  let backTo = 'table';
+  function watch(jsonl) {
+    viewer?.destroy?.();
+    show('viewer');
+    viewer = SWUViewer.mount($('viewer'), { jsonl, follow: false });
+  }
+  $('back').onclick = () => { viewer?.destroy?.(); viewer = null; show(backTo); };
+  $('games-back').onclick = () => show('table');
+  $('games-btn').onclick = () => { loadGames(); show('games'); };
+
+  const when = (iso) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  };
+  function gameRow(g, admin) {
+    const row = document.createElement('div');
+    row.className = 'game';
+    const head = document.createElement('div');
+    const p = (s) => (admin && g.people?.[s] ? `${g[s]} (${g.people[s]})` : g[s]);
+    if (admin || g.won === null) {
+      head.className = 'head';
+      head.textContent = g.outcome === 'won' ? `${p(g.winnerSeat)} beat ${p(g.winnerSeat === 'p1' ? 'p2' : 'p1')}${g.conceded ? ' (conceded)' : ''}` : g.outcome === 'draw' ? `${p('p1')} and ${p('p2')}: a draw` : `${p('p1')} and ${p('p2')}: no result`;
+    } else {
+      head.className = `head ${g.won ? 'won' : g.outcome === 'won' ? 'lost' : ''}`;
+      head.textContent = g.outcome !== 'won' ? `No result against ${g.opponent}` : g.won ? `You beat ${g.opponent}${g.conceded ? ' (they conceded)' : ''}` : `${g.opponent} beat you${g.conceded ? ' (you conceded)' : ''}`;
+    }
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    // your deck first in your own games
+    const [a, z] = !admin && g.seat === 'p2' ? ['p2', 'p1'] : ['p1', 'p2'];
+    meta.textContent = `${when(g.playedAt)} · ${g.decks?.[a] ?? '?'} against ${g.decks?.[z] ?? '?'} · round ${g.rounds ?? '?'}, ${g.steps ?? '?'} moves`;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 'Watch';
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const r = await fetch(`/api/tables/games/${encodeURIComponent(g.id)}.jsonl`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        backTo = 'games';
+        watch(await r.text());
+      } catch (e) {
+        status(`Could not load that game: ${e.message}`, 'bad');
+      } finally {
+        b.disabled = false;
+      }
+    };
+    row.append(head, b, meta);
+    return row;
+  }
+  async function loadGames() {
+    let j = null;
+    try {
+      j = (await api('GET', '/api/tables/games'));
+    } catch (e) {
+      status(`Could not load your games: ${e.message}`, 'bad');
+    }
+    const mine = $('mine');
+    mine.replaceChildren(...(j?.games ?? []).map((g) => gameRow(g, false)));
+    if (!mine.children.length) {
+      const p = document.createElement('p');
+      p.textContent = 'No games yet.';
+      mine.append(p);
+    }
+    const all = j?.all ?? null;
+    $('all-h').hidden = $('all').hidden = !all;
+    if (all) $('all').replaceChildren(...all.map((g) => gameRow(g, true)));
+  }
+
+  async function api(method, path, body) {
+    const r = await fetch(path, { method, headers: { accept: 'application/json', ...(body !== undefined ? { 'content-type': 'application/json' } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const e = new Error(j.error?.message || `HTTP ${r.status}`);
+      e.status = r.status;
+      throw e;
+    }
+    return j.result;
+  }
+
+  // ---------------------------------------------------------------- decks: the lists, and decks people added
+  let custom = [];
+  try { custom = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]').filter((d) => d && d.metadata && d.leader && d.base && Array.isArray(d.deck)); } catch { custom = []; }
+  const saveCustom = () => { try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(custom.slice(-20))); } catch { /* kept for this visit only */ } };
+  const optionOf = (d) => ({ name: d.metadata.name, leader: d.leader.id, base: d.base.id, style: d.metadata.style ?? null });
+  /** What a game takes for a deck name: a list's name, or the deck itself for one people added. */
+  const deckRef = (name) => (!name || name === RANDOM ? name : custom.find((d) => d.metadata.name === name) ?? name);
+
+  // ---------------------------------------------------------------- the engine: tables-worker.js, loaded when first needed
+  let engine = null;
+  async function fetchBytes(url, label, size = null) {
+    const r = await fetch(url);
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j.error?.message || `${label}: HTTP ${r.status}`);
+    }
+    const total = size || Number(r.headers.get('content-length')) || 0;
+    if (!r.body || !total) {
+      return new Uint8Array(await r.arrayBuffer());
+    }
+    const reader = r.body.getReader();
+    const parts = [];
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+      got += value.length;
+      // with gzip the length header is the compressed size: the bar fills to the end and waits there
+      progress(Math.min(0.98, got / total));
+      status(`Downloading ${label}: ${mb(got)}`, 'busy');
+    }
+    const out = new Uint8Array(got);
+    let at = 0;
+    for (const p of parts) { out.set(p, at); at += p.length; }
+    return out;
+  }
+  function loadEngine() {
+    engine ??= (async () => {
+      const t0 = performance.now();
+      const pack = await fetchBytes(info.files.pack, 'the rules engine');
+      progress(null);
+      status('Starting the rules engine…', 'busy');
+      const worker = new Worker(info.files.worker);
+      const waits = { ready: null, started: null, deck: new Map(), bot: new Map(), acted: [] };
+      const handlers = { msg: () => undefined, peer: () => undefined, peerActed: () => undefined };
+      const ready = new Promise((ok, no) => { waits.ready = { ok, no }; });
+      worker.onmessage = (e) => {
+        const m = e.data;
+        if (m.t === 'ready') {
+          if (m.cardText) SWUViewer.loadCardText(m.cardText);
+          waits.ready.ok(m);
+        } else if (m.t === 'started' || m.t === 'refused') {
+          const w = waits.started;
+          waits.started = null;
+          if (m.t === 'started' && m.cardText) SWUViewer.loadCardText(m.cardText);
+          if (w) m.t === 'started' ? w.ok(m) : w.no(new Error(m.error));
+        } else if (m.t === 'botReady') {
+          const w = waits.bot.get(m.name);
+          waits.bot.delete(m.name);
+          if (w) m.error ? w.no(new Error(m.error)) : w.ok();
+        } else if (m.t === 'deckChecked') {
+          const w = waits.deck.get(m.n);
+          waits.deck.delete(m.n);
+          if (w) m.error ? w.no(new Error(m.error)) : w.ok(m.deck);
+        } else if (m.t === 'acted') {
+          const a = waits.acted.shift();
+          if (a) m.error ? a.no(new Error(m.error)) : a.ok({ ok: true });
+        } else if (m.t === 'msg') {
+          handlers.msg(m.msg);
+        } else if (m.t === 'peer') {
+          handlers.peer(m.msg);
+        } else if (m.t === 'peerActed') {
+          handlers.peerActed(m);
+        } else if (m.t === 'error') {
+          console.error('[tables]', m.message);
+          waits.ready.no(new Error(String(m.message).split('\n')[0]));
+          handlers.msg({ t: 'fatal', error: String(m.message).split('\n')[0] });
+        }
+      };
+      worker.onerror = (e) => waits.ready.no(new Error(e.message || 'the game worker did not start'));
+      worker.postMessage({ t: 'init', packBytes: pack, botWorker: info.files.botWorker, pythonLib: info.files.pythonLib, pythonWasm: info.files.pythonWasm }, [pack.buffer]);
+      const r = await ready;
+      status(`Rules engine ready (${Math.round((performance.now() - t0) / 1000)} s).`, 'good');
+      let n = 0;
+      return {
+        worker, handlers, isolated: r.isolated,
+        // files: [[path, bytes]] for the worker's disk (the JEPA bot's models, with the first game against it)
+        start: (game, files) => new Promise((ok, no) => {
+          if (waits.started) return no(new Error('a game is starting'));
+          waits.started = { ok, no };
+          worker.postMessage({ t: 'start', game, ...(files ? { files } : {}) });
+        }),
+        bot: (name, hex, tar, capMs) => new Promise((ok, no) => {
+          waits.bot.set(name, { ok, no });
+          worker.postMessage({ t: 'bot', name, hex, tar, capMs }, [tar.buffer]);
+        }),
+        checkDeck: (deck) => new Promise((ok, no) => {
+          const k = ++n;
+          waits.deck.set(k, { ok, no });
+          worker.postMessage({ t: 'checkDeck', n: k, deck });
+        }),
+        act: (act) => new Promise((ok, no) => {
+          waits.acted.push({ ok, no });
+          worker.postMessage({ t: 'act', act });
+        }),
+        peerAct: (n2, act) => worker.postMessage({ t: 'peerAct', n: n2, act }),
+        concede: () => worker.postMessage({ t: 'concede' }),
+        peerConcede: () => worker.postMessage({ t: 'peerConcede' })
+      };
+    })();
+    engine.catch(() => { engine = null; });
+    return engine;
+  }
+
+  // the JEPA bot's models: downloaded once per visit, the first time someone plays it, and sent with that game
+  let jepaSent = false;
+  let jepaFiles = null;
+  async function loadJepa() {
+    if (jepaSent) return null;
+    jepaFiles ??= (async () => {
+      const out = [];
+      for (const f of info.files.models ?? []) out.push([f.path, await fetchBytes(f.url, "Eric's JEPA bot's models", f.bytes)]);
+      progress(null);
+      return out;
+    })();
+    jepaFiles.catch(() => { jepaFiles = null; });
+    return jepaFiles;
+  }
+  // arena bots: the bundle, downloaded once per visit, unpacked in the worker
+  const botsLoaded = new Set();
+  async function loadBot(eng, name) {
+    if (name === JEPA || botsLoaded.has(name)) return;
+    const b = info.bots.find((x) => x.name === name);
+    if (!b?.url) throw new Error(`no bot ${name} here`);
+    if (!eng.isolated) throw new Error('this browser cannot run arena bots here (try Chrome, Edge or Firefox); Eric\'s JEPA bot works everywhere');
+    const tar = await fetchBytes(b.url, b.title || name, b.bytes);
+    progress(null);
+    status(b.runtime === 'python' ? `Starting ${b.title || name} (the Python runtime downloads once, about 30 MB)…` : `Starting ${b.title || name}…`, 'busy');
+    await eng.bot(name, b.bundle, tar, b.capMs);
+    botsLoaded.add(name);
+  }
+
+  // ---------------------------------------------------------------- games this page follows (Holotable's Table.follow)
+  const games = new Map(); // id -> {msgs, subs, replay, url, seat, kind}
+  function newGame(id, seat, kind) {
+    const g = { id, seat, kind, msgs: [], subs: new Set(), replay: null, url: null, over: false };
+    games.set(id, g);
+    return g;
+  }
+  function deliver(g, m) {
+    if (g.dropped) return; // ended in this tab when its link closed for good (dropGame)
+    if (m.t === 'end') {
+      g.over = true;
+      playing = false;
+      const links = g.links?.() ?? [];
+      // a while after the end, once the guest says it has the end (a host) or what this tab still sends has gone
+      setTimeout(async () => {
+        const sent = g.settled ? g.settled() : Promise.all(links.map((l) => l?.idle?.()));
+        await Promise.race([sent, new Promise((ok) => setTimeout(ok, 300000))]);
+        for (const l of links) l?.close?.();
+      }, 15000);
+      if (g.cancelled) {
+        // a game cancelled while it was dealt: nothing to keep
+      } else if (m.replay) {
+        g.replay = m.replay;
+        g.url = URL.createObjectURL(new Blob([m.replay], { type: 'application/x-ndjson' }));
+        save(m.replay, g.seat);
+      } else {
+        status('The game stopped before it could be saved.', 'bad');
+      }
+    }
+    if (m.t === 'fatal') {
+      playing = false;
+      status(`The game stopped: ${m.error}. Reload the page to play again.`, 'bad');
+      for (const s of g.subs) s.onError(true);
+      return;
+    }
+    g.msgs.push(m);
+    for (const s of g.subs) s.onMsg(m);
+  }
+  /**
+   * The link to the other player closed and nothing can take its place (a game linked by codes, or the lobby's room
+   * gone): the game cannot go on, so it ends here with no winner, and nothing is kept.
+   */
+  function dropGame(g, why) {
+    if (g.over) return;
+    g.dropped = true;
+    g.over = true;
+    playing = false;
+    status(`The game stopped: ${why}. It was not saved.`, 'bad');
+    const end = { t: 'end', winner: null, outcome: 'ERROR', round: null, steps: null, error: why, conceded: false, concededBy: null, replay: null };
+    g.msgs.push(end);
+    for (const s of g.subs) s.onMsg(end);
+    for (const l of g.links?.() ?? []) l?.close?.();
+  }
+  async function save(replay, seat) {
+    saving++;
+    status('Saving the game…', 'busy');
+    try {
+      for (let i = 0; i < 5; i++) {
+        try {
+          await api('POST', '/api/tables/games', { replay, seat });
+          status('Saved. It is in your games, unrated.', 'good');
+          return;
+        } catch (e) {
+          if (e.status && e.status < 500) {
+            status(`Not saved: ${e.message}. Download the replay to keep it.`, 'bad');
+            return;
+          }
+        }
+        await new Promise((ok) => setTimeout(ok, 2000 * 2 ** i));
+      }
+      status('Not saved: the arena did not answer. Download the replay to keep it.', 'bad');
+    } finally {
+      saving--;
+    }
+  }
+  window.addEventListener('beforeunload', (e) => {
+    if (playing || saving) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
+  // ---------------------------------------------------------------- links between two browsers
+  // A game message is JSON; a long one (the end, with the replay) goes in parts no bigger than the link takes.
+  function framer(sendRaw, size) {
+    let next = 0;
+    return (obj) => {
+      const s = JSON.stringify(obj);
+      if (s.length <= size) return sendRaw(s);
+      const id = ++next;
+      const n = Math.ceil(s.length / size);
+      for (let i = 0; i < n; i++) sendRaw(JSON.stringify({ part: id, i, n, s: s.slice(i * size, (i + 1) * size) }));
+      return undefined;
+    };
+  }
+  function deframer(onObj) {
+    const parts = new Map();
+    return (s) => {
+      let o;
+      try { o = JSON.parse(s); } catch { return; }
+      if (o && o.part && typeof o.s === 'string') {
+        const p = parts.get(o.part) ?? { got: 0, n: o.n, s: [] };
+        if (p.s[o.i] === undefined) { p.s[o.i] = o.s; p.got++; }
+        parts.set(o.part, p);
+        if (p.got === p.n) {
+          parts.delete(o.part);
+          try { onObj(JSON.parse(p.s.join(''))); } catch { /* a broken message is dropped */ }
+        }
+        return;
+      }
+      onObj(o);
+    };
+  }
+
+  /** A link's onGame: game messages that come before anyone listens wait for the listener. */
+  function gameSink(link) {
+    let fn = null;
+    const pending = [];
+    Object.defineProperty(link, 'onGame', { get: () => fn, set: (f) => { fn = f; while (fn && pending.length) fn(pending.shift()); } });
+    return (o) => (fn ? fn(o) : pending.push(o));
+  }
+
+  /** The lobby's room as a link: a stream of events and POSTs, in order. */
+  function roomLink({ room, side, k }) {
+    const q = `room=${encodeURIComponent(room)}&side=${side}&k=${k}`;
+    const es = new EventSource(`/api/tables/stream?${q}`);
+    const link = { onRoom: () => undefined, onSignal: () => undefined, onDown: () => undefined, closed: false };
+    const gameIn = deframer(gameSink(link));
+    es.onmessage = (e) => {
+      let d;
+      try { d = JSON.parse(e.data); } catch { return; }
+      if (d.room) link.onRoom(d);
+      else if (d.msg && d.msg.sig) link.onSignal(d.msg);
+      else if (d.msg && typeof d.msg.g === 'string') gameIn(d.msg.g);
+    };
+    es.onerror = () => { if (!link.closed && es.readyState === EventSource.CLOSED) link.onDown('the lobby closed the link'); };
+    // a stream that comes back (the browser reconnects it) may have missed what the lobby no longer keeps: onReopen
+    let opened = false;
+    es.onopen = () => {
+      if (opened && !link.closed) link.onReopen?.();
+      opened = true;
+    };
+    let chain = Promise.resolve();
+    const post = (msg) => {
+      chain = chain.then(async () => {
+        // in order, each one until the lobby takes it (a lost network or a restarting window only delays it)
+        for (let i = 0; !link.closed; i++) {
+          try {
+            await api('POST', `/api/tables/send?${q}`, { msg });
+            return;
+          } catch (e) {
+            if (e.status >= 400 && e.status < 500) { link.onDown(e.message); return; }
+            await new Promise((ok) => setTimeout(ok, Math.min(8000, 500 * 2 ** i)));
+          }
+        }
+      });
+      return chain;
+    };
+    link.signal = (m) => post(m);
+    link.idle = () => chain; // settles once every message sent so far has been posted
+    // a part is escaped twice on its way (in its part, then in the POST body), so it stays well under the lobby's 256 KB
+    link.game = framer((s) => post({ g: s }), 50000);
+    link.close = (leave = true) => {
+      if (link.closed) return;
+      link.closed = true;
+      es.close();
+      if (leave) chain.then(() => api('POST', `/api/tables/leave?${q}`, {})).catch(() => undefined);
+    };
+    return link;
+  }
+
+  /** Waits for a peer connection's candidates (no trickle: one offer or answer holds them all), at most `ms`. */
+  function gathered(pc, ms = 4000) {
+    if (pc.iceGatheringState === 'complete') return Promise.resolve();
+    return new Promise((ok) => {
+      const t = setTimeout(ok, ms);
+      pc.addEventListener('icegatheringstatechange', () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); ok(); } });
+    });
+  }
+  /** A data channel as a game link: ordered and reliable, messages in parts of 16 KB. */
+  function channelLink(pc, dc) {
+    const link = { onDown: () => undefined, closed: false, kind: 'direct' };
+    const gameIn = deframer(gameSink(link));
+    dc.onmessage = (e) => gameIn(String(e.data));
+    const down = () => { if (!link.closed) link.onDown('the direct link closed'); };
+    dc.onclose = down;
+    pc.addEventListener('connectionstatechange', () => { if (['failed', 'closed'].includes(pc.connectionState)) down(); });
+    // parts wait here while the channel's own buffer holds more than HIGH (a big end message would overflow it)
+    const out = [];
+    const HIGH = 1 << 20;
+    dc.bufferedAmountLowThreshold = HIGH / 2;
+    const flush = () => {
+      while (out.length && dc.readyState === 'open' && dc.bufferedAmount < HIGH) dc.send(out.shift());
+    };
+    dc.onbufferedamountlow = flush;
+    link.game = framer((s) => { out.push(s); flush(); }, 16000);
+    link.idle = () => new Promise((ok) => {
+      const check = () => (dc.readyState !== 'open' || (!out.length && dc.bufferedAmount === 0) ? ok() : setTimeout(check, 200));
+      check();
+    });
+    link.close = () => { link.closed = true; try { dc.close(); pc.close(); } catch { /* gone */ } };
+    return link;
+  }
+  const opened = (dc, ms) => new Promise((ok, no) => {
+    if (dc.readyState === 'open') return ok();
+    const t = setTimeout(() => no(new Error('timeout')), ms);
+    dc.addEventListener('open', () => { clearTimeout(t); ok(); });
+  });
+
+  /**
+   * Links this tab with the other side of a lobby room: a direct WebRTC channel when the two browsers can reach each
+   * other, else the room itself carries the game. Resolves to {link, room}; the room stays open as the way back.
+   */
+  async function connect(room, side, onState, stopped) {
+    const r = roomLink(room);
+    let peer = room.peer ?? null;
+    const pc = new RTCPeerConnection({ iceServers: STUN });
+    const result = new Promise((resolve, reject) => {
+      let done = false;
+      const finish = (link) => { if (!done) { done = true; resolve({ link, room: r, peer, pc }); } };
+      stopped?.catch((e) => {
+        if (done) return;
+        done = true;
+        try { pc.close(); } catch { /* gone */ }
+        r.close();
+        reject(e);
+      });
+      const viaRoom = () => {
+        try { pc.close(); } catch { /* gone */ }
+        r.kind = 'relay';
+        finish(r);
+      };
+      r.onDown = (why) => { if (!done) { done = true; reject(new Error(why)); } };
+      if (side === 'host') {
+        const dc = pc.createDataChannel('swu', { ordered: true });
+        const go = async () => {
+          onState?.({ text: 'Connecting to the other player…' });
+          await pc.setLocalDescription(await pc.createOffer());
+          await gathered(pc);
+          r.signal({ sig: 'offer', sdp: pc.localDescription.sdp });
+          try {
+            await opened(dc, 12000);
+            r.signal({ sig: 'direct' });
+            finish(channelLink(pc, dc));
+          } catch {
+            r.signal({ sig: 'relay' });
+            viaRoom();
+          }
+        };
+        r.onRoom = (d) => { if (d.room === 'joined') { peer = d.peer; go().catch(viaRoom); } else if (d.room === 'left' && !done) { done = true; reject(new Error('the other player left')); } };
+        r.onSignal = async (m) => { if (m.sig === 'answer') await pc.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => undefined); };
+        if (room.peer) go().catch(viaRoom);
+      } else {
+        let dc = null;
+        pc.ondatachannel = (e) => { dc = e.channel; };
+        r.onRoom = (d) => { if (d.room === 'left' && !done) { done = true; reject(new Error('the other player left')); } };
+        r.onSignal = async (m) => {
+          if (m.sig === 'offer') {
+            onState?.({ text: 'Connecting to the other player…' });
+            await pc.setRemoteDescription({ type: 'offer', sdp: m.sdp });
+            await pc.setLocalDescription(await pc.createAnswer());
+            await gathered(pc);
+            r.signal({ sig: 'answer', sdp: pc.localDescription.sdp });
+          } else if (m.sig === 'direct') {
+            const wait = () => (dc ? opened(dc, 8000) : new Promise((ok) => setTimeout(ok, 200)).then(wait));
+            wait().then(() => finish(channelLink(pc, dc)), viaRoom);
+          } else if (m.sig === 'relay') {
+            viaRoom();
+          }
+        };
+      }
+    });
+    return result;
+  }
+
+  // pasted codes, no lobby: the offer and the answer, compressed (CompressionStream) and in base64url
+  async function pack(obj, prefix) {
+    const data = new TextEncoder().encode(JSON.stringify(obj));
+    const cs = new Blob([data]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    const bytes = new Uint8Array(await new Response(cs).arrayBuffer());
+    let s = '';
+    for (const b of bytes) s += String.fromCharCode(b);
+    return `${prefix}${btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
+  }
+  async function unpackCode(code, prefix) {
+    const s = String(code).trim().replace(/\s+/g, '');
+    if (!s.startsWith(prefix)) throw new Error('that is not the right code');
+    const b = atob(s.slice(prefix.length).replace(/-/g, '+').replace(/_/g, '/'));
+    const bytes = Uint8Array.from(b, (c) => c.charCodeAt(0));
+    const ds = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return JSON.parse(await new Response(ds).text());
+  }
+  const OFFER = 'SWU1.';
+  const ANSWER = 'SWU1A.';
+
+  // ---------------------------------------------------------------- one people game, either side
+  /**
+   * The host: plays the game in this tab's worker. The guest's messages are numbered and kept, so a guest who comes
+   * back (a new link, a reload) asks for what it missed. Resolves once the game started.
+   */
+  async function hostGame(link, peerPid, deckName, setLink, wanted = () => true) {
+    let joined = null;
+    let joinedWait = null;
+    const log = []; // every message for the guest, numbered from 1
+    let lastAct = 0; // the guest numbers its actions and sends unanswered ones again on a new link
+    let g = null;
+    let guestHas = 0; // the last message the guest said it has (resume, got)
+    let endAt = 0; // the end's number in the log
+    let gotEnd = null;
+    let gone = null; // the link closed for good before the game started
+    const received = new Promise((ok) => { gotEnd = ok; });
+    const heard = (n) => {
+      guestHas = Math.max(guestHas, n);
+      if (endAt && guestHas >= endAt) gotEnd();
+    };
+    const toGuest = (m) => {
+      log.push(m);
+      if (m.t === 'msg' && m.msg?.t === 'end') endAt = log.length;
+      cur.game({ n: log.length, m });
+    };
+    let cur = link;
+    const attach = (l) => {
+      cur = l;
+      l.onGame = (o) => {
+        if (o.t === 'join' && !joined) {
+          joined = o;
+        } else if (o.t === 'join' || o.t === 'resume') {
+          if (o.t === 'join') { lastAct = 0; guestHas = 0; } // a new page numbers its actions from 1 again
+          else heard(o.have ?? 0);
+          for (let i = (o.have ?? 0); i < log.length; i++) l.game({ n: i + 1, m: log[i] });
+        } else if (o.t === 'act' && g && !g.over && Number.isInteger(o.a) && o.a > lastAct) {
+          lastAct = o.a;
+          eng.peerAct(o.a, o.act);
+        } else if (o.t === 'concede' && g && !g.over) {
+          eng.peerConcede();
+        } else if (o.t === 'got' && Number.isInteger(o.have)) {
+          heard(o.have);
+        }
+        joinedWait?.();
+      };
+      // only a link nothing can replace gets here (lobbyGame moves a dropped direct link to the room): the game ends
+      l.onDown = (why) => {
+        if (cur !== l) return;
+        const text = `${why}, and this game cannot reconnect`;
+        if (g && !g.over) {
+          dropGame(g, text);
+          eng.concede(); // the worker's game ends too, so the table takes the next one
+        } else if (!g) {
+          gone = new Error(text);
+          joinedWait?.();
+        }
+      };
+      l.onReopen = () => { if (cur === l) l.game({ t: 'again' }); };
+    };
+    attach(link);
+    setLink?.(attach);
+    let eng;
+    try {
+      eng = await loadEngine();
+    } catch (e) {
+      toGuest({ t: 'refused', error: `the host's rules engine did not start (${e.message})` });
+      throw e;
+    }
+    if (!wanted()) throw new Error('cancelled');
+    if (gone) throw gone;
+    if (!joined) {
+      await new Promise((ok, no) => {
+        const t = setTimeout(() => {
+          toGuest({ t: 'refused', error: 'the host never got your deck' });
+          no(new Error('the other player did not send their deck'));
+        }, 60000);
+        joinedWait = () => {
+          if (gone) { clearTimeout(t); joinedWait = null; no(gone); }
+          else if (joined) { clearTimeout(t); joinedWait = null; ok(); }
+        };
+      });
+    }
+    if (!wanted()) throw new Error('cancelled');
+    eng.handlers.peer = (m) => toGuest({ t: 'msg', msg: m });
+    eng.handlers.peerActed = (m) => toGuest({ t: 'acted', a: m.n, error: m.error });
+    const early = [];
+    eng.handlers.msg = (m) => (g ? deliver(g, m) : early.push(m));
+    let st;
+    try {
+      st = await eng.start({ mode: 'people', deck: deckRef(deckName), peerDeck: joined.deck, you: info.you, peer: peerPid });
+    } catch (e) {
+      toGuest({ t: 'refused', error: e.message });
+      throw e;
+    }
+    if (!wanted() || gone) {
+      // cancelled, or the link closed for good, while the worker dealt: end it there (the table takes one game at a
+      // time), and keep nothing
+      eng.concede();
+      throw gone ?? new Error('cancelled');
+    }
+    g = newGame(st.id, st.seat, 'host');
+    g.links = () => [cur];
+    g.settled = () => received;
+    for (const m of early) deliver(g, m);
+    g.act = (act) => eng.act(act);
+    g.concede = () => eng.concede();
+    toGuest({ t: 'start', id: st.id, seat: st.peerSeat, opponent: info.you, cardText: st.cardText });
+    playing = true;
+    return { id: st.id, seat: st.seat, opponent: peerPid };
+  }
+
+  /**
+   * The guest: sends its deck, then draws the game the host's tab plays. Resolves once the game started. setLink gets a
+   * function that moves the game to another link, which asks the host for what it missed.
+   */
+  function guestGame(link, peerPid, deckName, setLink) {
+    return new Promise((ok, no) => {
+      let have = 0;
+      let g = null;
+      let a = 0;
+      let conceded = false; // sent again on a new link until the end comes
+      const acts = new Map(); // actions the host has not answered yet, by number
+      let cur = link;
+      // what the host may never have had: the join before the start, else where this tab is, then unanswered actions
+      const sendAgain = (l) => {
+        l.game(g ? { t: 'resume', have } : joinMsg);
+        for (const [k, w] of acts) l.game({ t: 'act', a: k, act: w.act });
+        if (conceded && g && !g.over) l.game({ t: 'concede' });
+      };
+      const attach = (l, again = false) => {
+        cur = l;
+        l.onReopen = () => { if (cur === l) sendAgain(l); };
+        l.onGame = (o) => {
+          if (o?.t === 'again') { if (cur === l) sendAgain(l); return; }
+          if (!o || !Number.isInteger(o.n) || o.n <= have) return;
+          if (o.n !== have + 1) { l.game({ t: 'resume', have }); return; }
+          have = o.n;
+          const m = o.m;
+          if (m.t === 'refused') { no(new Error(`the host's table refused: ${m.error}`)); return; }
+          if (m.t === 'start') {
+            if (m.cardText) SWUViewer.loadCardText(m.cardText);
+            g = newGame(m.id, m.seat, 'guest');
+            g.links = () => [cur];
+            g.act = (act) => new Promise((ok2, no2) => {
+              const k = ++a;
+              acts.set(k, { ok: ok2, no: no2, act });
+              cur.game({ t: 'act', a: k, act });
+            });
+            g.concede = () => { conceded = true; cur.game({ t: 'concede' }); };
+            playing = true;
+            ok({ id: m.id, seat: m.seat, opponent: m.opponent || peerPid });
+          } else if (m.t === 'msg' && g) {
+            deliver(g, m.msg);
+            if (m.msg.t === 'end') cur.game({ t: 'got', have });
+          } else if (m.t === 'acted') {
+            const w = acts.get(m.a);
+            acts.delete(m.a);
+            if (w) m.error ? w.no(new Error(m.error)) : w.ok({ ok: true });
+          }
+        };
+        // only a link nothing can replace gets here (lobbyGame moves a dropped direct link to the room): the game ends
+        l.onDown = (why) => {
+          if (cur !== l) return;
+          const text = `${why}, and this game cannot reconnect`;
+          if (g && !g.over) {
+            for (const w of acts.values()) w.no(new Error(text));
+            acts.clear();
+            dropGame(g, text);
+          } else if (!g) {
+            no(new Error(text));
+          }
+        };
+        if (again) {
+          // what the host sent and this tab missed (before the start, the join, which the host may never have had),
+          // then the actions it may never have had (it plays each one once)
+          sendAgain(l);
+        }
+      };
+      const joinMsg = { t: 'join', v: 1, deck: deckRef(deckName), have: 0 };
+      attach(link);
+      setLink?.((l) => attach(l, true));
+      link.game(joinMsg);
+    });
+  }
+
+  // ---------------------------------------------------------------- pairing (Holotable's Table.pair)
+  /** Links and starts a game in a lobby room; setCancel gets what Cancel does until the game has started. */
+  async function lobbyGame(room, side, deck, onState, setCancel) {
+    let stop;
+    let halted = false;
+    const stopped = new Promise((_, no) => { stop = (e) => { halted = true; no(e); }; });
+    stopped.catch(() => undefined);
+    let c = null;
+    setCancel(() => {
+      if (c) { c.link.close(); c.room.close(); }
+      stop(new Error('cancelled'));
+    });
+    c = await connect(room, side, onState, stopped);
+    const peer = c.peer ?? room.peer;
+    const how = c.link === c.room ? 'through the lobby' : 'directly';
+    onState({ text: side === 'host' ? `Linked ${how} with ${peer}. Dealing…` : `Linked ${how} with ${peer}. Waiting for the host's table…` });
+    let move = null;
+    let id = null;
+    let viaRoom = c.link === c.room; // the game goes through the room (from the start, or since the direct link dropped)
+    const starting = side === 'host' ? hostGame(c.link, peer, deck, (fn) => { move = fn; }, () => !halted) : guestGame(c.link, peer, deck, (fn) => { move = fn; });
+    // the room stays as the way back: a direct link that drops goes on through the lobby, on both sides, from the start
+    // (after the end too on the host's side: the end and its replay may still be on their way to the guest)
+    if (c.link !== c.room) {
+      c.link.onDown = () => {
+        const over = id && games.get(id)?.over;
+        if (over && side === 'guest') return;
+        if (!over) status('The direct link dropped: going on through the lobby.', 'busy');
+        c.room.onSignal = () => undefined;
+        viaRoom = true;
+        move(c.room);
+      };
+    }
+    c.room.onRoom = (d) => {
+      if (d.room !== 'left') return;
+      if (!id) stop(new Error('the other player left'));
+      else if (!games.get(id)?.over) {
+        // the other player closed its links for good (a tab leaves only once its game is over there), so nothing
+        // more can come: the room ends the game as any link that cannot come back does
+        if (!viaRoom) { viaRoom = true; move(c.room); }
+        c.room.onDown(`${peer} left the table`);
+      }
+    };
+    const game = await Promise.race([starting, stopped]).catch(async (e) => {
+      await Promise.race([c.link.idle?.(), new Promise((ok) => setTimeout(ok, 5000))]);
+      c.link.close();
+      c.room.close();
+      throw e;
+    });
+    id = game.id;
+    setCancel(() => undefined);
+    const g = games.get(game.id);
+    if (g) g.links = () => [c.link, c.room];
+    status(`Playing ${peer}, linked ${how}.`, 'good');
+    return game;
+  }
+
+  function pair(req, onState) {
+    let cancel = () => undefined;
+    let cancelled = false;
+    let answerFn = null;
+    const setCancel = (fn) => { cancel = fn; if (cancelled) fn(); };
+    const done = (async () => {
+      if (req.how === 'invite') {
+        const room = await api('POST', '/api/tables/invite', {});
+        const link = `${location.origin}/tables#join=${room.code}`;
+        onState({ text: 'Send your friend this link or code. The game starts when they join.', code: room.code, link });
+        cancel = () => api('POST', `/api/tables/leave?room=${room.room}&side=host&k=${room.k}`, {}).catch(() => undefined);
+        loadEngine().catch(() => undefined);
+        return lobbyGame({ room: room.room, side: 'host', k: room.k }, 'host', req.deck, onState, setCancel);
+      }
+      if (req.how === 'join') {
+        const text = String(req.code || '').trim();
+        if (text.startsWith(OFFER)) return directJoin(text, req.deck, onState, setCancel);
+        const m = /(?:#|[?&])join=([A-Za-z0-9]{6})\b/.exec(text) || /^([A-Za-z0-9]{6})$/.exec(text);
+        if (!m) throw new Error('paste the invite link, the 6-letter code, or a code that starts with SWU1.');
+        onState({ text: 'Joining…' });
+        const room = await api('POST', '/api/tables/join', { code: m[1].toUpperCase() });
+        return lobbyGame({ room: room.room, side: 'guest', k: room.k, peer: room.peer }, 'guest', req.deck, onState, setCancel);
+      }
+      if (req.how === 'lobby') {
+        const t = await api('POST', '/api/tables/queue', {});
+        onState({ text: 'Looking for another player…' });
+        loadEngine().catch(() => undefined);
+        const paired = await new Promise((ok, no) => {
+          const es = new EventSource(`/api/tables/stream?ticket=${t.ticket}&k=${t.k}`);
+          let timer = null;
+          if (req.botAfterMs) {
+            timer = setTimeout(() => { es.close(); ok(null); }, req.botAfterMs);
+          }
+          setCancel(() => { es.close(); clearTimeout(timer); no(new Error('cancelled')); });
+          es.onmessage = (e) => {
+            const d = JSON.parse(e.data);
+            if (d.t === 'waiting') onState({ text: d.people > 1 ? 'Looking for another player…' : 'Nobody else is waiting yet. Looking…' });
+            if (d.t === 'paired') { clearTimeout(timer); es.close(); ok(d); }
+          };
+          es.onerror = () => { if (es.readyState === EventSource.CLOSED) { clearTimeout(timer); no(new Error('the lobby closed the queue: try again')); } };
+        });
+        if (!paired) {
+          // nobody came: a bot game, with one this browser can run; Cancel still stops it until the game has started
+          let stopped = false;
+          let stop;
+          const halted = new Promise((_, no) => { stop = no; });
+          halted.catch(() => undefined);
+          setCancel(() => { stopped = true; stop(new Error('cancelled')); });
+          const eng = await Promise.race([loadEngine(), halted]);
+          const runnable = info.bots.filter((b) => b.name === JEPA || (eng.isolated && b.url));
+          const bot = runnable[Math.floor(Math.random() * runnable.length)] ?? info.bots[0];
+          onState({ text: `Nobody came: you play ${bot.title || bot.name}.` });
+          const g = await startBot(bot.name, req.deck, RANDOM, () => !stopped);
+          setCancel(() => undefined);
+          return { ...g, opponent: bot.name };
+        }
+        return lobbyGame({ room: paired.room, side: paired.side, k: paired.k, peer: paired.peer }, paired.side, req.deck, onState, setCancel);
+      }
+      if (req.how === 'direct') return directHost(req.deck, onState, (fn) => { answerFn = fn; }, setCancel);
+      throw new Error(`no way to pair: ${req.how}`);
+    })();
+    done.catch(() => undefined);
+    return {
+      done,
+      cancel: () => { cancelled = true; cancel(); },
+      answer: (code) => answerFn?.(code)
+    };
+  }
+
+  /** stopped rejects when pairing is cancelled, which also closes pc; started() turns Cancel off once the game started. */
+  function stopper(pc, setCancel) {
+    let stop;
+    let halted = false;
+    const stopped = new Promise((_, no) => { stop = no; });
+    stopped.catch(() => undefined);
+    setCancel(() => { halted = true; try { pc.close(); } catch { /* gone */ } stop(new Error('cancelled')); });
+    return { stopped, wanted: () => !halted, started: () => setCancel(() => undefined) };
+  }
+
+  /** Runs a pasted-code pairing; when it fails (a timeout, a bad code, a refused game) the peer connection closes. */
+  async function linkUp(pc, run) {
+    try {
+      return await run();
+    } catch (e) {
+      try { pc.close(); } catch { /* gone */ }
+      throw e;
+    }
+  }
+
+  async function directHost(deck, onState, setAnswer, setCancel) {
+    loadEngine().catch(() => undefined);
+    const pc = new RTCPeerConnection({ iceServers: STUN });
+    const dc = pc.createDataChannel('swu', { ordered: true });
+    const { stopped, started, wanted } = stopper(pc, setCancel);
+    // any failure before the game starts closes the peer connection, so no late peer reaches a page that gave up
+    return linkUp(pc, async () => {
+      await pc.setLocalDescription(await pc.createOffer());
+      onState({ text: 'Making your code…' });
+      await gathered(pc, 5000);
+      const code = await pack({ v: 1, sdp: pc.localDescription.sdp, pid: info.you }, OFFER);
+      const answered = new Promise((ok) => setAnswer(ok));
+      onState({ text: 'Send this code to your friend (any chat works). Then paste the code they send back.', code, askCode: 'Their answer code' });
+      const ans = await unpackCode(await Promise.race([answered, stopped]), ANSWER);
+      onState({ text: `Connecting to ${ans.pid}…`, code: null });
+      await pc.setRemoteDescription({ type: 'answer', sdp: ans.sdp });
+      try {
+        await Promise.race([opened(dc, 15000), stopped]);
+      } catch (e) {
+        if (e.message === 'cancelled') throw e;
+        throw new Error('the two browsers could not reach each other directly; use an invite link instead (it can go through the lobby)');
+      }
+      const link = channelLink(pc, dc);
+      const game = await Promise.race([hostGame(link, ans.pid, deck, null, wanted), stopped]);
+      started();
+      status(`Playing ${ans.pid}, linked directly.`, 'good');
+      return game;
+    });
+  }
+
+  async function directJoin(text, deck, onState, setCancel) {
+    const offer = await unpackCode(text, OFFER);
+    const pc = new RTCPeerConnection({ iceServers: STUN });
+    const { stopped, started } = stopper(pc, setCancel);
+    return linkUp(pc, async () => {
+      let dc = null;
+      const got = new Promise((ok) => { pc.ondatachannel = (e) => { dc = e.channel; ok(); }; });
+      await pc.setRemoteDescription({ type: 'offer', sdp: offer.sdp });
+      await pc.setLocalDescription(await pc.createAnswer());
+      onState({ text: 'Making your answer code…' });
+      await gathered(pc, 5000);
+      const code = await pack({ v: 1, sdp: pc.localDescription.sdp, pid: info.you }, ANSWER);
+      onState({ text: `Send this answer code back to ${offer.pid}. The game starts when they paste it.`, code });
+      await Promise.race([got, stopped, new Promise((_, no) => setTimeout(() => no(new Error('your friend did not connect within 5 minutes')), 300000))]);
+      await Promise.race([opened(dc, 30000), stopped]);
+      const link = channelLink(pc, dc);
+      const game = await Promise.race([guestGame(link, offer.pid, deck), stopped]);
+      started();
+      status(`Playing ${offer.pid}, linked directly.`, 'good');
+      return game;
+    });
+  }
+
+  // ---------------------------------------------------------------- the table Holotable plays through
+  let joinCode = (() => {
+    const m = /(?:^#|&)join=([A-Za-z0-9]{6})\b/.exec(location.hash);
+    return m ? m[1].toUpperCase() : null;
+  })();
+  // an invite link opened in a tab that already shows the tables changes only the address's #: start over with it
+  window.addEventListener('hashchange', () => {
+    if (/(?:^#|&)join=[A-Za-z0-9]{6}\b/.test(location.hash) && !playing) location.reload();
+  });
+  /** A game against a bot in this tab; wanted() false before the game starts stops it (a cancelled lobby fallback). */
+  async function startBot(bot, deck, botDeck, wanted = () => true) {
+    const eng = await loadEngine();
+    await loadBot(eng, bot);
+    const files = bot === JEPA ? await loadJepa() : null;
+    progress(null);
+    if (!wanted()) throw new Error('cancelled');
+    const early = [];
+    let g = null;
+    eng.handlers.msg = (m) => (g ? deliver(g, m) : early.push(m));
+    const st = await eng.start({ mode: 'bot', bot, deck: deckRef(deck), botDeck: deckRef(botDeck), you: info.you }, files ?? undefined);
+    // the worker keeps the models once a game has started with them (about 2 MB, copied to it)
+    if (files) { jepaSent = true; jepaFiles = null; }
+    g = newGame(st.id, st.seat, 'bot');
+    g.act = (act) => eng.act(act);
+    g.concede = () => eng.concede();
+    for (const m of early) deliver(g, m);
+    if (!wanted()) {
+      // cancelled while the worker dealt: end it there (the table takes one game at a time), and keep nothing
+      g.cancelled = true;
+      eng.concede();
+      throw new Error('cancelled');
+    }
+    playing = true;
+    const b = info.bots.find((x) => x.name === bot);
+    status(`Playing ${b?.title || bot}. The game runs in this tab.`, 'good');
+    return { id: st.id, seat: st.seat };
+  }
+  const table = {
+    options: async () => ({
+      bots: info.bots.map((b) => b.name),
+      botInfo: Object.fromEntries(info.bots.map((b) => [b.name, { title: b.title, owner: b.owner, elo: b.elo, bytes: b.bytes, note: b.runtime === 'python' ? 'Python: the first game downloads its runtime' : b.note ?? null }])),
+      decks: [...info.decks, ...custom.map(optionOf)],
+      botDeck: RANDOM,
+      people: info.people,
+      importDeck: true,
+      you: info.you,
+      join: (() => { const j = joinCode; joinCode = null; return j; })(),
+      notice: 'Every game here runs in a player\'s browser and is unrated. Finished games are kept for training under your random player id, and anyone signed in with GitHub can read them.'
+    }),
+    importDeck: async (text) => {
+      const { deck } = await api('POST', '/api/tables/deck', { text });
+      // the engine checks it against the card data once it is loaded; a broken list is refused when a game starts
+      let name = deck.metadata.name;
+      const taken = new Set([...info.decks.map((d) => d.name), ...custom.map((d) => d.metadata.name)]);
+      for (let i = 2; taken.has(name); i++) name = `${deck.metadata.name} (${i})`;
+      deck.metadata.name = name;
+      if (engine) {
+        const eng = await engine;
+        await eng.checkDeck(deck);
+      }
+      custom = [...custom, deck];
+      saveCustom();
+      return optionOf(deck);
+    },
+    start: (bot, deck, botDeck) => startBot(bot, deck, botDeck),
+    act: (id, act) => games.get(id)?.act(act) ?? Promise.reject(new Error('no such game')),
+    concede: (id) => {
+      games.get(id)?.concede();
+      return Promise.resolve({ ok: true });
+    },
+    follow(id, onMsg, onError) {
+      const g = games.get(id);
+      if (!g) {
+        onError(true);
+        return () => undefined;
+      }
+      const sub = { onMsg, onError };
+      for (const m of g.msgs) onMsg(m);
+      g.subs.add(sub);
+      return () => g.subs.delete(sub);
+    },
+    replayUrl: (id) => games.get(id)?.url ?? null,
+    watch: (id) => (games.get(id)?.replay ? () => { backTo = 'table'; watch(games.get(id).replay); } : null),
+    pair,
+    note: 'Play anyone: a friend, whoever is in the lobby, or any arena bot. The real rules engine runs in a player\'s browser.',
+    missing: 'Reload the page to try again.'
+  };
+
+  // ---------------------------------------------------------------- start
+  async function main() {
+    if (!window.SWUViewer?.mountPlay) {
+      status('The page did not load completely. Reload it.', 'bad');
+      return;
+    }
+    for (let tries = 0; ; tries++) {
+      try {
+        info = await api('GET', '/api/tables/info');
+      } catch (e) {
+        status(`The arena did not answer: ${e.message}`, 'bad');
+        return;
+      }
+      $('who').textContent = `@${info.login} · ${info.you}`;
+      if (info.ready) break;
+      $('wait').hidden = false;
+      $('table').hidden = true;
+      $('wait-text').textContent = info.why || 'The game files are not here yet.';
+      status('Waiting for the game files…', 'busy');
+      if (tries >= 30) {
+        status('The game files did not come. Try again later.', 'bad');
+        return;
+      }
+      await new Promise((ok) => setTimeout(ok, 10000));
+    }
+    $('wait').hidden = true;
+    show('table');
+    if (!window.crossOriginIsolated) {
+      // without isolation only the JEPA bot (in the worker itself) can play; arena bots need a SharedArrayBuffer
+      info.bots = info.bots.filter((b) => b.name === JEPA);
+    }
+    const arena = info.bots.length - 1;
+    status(`Ready: ${info.decks.length} deck lists, ${arena ? `${arena} arena bots and ` : ''}Eric's JEPA bot.`, 'good');
+    SWUViewer.mountPlay($('table'), { table });
+  }
+  main();
+})();
+</script>
+</body>
+</html>

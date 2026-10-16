@@ -93,6 +93,7 @@ const SWARM_FILES: Readonly<Record<string, string>> = {
   "bot-worker.js": "text/javascript",
   "executor-worker.js": "text/javascript",
   "play-worker.js": "text/javascript",
+  "tables-worker.js": "text/javascript",
   // the JEPA bot's models (bot/swarm/pack.js MODELS), which a tab fetches only to play that bot
   "tx-t10.safetensors": "application/octet-stream",
   "tx-t10-e.safetensors": "application/octet-stream"

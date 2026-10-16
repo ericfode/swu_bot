@@ -71,9 +71,9 @@ The machine's `swarm` routes are the ones that need no `x-helper-build` header a
 | `GET /v1/bundle/<sha256>` | `GET /api/swarm/bundle/<sha256>` | a bundle of a seed this executor holds (canonical tar) |
 | `POST /v1/lease/<id>/heartbeat` | `POST /api/swarm/lease/<id>/heartbeat` | at once, then every `heartbeatMs`: 200 `{continue: true}`, or 410 when the seed was taken back |
 | `POST /v1/lease/<id>/result` | `POST /api/swarm/lease/<id>/result` | the result or `{failed}`; 410 when taken back |
-| `GET /v1/swarm/<file>` | `GET /swarm/<file>` | the browser executor's files, built with the machine's own image: `manifest.json`, `engine.json`, `python-lib.json`, `python.wasm`, `referee-worker.js`, `bot-worker.js`, `executor-worker.js`, `play-worker.js`, and the JEPA bot's models `tx-t10.safetensors` and `tx-t10-e.safetensors` (the play page's) |
-| `GET /v1/swarm/lineup.json` | `bots` of `GET /api/play/bots` | the latest round's versions whose bundle is on the machine, in roster order, and the round's time per bot per game: `{round, capMs, bots: [{bundle, bytes, name}]}`, or `{round: null, capMs: null, bots: []}` before the first round |
-| `GET /v1/swarm/bot/<sha256>` | `GET /play/bundle/<sha256>` | the canonical tar of a version in that lineup, for a person playing it in their tab (the window's /play page); 404 for any other |
+| `GET /v1/swarm/<file>` | `GET /swarm/<file>` | the browser executor's files, built with the machine's own image: `manifest.json`, `engine.json`, `python-lib.json`, `python.wasm`, `referee-worker.js`, `bot-worker.js`, `executor-worker.js`, `play-worker.js`, `tables-worker.js` (the /tables page's worker), and the JEPA bot's models `tx-t10.safetensors` and `tx-t10-e.safetensors` (for the play and tables pages) |
+| `GET /v1/swarm/lineup.json` | `bots` of `GET /api/play/bots` and of `GET /api/tables/info` | the latest round's versions whose bundle is on the machine, in roster order, and the round's time per bot per game: `{round, capMs, bots: [{bundle, bytes, name}]}`, or `{round: null, capMs: null, bots: []}` before the first round |
+| `GET /v1/swarm/bot/<sha256>` | `GET /play/bundle/<sha256>`, `GET /tables/bot/<sha256>.tar` | the canonical tar of a version in that lineup, for a person playing it in their tab (the window's /play and /tables pages); 404 for any other |
 | | `GET /api/swarm/info` | `{on, build, cards}`: whether the swarm is on, and the build the tab must load |
 
 `build` is the commit the machine's image was built from and `cards` a hash of its card data; an executor that runs
