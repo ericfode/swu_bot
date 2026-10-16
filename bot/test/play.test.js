@@ -313,6 +313,7 @@ test('a sleeping games machine with no files on the window is woken, once, and t
             const info = (await (await go('/api/play/info', { cookie: session(w, 'pal') })).json()).result;
             assert.strictEqual(info.ready, false);
             assert.match(info.why, /starting/);
+            assert.equal(info.waking, true);
             assert.ok(info.decks.length > 20, 'the lists do not wait for the machine');
         }
         assert.strictEqual(woke, 1);
