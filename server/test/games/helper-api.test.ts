@@ -1,11 +1,11 @@
 /**
  * The helper API (HelperApi.ts) on a real listener on 127.0.0.1, ported from coord/test/coord_web/helper_api_test.exs:
- * tokens, builds (an old helper's 409 and 401), claims, bundles, leases, limits, stopping, the swarm's files. Helper
- * tokens are fakes made for these tests.
+ * tokens, builds (an old helper's 409 and 401), claims, bundles, leases, limits, stopping, the swarm's files, and the
+ * tables' lineup and bots. Helper tokens are fakes made for these tests.
  */
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs"
 import http from "node:http"
 import net from "node:net"
 import { tmpdir } from "node:os"
@@ -13,7 +13,7 @@ import path from "node:path"
 import { afterEach, beforeEach, test } from "node:test"
 import type { Timing } from "../../src/games/Config.ts"
 import { readConfig, TIMING } from "../../src/games/Config.ts"
-import type { Listening } from "../../src/games/HelperApi.ts"
+import type { Lineup, Listening } from "../../src/games/HelperApi.ts"
 import { helperNodeOn, listenAddress, pathInfo, startHelperApi } from "../../src/games/HelperApi.ts"
 import type { LeaseBoardImpl } from "../../src/games/Leases.ts"
 import { makeLeaseBoard } from "../../src/games/Leases.ts"
@@ -61,6 +61,8 @@ interface SetupOptions {
   /** an app folder made by the test (else one with the swarm's manifest) */
   readonly app?: string
   readonly board?: (b: LeaseBoardImpl) => LeaseBoardImpl
+  /** the latest round's lineup (else none given: the API's own default) */
+  readonly lineup?: () => Promise<Lineup | null>
 }
 
 let lines: Array<string> = []
@@ -104,7 +106,7 @@ const setup = async (o: SetupOptions = {}): Promise<Machine> => {
     bundles, timing, isStopping: () => m.stopping, ...(o.fakeClock ? { now: () => m.clock } : {})
   })
   const board = o.board ? o.board(real) : real
-  const api = await startHelperApi({ config, secrets, board, isStopping: () => m.stopping })
+  const api = await startHelperApi({ config, secrets, board, isStopping: () => m.stopping, ...(o.lineup ? { lineup: o.lineup } : {}) })
   Object.assign(m, { board, api })
   machines.push(m)
   return m
@@ -218,6 +220,91 @@ test("the swarm's files: other names, missing files and no token are refused", a
   assert.equal((await call(m, "GET", "/v1/swarm/manifest.json", { as: null, build: null })).status, 401)
   // only GET reads them: anything else goes on to the build check and the routes
   assert.equal((await call(m, "POST", "/v1/swarm/manifest.json")).status, 404)
+})
+
+test("the swarm's files: the JEPA bot's models are two of them", async () => {
+  const m = await setup()
+  writeFileSync(path.join(m.dir, "app", "build", "swarm", "tx-t10.safetensors"), "model")
+  const a = await call(m, "GET", "/v1/swarm/tx-t10.safetensors", { build: null })
+  assert.equal(a.status, 200)
+  assert.equal(a.text, "model")
+  assert.equal(a.headers["content-type"], "application/octet-stream")
+  assert.equal((await call(m, "GET", "/v1/swarm/tx-t10-e.safetensors", { build: null })).status, 404)
+})
+
+/** a lineup of four versions in roster order: b's tar is missing, c's is a link, a's and d's are there */
+const tablesSetup = async () => {
+  const hex = { a: sha256("tar a"), b: sha256("tar b"), c: sha256("tar c"), d: sha256("tar d"), other: sha256("other") }
+  const m = await setup({
+    lineup: async () => ({
+      round: 7,
+      bots: [{ name: "b-v1", bundle: hex.b }, { name: "a-v2", bundle: hex.a }, { name: "c-v1", bundle: hex.c }, { name: "d-v3", bundle: hex.d }]
+    })
+  })
+  writeFileSync(path.join(m.bundles, `${hex.a}.tar`), "tar a")
+  writeFileSync(path.join(m.bundles, `${hex.d}.tar`), "tar d body")
+  writeFileSync(path.join(m.dir, "elsewhere.tar"), "tar c")
+  symlinkSync(path.join(m.dir, "elsewhere.tar"), path.join(m.bundles, `${hex.c}.tar`))
+  // a tar that is there but names no version of the lineup
+  writeFileSync(path.join(m.bundles, `${hex.other}.tar`), "other")
+  return { m, hex }
+}
+
+test("the tables' lineup: the latest round's versions whose tar is a regular file, in roster order, without the build header", async () => {
+  const { m, hex } = await tablesSetup()
+  const a = await call(m, "GET", "/v1/swarm/lineup.json", { build: null })
+  assert.equal(a.status, 200)
+  assert.equal(a.headers["content-type"], JSON_TYPE)
+  assert.deepEqual(a.json(), { round: 7, bots: [{ bundle: hex.a, bytes: 5, name: "a-v2" }, { bundle: hex.d, bytes: 10, name: "d-v3" }] })
+  // keys sorted, as every other answer's
+  assert.equal(a.text, `{"bots":[{"bundle":"${hex.a}","bytes":5,"name":"a-v2"},{"bundle":"${hex.d}","bytes":10,"name":"d-v3"}],"round":7}`)
+  // a tar written later is in the next answer
+  writeFileSync(path.join(m.bundles, `${hex.b}.tar`), "tar b")
+  assert.deepEqual((await call(m, "GET", "/v1/swarm/lineup.json", { build: null })).json().bots.map((b: any) => b.name), ["b-v1", "a-v2", "d-v3"])
+  // any build header, or none, and still while the machine stops; never without a token
+  assert.equal((await call(m, "GET", "/v1/swarm/lineup.json", { build: "other" })).status, 200)
+  m.stopping = true
+  assert.equal((await call(m, "GET", "/v1/swarm/lineup.json", { build: null })).status, 200)
+  const nobody = await call(m, "GET", "/v1/swarm/lineup.json", { as: null, build: null })
+  assert.equal(nobody.status, 401)
+  assert.deepEqual(nobody.json(), { error: { code: "unauthorized", message: "a helper token is needed" } })
+})
+
+test("the tables' lineup before the first round, or with no lineup given, is empty", async () => {
+  const none = await setup({ lineup: async () => null })
+  const a = await call(none, "GET", "/v1/swarm/lineup.json", { build: null })
+  assert.equal(a.status, 200)
+  assert.equal(a.text, `{"bots":[],"round":null}`)
+  const bare = await setup()
+  assert.equal((await call(bare, "GET", "/v1/swarm/lineup.json", { build: null })).text, `{"bots":[],"round":null}`)
+  const hex = sha256("tar a")
+  writeFileSync(path.join(bare.bundles, `${hex}.tar`), "tar a")
+  assert.equal((await call(bare, "GET", `/v1/swarm/bot/${hex}`, { build: null })).status, 404)
+})
+
+test("the tables' bots: the tar of a version in the lineup, without the build header; nothing else", async () => {
+  const { m, hex } = await tablesSetup()
+  const a = await call(m, "GET", `/v1/swarm/bot/${hex.a}`, { build: null })
+  assert.equal(a.status, 200)
+  assert.equal(a.text, "tar a")
+  assert.equal(a.headers["content-type"], "application/x-tar")
+  assert.equal(a.headers["content-length"], "5")
+  assert.equal((await call(m, "GET", `/v1/swarm/bot/${hex.d}`, { build: "other" })).text, "tar d body")
+
+  // in the lineup but its tar is missing or a link; a tar of no version in the lineup; not a sha256
+  for (const p of [`/v1/swarm/bot/${hex.b}`, `/v1/swarm/bot/${hex.c}`, `/v1/swarm/bot/${hex.other}`, `/v1/swarm/bot/${hex.a.toUpperCase()}`,
+    `/v1/swarm/bot/${hex.a}.tar`, `/v1/swarm/bot/${hex.a.slice(1)}`, "/v1/swarm/bot/..%2F..%2Fetc", "/v1/swarm/bot/constructor"]) {
+    const no = await call(m, "GET", p, { build: null })
+    assert.equal(no.status, 404, p)
+    assert.deepEqual(no.json(), { error: { code: "not_found" } })
+  }
+
+  // still while the machine stops; never without a token; only GET
+  m.stopping = true
+  assert.equal((await call(m, "GET", `/v1/swarm/bot/${hex.a}`, { build: null })).status, 200)
+  m.stopping = false
+  assert.equal((await call(m, "GET", `/v1/swarm/bot/${hex.a}`, { as: null, build: null })).status, 401)
+  assert.equal((await call(m, "POST", `/v1/swarm/bot/${hex.a}`)).status, 404)
 })
 
 test("a token whose sha256 is listed gets in, by its name", async () => {

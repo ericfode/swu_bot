@@ -175,22 +175,42 @@ hyphen. A feed token reads like a friend and writes only what carries its name, 
 
 ## The play page (play.js)
 
-`/play` seats a person against Eric's JEPA bot (jepa-tx-gate) on Holotable's play screen. The referee and the bot run
-in a worker of the person's tab (`play-worker.js` on the swarm's engine pack, `bot/table/README.md`), so the window and
-the games machine play nothing; the window only serves the files and keeps the finished games.
+`/play` seats a person against a bot on Holotable's play screen: Eric's JEPA bot (jepa-tx-gate) or a WebAssembly
+version of the arena's latest round. The person picks the opponent first, and the page downloads only what that one
+needs, with a progress bar (`/play?bot=<name>` goes straight to one). The referee and the bot run in the person's tab
+(`play-worker.js` on the swarm's engine pack, `bot/table/README.md`), so the window and the games machine play
+nothing; the window only serves the files and keeps the finished games. The page is cross-origin isolated (an arena
+bot's stdin is a SharedArrayBuffer) with `credentialless`, so card art from its CDN still loads; a browser that does
+not isolate it (Safari) can play only the JEPA bot.
 
 - `ARENA_PLAY` says who may play: `invited` (the default: signed in with GitHub and invited), `github` (anyone signed in
   with GitHub; their sign-in then returns to `/play` though they cannot read the arena) or `off`. A view link's guest has
   no GitHub login, so the page asks them to sign in. The files come through the swarm relay, so the page needs
   `SWARM_HELPER_TOKEN` too.
 - `GET /play`, `/play/kit.js` (the viewer kit; its license list `/play/swu-viewer-kit.licenses.txt`, like
-  `/swu-viewer-kit.licenses.txt`, is open to anyone), `/play/engine.json?b=` and `/play/play-worker.js?b=` (the games
-  machine's files of that build, kept on the window's disk so they load while it sleeps; with none kept and the
-  machine asleep, the page asks for them, which wakes it at most every 15 minutes).
-- `GET /api/play/info`: the files to load and the person's last 20 games; an admin also gets the last 200 games of
-  everyone, with who played them.
+  `/swu-viewer-kit.licenses.txt`, is open to anyone), and `/play/<file>?b=<build>`: `engine.json`, `play-worker.js`,
+  `bot-worker.js`, the JEPA bot's `tx-t10.safetensors` and `tx-t10-e.safetensors`, `python-lib.json` and `python.wasm`
+  (the games machine's files of that build, kept on the window's disk so they load while it sleeps; with none kept and
+  the machine asleep, the page asks for them, which wakes it at most every 15 minutes). Every answer has
+  `x-raw-length`, the unzipped size, which is what a page reading the body counts.
+- `GET /play/bundle/<sha256>`: an arena version's canonical tar, only for a version of the latest round. The swarm
+  relay (`lineup()`, `sendBot()`) gets the lineup (`GET /v1/swarm/lineup.json`) and each of its bundles
+  (`GET /v1/swarm/bot/<sha256>`) from the games machine as soon as it learns the lineup, checks each sha256 and keeps
+  the tars with their gzips in `<home>/swarm-bots` (the latest round's only), so they load while the machine sleeps.
+  503 while the machine is asleep and the window does not have it yet (it is woken, at most every 15 minutes).
+- `GET /api/play/info`: the files to load (`pack`, `worker`, `botWorker`, each `{url, bytes}`) and the person's last
+  20 games; an admin also gets the last 200 games of everyone, with who played them.
+- `GET /api/play/bots`: `{ready, round, capMs, bots, runtimes}`, the opponents to pick. The JEPA bot comes first
+  (`kind: 'jepa'`, `files: [{url, path, bytes}]`, its models: the page sends `[[path, bytes]]` to the worker with its
+  first game), then the latest round's versions by arena rating (`kind: 'arena'`, `elo`, `runtime`, `capMs`,
+  `bundle: {url, hex, bytes, wire}`). `runtimes` names the files of each interpreter a bundle may need
+  (`python-3.14-wasi`: `{lib, wasm}`). The lineup is the swarm relay's (above), asked again when it is over a minute
+  old. `runtime` is what the bundle's `arena.json` names, read once the window has the bundle (null before); `capMs` is
+  the time per bot per game rated rounds take now (Eric's setting, else 60 s). `bytes` and `wire` (about what a file
+  downloads, gzipped) are null when the window does not know a size yet.
 - `POST /api/play/games {replay}`: the tab sends the finished game. Only from this site's own page (Origin) and as JSON;
-  the header must seat `person` in seat 1 and `jepa-tx-gate` in seat 2, with step lines and an end line; at most 16 MB
+  the header must seat `person` in seat 1 and `jepa-tx-gate` or an arena version in seat 2, with step lines and an
+  end line; at most 16 MB
   and 40 games a day per person. The same replay again gives the same id. It goes into the run `play`
   (`feed: "play"`, so a people run: readers see "opponent", and the app leaves it out), with who played it in
   `admin/people` as `@<login>`. The games are unrated: the person's tab played them.
