@@ -124,4 +124,4 @@ function createTableHost({ send, env = new Env(), decksFile = DECKS, makeBot = j
     return host;
 }
 
-module.exports = { createTableHost, deckOptions, pickDecks, RANDOM };
+module.exports = { createTableHost, deckOptions, pickDecks, cardTextOf, RANDOM };

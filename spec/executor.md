@@ -62,6 +62,7 @@ a bot that ran out of time or hung while the tab was hidden, or after the comput
 
 Every request carries the executor's credential: a helper token (`authorization: Bearer`) on port 8090, or a signed-in
 session cookie on the window. The window adds the swarm's token itself and remembers which person holds which lease.
+The machine's `swarm` routes are the ones that need no `x-helper-build` header and are still served while it stops.
 
 | Machine (port 8090) | Window (the swarm) | |
 |---|---|---|
@@ -70,7 +71,9 @@ session cookie on the window. The window adds the swarm's token itself and remem
 | `GET /v1/bundle/<sha256>` | `GET /api/swarm/bundle/<sha256>` | a bundle of a seed this executor holds (canonical tar) |
 | `POST /v1/lease/<id>/heartbeat` | `POST /api/swarm/lease/<id>/heartbeat` | at once, then every `heartbeatMs`: 200 `{continue: true}`, or 410 when the seed was taken back |
 | `POST /v1/lease/<id>/result` | `POST /api/swarm/lease/<id>/result` | the result or `{failed}`; 410 when taken back |
-| `GET /v1/swarm/<file>` | `GET /swarm/<file>` | the browser executor's files, built with the machine's own image: `engine.json`, `python.json`, `referee-worker.js`, `bot-worker.js`, `manifest.json` |
+| `GET /v1/swarm/<file>` | `GET /swarm/<file>` | the browser executor's files, built with the machine's own image: `manifest.json`, `engine.json`, `python-lib.json`, `python.wasm`, `referee-worker.js`, `bot-worker.js`, `executor-worker.js`, `play-worker.js`, `tables-worker.js` (the /tables page's worker) |
+| `GET /v1/swarm/lineup.json` | `bots` of `GET /api/tables/info` | the latest round's versions whose bundle is on the machine, in roster order: `{round, bots: [{bundle, bytes, name}]}`, or `{round: null, bots: []}` before the first round |
+| `GET /v1/swarm/bot/<sha256>` | `GET /tables/bot/<sha256>.tar` | the canonical tar of a version in that lineup, for a person playing it on the window's /tables page; 404 for any other |
 | | `GET /api/swarm/info` | `{on, build, cards}`: whether the swarm is on, and the build the tab must load |
 
 `build` is the commit the machine's image was built from and `cards` a hash of its card data; an executor that runs

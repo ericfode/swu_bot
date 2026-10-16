@@ -1,19 +1,26 @@
 'use strict';
 /**
- * One game at a table: a person (person.js) against a bot, played by match.js like any arena game. Besides the
- * protocol messages the person's seat gets (hello, decide, over), the screen gets a `move` after every real move, from
- * either seat, with the board as the person sees it then, so the bot's moves can be shown one by one:
+ * One game at a table: a person (person.js) against a bot, or two people (open.js), played by match.js like any arena
+ * game. Besides the protocol messages a person's seat gets (hello, decide, over), each person's screen gets a `move`
+ * after every real move, from either seat, with the board as that person sees it then, so the other side's moves can
+ * be shown one by one:
  *
  *   { t: 'move', n, seat, kind, label, card?, split?, state }
  *
- * `card` ({id, n, s}) is left out when the person cannot see it after the move (a card the bot resourced, or picked
- * from its own deck or hand), and `label` then says only "a hidden card". At the end the screen gets
+ * `card` ({id, n, s}) is left out when that person cannot see it after the move (a card the other side resourced, or
+ * picked from its own deck or hand), and `label` then says only "a hidden card". At the end each screen gets
  *
- *   { t: 'end', winner, outcome, round, steps, error, by, conceded, replay }
+ *   { t: 'end', winner, outcome, round, steps, error, by, conceded, concededBy, replay }
  *
- * with `replay` the game's replay (spec/replay-format.md, both hands, written after the game) as JSON Lines text.
+ * with `replay` the game's replay (spec/replay-format.md, both hands, written after the game) as JSON Lines text,
+ * `conceded` whether this screen's person conceded and `concededBy` the seat that did, or null.
  *
  *   const { result, replay } = await playTable({ env, person, personSeat: 'p1', bot, decks: {p1, p2}, seed, key, send });
+ *   const { result, replay } = await playSeats({ env, seats: { p1, p2 }, screens: { p1: send1, p2: send2 }, decks, seed, key });
+ *
+ * playSeats takes any two protocol clients; `screens` names the seats that are people (PersonSeat), each with the
+ * function that gets that person's moves and end. `stop` is match.js's: a promise of {seat, why} that ends the game as
+ * that seat's loss at once (a person who concedes while the other one has the decision).
  */
 const { playGame } = require('../match');
 const { view, snapshot, placedRef } = require('../view');
@@ -54,34 +61,46 @@ function describe(eg, pid, action, applied, personPid) {
     return out;
 }
 
-async function playTable({ env, person, personSeat = 'p1', bot, decks, seed, key = null, send, maxSteps = 6000 }) {
-    const bots = personSeat === 'p1' ? [person, bot] : [bot, person];
+async function playSeats({ env, seats, screens, decks, seed, key = null, maxSteps = 6000, stop = null }) {
+    const bots = [seats.p1, seats.p2];
+    const people = Object.entries(screens).filter(([, send]) => typeof send === 'function');
     const lines = [];
     let n = 0;
     const watch = {
         pre() {},
         post(eg, pid, action, applied) {
-            try {
-                const personPid = eg.ids[personSeat === 'p1' ? 0 : 1];
-                send({ t: 'move', n: ++n, ...describe(eg, pid, action, applied, personPid), state: view(eg, personSeat) });
-            } catch (e) {
-                // a view must never stop the game
-                console.error(`table: could not describe move ${n}: ${e.message}`);
+            n++;
+            for (const [seat, send] of people) {
+                try {
+                    const personPid = eg.ids[seat === 'p1' ? 0 : 1];
+                    send({ t: 'move', n, ...describe(eg, pid, action, applied, personPid), state: view(eg, seat) });
+                } catch (e) {
+                    // a view must never stop the game
+                    console.error(`table: could not describe move ${n} for ${seat}: ${e.message}`);
+                }
             }
         },
         end() {}
     };
     const result = await playGame(env, {
-        seed, bots, decks, key, record: true, maxSteps, snapshot, watch,
+        seed, bots, decks, key, record: true, maxSteps, snapshot, watch, stop,
         onEvent: (e) => lines.push(JSON.stringify(e))
     });
     delete result.events;
     const replay = lines.join('\n') + '\n';
-    send({
-        t: 'end', winner: result.winner, outcome: result.outcome, round: result.round, steps: result.steps,
-        error: result.error ?? null, by: result.by ?? null, conceded: !!person.conceded, replay
-    });
+    const concededBy = ['p1', 'p2'].find((s) => seats[s].conceded) ?? null;
+    for (const [seat, send] of people) {
+        send({
+            t: 'end', winner: result.winner, outcome: result.outcome, round: result.round, steps: result.steps,
+            error: result.error ?? null, by: result.by ?? null, conceded: concededBy === seat, concededBy, replay
+        });
+    }
     return { result, replay };
 }
 
-module.exports = { playTable, describe, hiddenFrom };
+function playTable({ env, person, personSeat = 'p1', bot, decks, seed, key = null, send, maxSteps = 6000 }) {
+    const seats = personSeat === 'p1' ? { p1: person, p2: bot } : { p1: bot, p2: person };
+    return playSeats({ env, seats, screens: { [personSeat]: send }, decks, seed, key, maxSteps });
+}
+
+module.exports = { playTable, playSeats, describe, hiddenFrom };

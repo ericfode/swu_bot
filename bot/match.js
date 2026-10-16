@@ -20,11 +20,13 @@ const { seatFor, Shadow, BotError } = require('./protocol');
  * bots/omni/rs/stress.js.
  * It only reads the engine and must not throw.
  * `engine` adds options to env.newGame for the real game and its lookahead copy, such as { selectionToggles: true }.
+ * `stop` (a promise of { seat, why }) ends the game as that seat's loss as soon as it resolves, even while the other
+ * seat is deciding: a person who concedes at a table of two people (bot/table/open.js) while the other one thinks.
  * playGame closes no bot: whoever started a bot program closes it.
  *
  * @returns {{seed, steps, outcome, winner, round, ms, error?, by?, key?, events, botStats, timing}}
  */
-async function playGame(env, { seed, bots, decks: given = null, pool = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {}, watch = null, engine = {} }) {
+async function playGame(env, { seed, bots, decks: given = null, pool = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {}, watch = null, engine = {}, stop = null }) {
     if (bots[0] === bots[1] && typeof bots[0]?.decide === 'function') {
         throw new Error(`${bots[0].name}: one protocol client cannot play both seats`);
     }
@@ -39,6 +41,10 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
         return seatFor(b, seat, { players, decks, botSeed: streams.botSeed(seat), deals: (deal) => streams.sim(seat, deal), limits });
     });
     const res = { seed, steps: 0, outcome: '?', winner: null, round: 0, ms: 0, ...(key ? { key } : {}), events: [] };
+    const stopped = stop && Promise.resolve(stop).then((s) => {
+        throw new BotError(s.seat, bots[s.seat === 'p2' ? 1 : 0].name, s.why ?? 'left the game');
+    });
+    stopped?.catch(() => undefined); // read by the race below; never unhandled
     // every recorded event is also handed to onEvent as it happens, so a viewer can follow the game live
     const emit = (e) => {
         if (record) {
@@ -86,7 +92,8 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
             const prompt = eg.promptSignature(pid);
             const title = eg.player(pid).currentPrompt().menuTitle ?? null;
             watch?.pre(eg, pid, actions, res.steps);
-            const action = await seats[eg.ids.indexOf(pid)].decide(eg, pid, actions, rng);
+            const asked = seats[eg.ids.indexOf(pid)].decide(eg, pid, actions, rng);
+            const action = await (stopped ? Promise.race([asked, stopped]) : asked);
             // a seat answers with one of `actions`, or a copy of it that carries a split
             const i = actions.findIndex((a) => a === action || actionKey(eg, a) === actionKey(eg, action));
             if (i < 0) {

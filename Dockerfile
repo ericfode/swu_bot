@@ -13,6 +13,9 @@ ENV NODE_ENV=production ARENA_MODE=window WINDOW_HOME=/data/window PORT=8080
 WORKDIR /app
 COPY --from=build /src/package.json ./
 COPY --from=build /src/bot/arena bot/arena
+# the open tables (bot/arena/tables.js) read deck lists in the arena's form and offer the tournament lists
+COPY --from=build /src/bot/decklists.js bot/decklists.js
+COPY --from=build /src/bot/decks/ash-meta-2026-09.json bot/decks/ash-meta-2026-09.json
 COPY --from=build /src/app/src app/src
 COPY --from=build /src/app/dist/public.html app/dist/public.html
 COPY --from=build /src/meta/atlas-kit.js meta/atlas-kit.js

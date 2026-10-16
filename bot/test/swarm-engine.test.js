@@ -145,3 +145,81 @@ test('the play page\'s worker: a person against the JEPA bot in the browser runt
     assert.strictEqual(end.outcome, native.result.outcome);
     assert.strictEqual(end.replay, native.replay, 'the same game, board by board');
 });
+
+test("the open tables' worker: two people in the browser runtime play the same game as in Node, and decks are checked there", { skip: !built && 'no engine build here', timeout: 300000 }, async () => {
+    const vm = require('vm');
+    const { webcrypto } = require('crypto');
+    const { build } = require('../swarm/build');
+    const { seededRng } = require('../rng');
+    const out = packOnce();
+    build(out);
+    const seed = 6;
+    const key = 'd'.repeat(64);
+    const game = { mode: 'people', deck: 'darth-vader_jtl_yellow', peerDeck: 'luke-skywalker_jtl_data-vault', you: 'pl_aaaaaa', peer: 'pl_bbbbbb' };
+    // Node: the open host as bot/test/open-table.test.js runs it
+    const { createOpenHost } = require('../table/open');
+    let mine = null;
+    let theirs = null;
+    const nodeHost = createOpenHost({ send: (m) => mine?.(m), sendPeer: (m) => theirs?.(m) });
+    mine = scriptedPerson((a) => nodeHost.act(a), seededRng('me'));
+    theirs = scriptedPerson((a) => nodeHost.peerAct(a), seededRng('them'));
+    nodeHost.start({ ...game, seed, key });
+    const native = await nodeHost.done;
+    // the worker, as the tables page runs it: this tab's person (msg) and the linked guest (peer)
+    const sent = [];
+    let onSent = () => undefined;
+    const self = { postMessage: (m) => (sent.push(m), onSent(m)) };
+    const ctx = vm.createContext({
+        self, navigator: { hardwareConcurrency: 2 }, console, performance, TextDecoder, TextEncoder, URL, atob, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, queueMicrotask, structuredClone,
+        crypto: { getRandomValues: (a) => (a.set(a.length === 1 ? [seed] : Buffer.from(key, 'hex')), a), randomUUID: () => webcrypto.randomUUID() },
+        fetch: async () => ({ json: async () => JSON.parse(fs.readFileSync(path.join(out, 'engine.json'), 'utf8')) })
+    });
+    vm.runInContext(fs.readFileSync(path.join(out, 'tables-worker.js'), 'utf8'), ctx);
+    self.onmessage({ data: { t: 'init', pack: '/tables/engine.json', botWorker: '/tables/bot-worker.js' } });
+    const ready = await new Promise((resolve) => {
+        onSent = (m) => (m.t === 'ready' || m.t === 'error') && resolve(m);
+    });
+    assert.strictEqual(ready.t, 'ready', ready.message);
+    assert.ok(ready.options.decks.length > 10);
+    assert.strictEqual(ready.isolated, false);
+    // a deck list as SWUDB exports it is checked against the pack's card data; a broken one says why
+    const vader = JSON.parse(fs.readFileSync(path.join(ROOT, 'bot', 'decks', 'ash-meta-2026-09.json'), 'utf8')).find((d) => d.metadata.name === 'darth-vader_jtl_yellow');
+    self.onmessage({ data: { t: 'checkDeck', n: 1, deck: { ...vader, metadata: { name: "Vader's list", author: 'someone' } } } });
+    self.onmessage({ data: { t: 'checkDeck', n: 2, deck: { ...vader, deck: vader.deck.slice(0, 2) } } });
+    const checked = sent.filter((m) => m.t === 'deckChecked');
+    assert.deepStrictEqual([checked[0].error, checked[0].deck.metadata.name], [null, "Vader's list"]);
+    assert.match(checked[1].error, /main deck has \d+ cards/);
+    self.onmessage({ data: { t: 'bot', name: 'tinybot-v1', hex: '0'.repeat(64), tar: new Uint8Array(0) } });
+    assert.match(sent.at(-1).error, /not cross-origin isolated/, 'arena bots need an isolated page');
+
+    const me = scriptedPerson((a) => {
+        self.onmessage({ data: { t: 'act', act: a } });
+        return sent.at(-1).t === 'acted' ? sent.at(-1).error : null;
+    }, seededRng('me'));
+    let n = 0;
+    const them = scriptedPerson((a) => {
+        self.onmessage({ data: { t: 'peerAct', n: ++n, act: a } });
+        return sent.at(-1).t === 'peerActed' ? sent.at(-1).error : null;
+    }, seededRng('them'));
+    const ends = {};
+    const ended = new Promise((resolve) => {
+        onSent = (m) => {
+            const [who, screen] = m.t === 'msg' ? ['mine', me] : m.t === 'peer' ? ['theirs', them] : [null, null];
+            if (who) {
+                screen(m.msg);
+                if (m.msg.t === 'end') {
+                    ends[who] = m.msg;
+                }
+            }
+            if (ends.mine && ends.theirs) {
+                resolve(ends);
+            }
+        };
+    });
+    self.onmessage({ data: { t: 'start', game } });
+    assert.strictEqual(JSON.stringify(sent.find((m) => m.t === 'started')), '{"t":"started","id":"open-00000006","seat":"p1","peerSeat":"p2","cardText":null}');
+    const end = await ended;
+    assert.strictEqual(end.mine.outcome, native.result.outcome);
+    assert.strictEqual(end.mine.replay, native.replay, 'the same game, board by board');
+    assert.strictEqual(end.theirs.replay, native.replay, 'the guest gets the same replay');
+});

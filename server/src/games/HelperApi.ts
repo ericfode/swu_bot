@@ -12,8 +12,12 @@
  * - GET bundle/<hex>: a bundle named by a lease this helper holds now (else 404)
  * - POST lease/<id>/heartbeat: 200 {continue: true} while this helper holds it, else 410
  * - POST lease/<id>/result {results, replays} or {failed}: 200, or 410 as for a heartbeat
- * - GET swarm/<file>: a file of the browser swarm built with this image, the one route without the build header
- *   (the window learns the build from swarm/manifest.json) and the one still served while the machine stops
+ * - GET swarm/<file>: a file of the browser swarm built with this image
+ * - GET swarm/lineup.json: the latest round's versions whose tar is in the bundles folder, in roster order:
+ *   200 {round, bots: [{bundle, bytes, name}]}, or {round: null, bots: []} before the first round
+ * - GET swarm/bot/<hex>: the tar of a version in that lineup, for the window's /tables page (else 404)
+ * The swarm routes are the ones without the build header (the window learns the build from swarm/manifest.json, and
+ * relays them with the swarm's own token) and the ones still served while the machine stops.
  *
  * Answers keep the Elixir server's bytes where it costs nothing: JSON keys in the order Jason wrote them (sorted),
  * `application/json; charset=utf-8`, files with no charset, Plug's cache-control. A job goes out with its keys in the
@@ -29,15 +33,23 @@ import path from "node:path"
 import { pipeline } from "node:stream/promises"
 import type { GamesConfig } from "./Config.ts"
 import type { LeaseBoardImpl, LeaseOutcome } from "./Leases.ts"
-import { firstChars } from "./Leases.ts"
+import { firstChars, tarSize } from "./Leases.ts"
 import * as Log from "./Log.ts"
 import type { Secrets } from "./Secrets.ts"
+
+/** The latest round's versions, in roster order, each with its bundle's sha256 (RoundSpec bots and bundles). */
+export interface Lineup {
+  readonly round: number
+  readonly bots: ReadonlyArray<{ readonly name: string; readonly bundle: string }>
+}
 
 export interface HelperApiOptions {
   readonly config: GamesConfig
   readonly secrets: Secrets
   readonly board: LeaseBoardImpl
   readonly isStopping: () => boolean
+  /** the latest round in games.db, null before the first (without it: no round, so swarm/bot/<hex> is always 404) */
+  readonly lineup?: () => Promise<Lineup | null>
 }
 
 export interface Listening {
@@ -75,7 +87,8 @@ const SWARM_FILES: Readonly<Record<string, string>> = {
   "referee-worker.js": "text/javascript",
   "bot-worker.js": "text/javascript",
   "executor-worker.js": "text/javascript",
-  "play-worker.js": "text/javascript"
+  "play-worker.js": "text/javascript",
+  "tables-worker.js": "text/javascript"
 }
 
 type Req = IncomingMessage
@@ -356,6 +369,33 @@ const swarmFile = async (o: HelperApiOptions, req: Req, res: Res, file: string) 
     fail(req, res, 404, "not_found", "this image has no swarm files"))
 }
 
+/**
+ * The latest round's versions whose tar is a regular file in the bundles folder (as an offer checks), in roster order,
+ * with each tar's size. Read on every request: one row of games.db and a stat per version.
+ */
+const tableLineup = async (o: HelperApiOptions) => {
+  const lineup = o.lineup ? await o.lineup() : null
+  if (!lineup) return { bots: [], round: null }
+  const bots: Array<{ bundle: string; bytes: number; name: string }> = []
+  for (const b of lineup.bots) {
+    const bytes = tarSize(o.config.paths.bundles, b.bundle)
+    if (bytes !== null) bots.push({ bundle: b.bundle, bytes, name: b.name })
+  }
+  return { bots, round: lineup.round }
+}
+
+/** swarm/lineup.json, its keys sorted as every other answer's */
+const swarmLineup = async (o: HelperApiOptions, req: Req, res: Res) => json(req, res, 200, await tableLineup(o))
+
+/** swarm/bot/<hex>: the canonical tar of a version in the lineup, for a person's tab to play it */
+const swarmBot = async (o: HelperApiOptions, req: Req, res: Res, hex: string) => {
+  const notFound = () => fail(req, res, 404, "not_found")
+  if (!HEX64.test(hex)) return notFound()
+  const { bots } = await tableLineup(o)
+  if (!bots.some((b) => b.bundle === hex)) return notFound()
+  await sendFile(req, res, path.join(o.config.paths.bundles, `${hex}.tar`), "application/x-tar", false, notFound)
+}
+
 const handle = async (o: HelperApiOptions, req: Req, res: Res) => {
   // let the parser finish the bytes that came with the headers first: a small body is then complete, and an answer
   // given before reading it does not need to close the connection
@@ -364,7 +404,11 @@ const handle = async (o: HelperApiOptions, req: Req, res: Res) => {
   if (name === null) return fail(req, res, 401, "unauthorized", "a helper token is needed")
   const p = pathInfo(req.url)
   const m = req.method
-  if (m === "GET" && p.length === 3 && p[0] === "v1" && p[1] === "swarm") return swarmFile(o, req, res, p[2]!)
+  if (m === "GET" && p[0] === "v1" && p[1] === "swarm") {
+    if (p.length === 3 && p[2] === "lineup.json") return swarmLineup(o, req, res)
+    if (p.length === 3) return swarmFile(o, req, res, p[2]!)
+    if (p.length === 4 && p[2] === "bot") return swarmBot(o, req, res, p[3]!)
+  }
   const builds = headerValues(req, "x-helper-build")
   if (builds.length !== 1 || !buildMatches(o.config, builds[0])) return wrongBuild(o, req, res)
   if (o.isStopping()) return fail(req, res, 503, "stopping")

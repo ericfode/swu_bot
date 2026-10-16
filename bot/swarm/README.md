@@ -39,6 +39,11 @@ The window's play page (`/play`, `bot/arena/play.js`) loads the same `engine.jso
 `play-worker.js`: the referee and the JEPA bot (`bot/table/host.js`) in one worker, a person at the other seat. That
 page plays no arena games and needs no cross-origin isolation (the bot runs in the worker, with no stdin pipe).
 
+The open tables (`/tables`, `bot/arena/tables.js`) load it with `tables-worker.js`: the referee, the JEPA bot, the
+WASI host and the bot workers' spawn, so a person plays an arena bundle (compiled or Python) in their own tab, unpacked
+under `ARENA_HOME` as the referee worker unpacks a lease's bundles; or two people play, this tab hosting the game for
+both (`bot/table/open.js`). That page is cross-origin isolated like the swarm page.
+
 Not the same as a helper: no memory cap per bot (a browser cannot cap a memory the module defines itself), and thinking
 time is the tab's wall clock, so a slow or busy computer gives clock bots less search (the report's ms/decision shows
 it, as it does for helpers). Nobody checks a swarm result twice: the swarm is for people Eric trusts (spec/executor.md).

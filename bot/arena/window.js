@@ -32,6 +32,7 @@ const crypto = require('crypto');
 const { createAuth, atLeast, LOGIN } = require('./auth');
 const { createSwarmRelay } = require('./swarm-relay');
 const { createPlay } = require('./play');
+const { createTables } = require('./tables');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
 const { builderName, ownsName } = require('./api');
@@ -636,7 +637,8 @@ function createWindow(opts = {}) {
         return Array.isArray(d?.links) ? d.links.filter((l) => l && typeof l.id === 'string' && typeof l.key === 'string') : [];
     };
     let play = null;
-    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], links: viewLinks, openTo: (next) => !!play?.openTo(next) });
+    let tables = null;
+    const auth = opts.auth ?? createAuth({ dir: path.join(home, 'auth'), invites: () => parseOr(store.getDoc('admin', 'invites'), null)?.logins ?? [], links: viewLinks, openTo: (next) => !!play?.openTo(next) || !!tables?.openTo(next) });
     // the games machine (coord/), woken when a bot comes in; a stopped machine starts on the request
     const wakeGames = opts.wakeGames ?? (() => wakeGamesAt(process.env.ARENA_GAMES_WAKE));
     const appData = appBuilder(store, { minMs: opts.minMs ?? 10000, parts: opts.appParts ?? null, staleMs: opts.staleMs ?? STALE_MS });
@@ -645,11 +647,17 @@ function createWindow(opts = {}) {
     // the third-party licenses of the packages bundled into the kit, which Holotable's build writes next to it
     const kitLicenses = path.join(path.dirname(kitFile), 'swu-viewer-kit.licenses.txt');
     // the browser swarm (spec/executor.md): /swarm and /api/swarm/*, relayed to the games machine for signed-in people
-    const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm') });
+    const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm'), botDir: path.join(home, 'swarm-bots') });
     // the play page (play.js): a person against the JEPA bot in their own tab, on the swarm's files; games come back here
     play = createPlay({ store, swarm, auth, kitFile, wake: () => wakeGames(), mode: opts.play ?? process.env.ARENA_PLAY });
 
     const arenaDoc = (id) => parseOr(store.getDoc('arena', id), undefined);
+    // the open tables (tables.js): people against people or any arena bot, every game in a player's tab
+    tables = createTables({
+        store, swarm, auth, kitFile, wake: () => wakeGames(), mode: opts.tables ?? process.env.ARENA_TABLES,
+        arena: { status: () => arenaDoc('status') ?? { competitors: [] }, versions: (name) => (/^[a-z][a-z0-9_]{0,31}$/.test(name) ? arenaDoc(`versions-${name}`) ?? null : null) },
+        ...(opts.tablesFetch ? { fetchImpl: opts.tablesFetch } : {})
+    });
     const arenaMethods = {
         status: () => arenaDoc('status') ?? { tournament: null, round: null, phase: 'idle', competitors: [] },
         standings: () => arenaDoc('standings') ?? { rounds: [], global: {} },
@@ -1211,11 +1219,18 @@ function createWindow(opts = {}) {
             if (url.pathname === '/mcp') {
                 return mcpRoute(req, res);
             }
+            // the open tables' logs: read with a reader token, which is no bearer token of the window's own
+            if (await tables.openRoute(req, res, url, { sendJson, sendText })) {
+                return undefined;
+            }
             const who = auth.who(req);
             if (who.role === 'bad') {
                 return sendJson(res, 401, { error: { code: 'unauthorized', message: 'wrong bearer token' } }, req);
             }
             if (await play.route(req, res, url, who, { sendJson, sendText, readBody })) {
+                return undefined;
+            }
+            if (await tables.route(req, res, url, who, { sendJson, sendText, readBody })) {
                 return undefined;
             }
             if (await swarm.route(req, res, url, who, { sendJson, sendText, readBody })) {
@@ -1274,7 +1289,7 @@ function createWindow(opts = {}) {
         }
     }
 
-    return { handle, store, auth, wakeGames };
+    return { handle, store, auth, wakeGames, tables };
 }
 
 module.exports = { createWindow, wakeGamesAt, Store, storeReader, settleRun, scrub, appBuilder, NS, FRIEND_NS };

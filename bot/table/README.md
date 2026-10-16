@@ -54,3 +54,34 @@ window /play ── play.html + Holotable's kit (SWUViewer.mountPlay) ── wor
 
 The bot runs in the person's tab, so a person who opens the browser's developer tools could read the bot's hand. That
 is why these games are unrated.
+
+## The open tables: /tables on the arena window
+
+Eric's picks (2026-10-16): people play each other or any arena bot, no ratings yet, every game hosted by a player's
+browser; the finished games are kept for training and anyone signed in with GitHub can read them with a free reader
+token; players appear in the logs by a random id, never a GitHub name; both players are trusted in this first version
+(no signed moves, no deal proof).
+
+```
+person's tab ── tables.html + Holotable's kit ── worker: tables-worker.js
+                                                 referee (forceteki) ◀─▶ a bot: JEPA, or an arena bundle in bot workers
+                                                                     ◀─▶ the other person (people games)
+guest's tab ── tables.html + kit ◀── WebRTC data channel, or the window's lobby relay ──▶ host's tab
+both tabs ── POST /api/tables/games {replay, seat} at the end
+```
+
+- `open.js`: `createOpenHost`, one game at a time in the host's tab: `options()`, `checkDeck(deck)` (a deck list such
+  as SWUDB exports it, checked against the card data like the arena's lists), `start({mode: 'bot' | 'people', ...})`,
+  `act()` and `peerAct()` (the guest's answers), `concede()` and `peerConcede()`, `cardText()`. An arena bot is made by
+  the registry from its bundle, which the worker unpacked under `ARENA_HOME`, and gets the arena's thinking time. In a
+  people game the guest's seat is a `PersonSeat` whose messages go to `sendPeer`; the host's tab holds both hands and
+  the deal (trusted). Which seat the host takes comes from the game's seed.
+- `table.js` `playSeats`: a game between any two seats, each person seat with its own screen; a concession from either
+  person ends the game for both (`end.concededBy`).
+- `bot/swarm/build.js` bundles it as `tables-worker.js` on the swarm's engine pack, with the WASI host and the bot
+  workers' spawn, so arena bundles (compiled and Python) run as they do on the swarm page.
+- `bot/arena/web/tables.html`: the page. It loads the engine only when the person hosts or plays a bot (a guest only
+  draws the host's game), links two tabs (a WebRTC data channel when the browsers can reach each other, else the
+  window's lobby carries the game; a direct link that drops goes on through the lobby), and makes the pasted codes for
+  games with no lobby. `bot/arena/tables.js` and `bot/arena/lobby.js` are the window's side (`bot/arena/WINDOW.md`),
+  and `spec/open-tables.md` is the log API.

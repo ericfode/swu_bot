@@ -132,18 +132,11 @@ function checkDecks(decks, { known, implemented = () => true, types = () => null
     return problems;
 }
 
-/** Read, normalize and check a deck file against the engine's card data. Throws listing every problem. */
-function loadDecks(file, env) {
-    const bytes = fs.readFileSync(file);
-    const raw = JSON.parse(bytes.toString('utf8'));
-    const list = Array.isArray(raw) ? raw : raw?.decks;
-    if (!Array.isArray(list) || list.length < 2) {
-        throw new Error(`${file}: expected a JSON array of at least 2 deck lists`);
-    }
-    const decks = list.map(normalizeDeck);
+/** checkDecks's lookups from the engine's card data (an env.js Env). */
+function engineLookups(env) {
     const g = env.cardDataGetter;
     const card = (id) => (g.setCodeMap.has(id) ? g.getCardSync(g.setCodeMap.get(id)) : null);
-    const problems = checkDecks(decks, {
+    return {
         known: (id) => g.setCodeMap.has(id),
         implemented: (id) => {
             const c = card(id);
@@ -153,7 +146,19 @@ function loadDecks(file, env) {
         minDeckSize: (id) => MIN_DECK_SIZE + (MIN_DECK_SIZE_MODIFIER.get(card(id)?.id) ?? 0),
         cardKey: (id) => card(id)?.id ?? id,
         maxCopies: (key) => MAX_COPIES_OVERRIDE.get(key) ?? MAX_COPIES
-    });
+    };
+}
+
+/** Read, normalize and check a deck file against the engine's card data. Throws listing every problem. */
+function loadDecks(file, env) {
+    const bytes = fs.readFileSync(file);
+    const raw = JSON.parse(bytes.toString('utf8'));
+    const list = Array.isArray(raw) ? raw : raw?.decks;
+    if (!Array.isArray(list) || list.length < 2) {
+        throw new Error(`${file}: expected a JSON array of at least 2 deck lists`);
+    }
+    const decks = list.map(normalizeDeck);
+    const problems = checkDecks(decks, engineLookups(env));
     if (problems.length) {
         throw new Error(`${file}:\n  ${problems.join('\n  ')}`);
     }
@@ -258,4 +263,4 @@ function parseDeckText(text, name) {
     });
 }
 
-module.exports = { padId, normalizeDeck, checkDecks, loadDecks, deckPairs, dealDecks, parseDeckText };
+module.exports = { padId, normalizeDeck, checkDecks, engineLookups, loadDecks, deckPairs, dealDecks, parseDeckText };

@@ -4,11 +4,14 @@ import http from "node:http"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { after, before, beforeEach, test } from "node:test"
-import { Effect } from "effect"
+import { createHash } from "node:crypto"
+import { Effect, Layer, ManagedRuntime } from "effect"
 import { readConfig, TIMING } from "../../src/games/Config.ts"
-import { setSink } from "../../src/games/Log.ts"
-import { BootFailed, mountpoint, startMachine } from "../../src/games/Machine.ts"
+import { layer as logLayer, setSink } from "../../src/games/Log.ts"
+import { BootFailed, lineupOf, mountpoint, startMachine } from "../../src/games/Machine.ts"
 import type { RoundDeps, RoundOutcome } from "../../src/games/Round.ts"
+import { Store } from "../../src/games/Store.ts"
+import type { RoundRow } from "../../src/games/Store.ts"
 import { request } from "../../src/games/WindowProxy.ts"
 
 const TOKEN = "the-window-token-0123456789abcdef"
@@ -266,4 +269,44 @@ test("boot refusals: no volume with GAMES_REQUIRE_MOUNT=1, no window or token on
     e instanceof BootFailed && e.message === "SWU_WINDOW_TOKEN is not set")
   await assert.rejects(startMachine({ config: readConfig({ GAMES_DATA: data }), env: { SWU_WINDOW_TOKEN: TOKEN }, production: true }), (e: unknown) =>
     e instanceof BootFailed && e.message === "SWU_WINDOW is not set")
+})
+
+test("the helper API's tables lineup is the latest round in games.db: its versions with a bundle, in roster order", { timeout: 60_000 }, async (t) => {
+  const data = scratch("games-machine-")
+  const sha256 = (x: string) => createHash("sha256").update(x).digest("hex")
+  const swarmToken = "the-swarm-token-0123456789abcdef0123"
+  const config = { ...machineConfig(data, { GAMES_HELPER_PORT: "8090", GAMES_HELPER_LISTEN: "127.0.0.1" }), helperPort: 0 }
+  const a = sha256("tar a")
+  const b = sha256("tar b")
+  mkdirSync(config.paths.bundles, { recursive: true })
+  writeFileSync(path.join(config.paths.bundles, `${a}.tar`), "tar a")
+  writeFileSync(path.join(config.paths.bundles, `${b}.tar`), "tar b!")
+  const round = (k: number, bots: Array<string>, bundles: Record<string, string>): RoundRow => ({
+    k, arena: "open", spec: { round: k, bots, gamesPerPair: 2, capMs: 45000, decks: null, bundles, botInfo: {} },
+    firstSeed: 9, keyId: "abc", workers: 2, state: "done", boot: "b0", attempts: 1, why: "changed", createdAt: "2026-10-15T00:00:00.000Z", endedAt: null
+  })
+  const rt = ManagedRuntime.make(Store.layerFile(config.paths.db).pipe(Layer.provide(logLayer)))
+  const store = await rt.runPromise(Effect.service(Store))
+  assert.equal(await lineupOf(store), null)
+  await rt.runPromise(store.createRound(round(3, ["a-v1"], { "a-v1": a }), []))
+  // a resident without a bundle is left out
+  await rt.runPromise(store.createRound(round(4, ["b-v1", "heuristic", "a-v2"], { "a-v2": a, "b-v1": b }), []))
+  assert.deepEqual(await lineupOf(store), { round: 4, bots: [{ name: "b-v1", bundle: b }, { name: "a-v2", bundle: a }] })
+  await rt.dispose()
+
+  const env = { SWU_WINDOW_TOKEN: TOKEN, GAMES_HELPER_TOKENS: `swarm:${sha256(swarmToken)}` }
+  const m = await startMachine({ config, env, production: false })
+  t.after(() => m.stop(1))
+  assert.ok(m.ports.helper)
+  const helper = `http://127.0.0.1:${m.ports.helper}`
+  const headers = { authorization: `Bearer ${swarmToken}` }
+  const lineup = await request(helper, "/v1/swarm/lineup.json", { method: "GET", headers, timeoutMs: 5000 })
+  assert.equal(lineup.status, 200)
+  assert.equal(lineup.body.toString("utf8"), `{"bots":[{"bundle":"${b}","bytes":6,"name":"b-v1"},{"bundle":"${a}","bytes":5,"name":"a-v2"}],"round":4}`)
+  const tar = await request(helper, `/v1/swarm/bot/${b}`, { method: "GET", headers, timeoutMs: 5000 })
+  assert.equal(tar.status, 200)
+  assert.equal(tar.contentType, "application/x-tar")
+  assert.equal(tar.body.toString("utf8"), "tar b!")
+  assert.equal((await request(helper, `/v1/swarm/bot/${sha256("other")}`, { method: "GET", headers, timeoutMs: 5000 })).status, 404)
+  assert.equal(await m.stop(0), 0)
 })
