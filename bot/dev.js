@@ -302,10 +302,16 @@ function runChild(argv, { env, timeoutMs = 0, errFile = null, inFile = null }) {
     return new Promise((resolve) => {
         const t0 = Date.now();
         const errFd = errFile ? fs.openSync(errFile, 'w') : 'pipe';
-        const inFd = inFile ? fs.openSync(inFile, 'r') : 'ignore';
-        const child = spawn(argv[0], argv.slice(1), { cwd: ROOT, env, stdio: [inFd, 'pipe', errFd], detached: true });
-        for (const fd of [errFd, inFd].filter((x) => typeof x === 'number')) {
-            fs.closeSync(fd);
+        let inFd = 'ignore';
+        let child;
+        try {
+            inFd = inFile ? fs.openSync(inFile, 'r') : 'ignore';
+            child = spawn(argv[0], argv.slice(1), { cwd: ROOT, env, stdio: [inFd, 'pipe', errFd], detached: true });
+        } finally {
+            // the child holds its own copies
+            for (const fd of [errFd, inFd].filter((x) => typeof x === 'number')) {
+                fs.closeSync(fd);
+            }
         }
         let out = '';
         let err = '';

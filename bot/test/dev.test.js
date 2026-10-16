@@ -219,8 +219,10 @@ test('pasted commands, read ends of files, run folders, the card data id and Jav
     }
 
     // Javy: setup installs it only where toolchain.json pins it, and the harness says so elsewhere
-    assert.strictEqual(dev.javyUnpinned('linux-x64'), null);
-    assert.match(dev.javyUnpinned('darwin-arm64'), /^Javy 8\.0\.0 is not pinned for darwin-arm64 yet .*cannot pack JavaScript bots; Python bots and bundles work$/);
+    for (const key of ['linux-x64', 'linux-arm64', 'darwin-arm64', 'darwin-x64']) {
+        assert.strictEqual(dev.javyUnpinned(key), null, key);
+    }
+    assert.match(dev.javyUnpinned('win32-x64'), /^Javy 8\.0\.0 is not pinned for win32-x64 yet .*cannot pack JavaScript bots; Python bots and bundles work$/);
 });
 
 test('usage: an --out the bot would be packed with, an opponent the arena does not play, a missing folder (exit 2)', async () => {
