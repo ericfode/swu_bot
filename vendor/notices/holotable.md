@@ -1,6 +1,6 @@
 # Third-party notices: vendor/holotable
 
-The built files in `vendor/holotable/` come from https://github.com/ericfode/holotable at `b7157d2`.
+The built files in `vendor/holotable/` come from https://github.com/ericfode/holotable at `e0bc061`.
 They bundle the packages below, each under its own license. The license texts the packages ship follow the table,
 each text once. `vendor/refresh.js` writes this file with every refresh; never edit it by hand.
 
