@@ -58,5 +58,9 @@ jobs:
           persist-credentials: false
       - if: env.FLY_API_TOKEN != ''
         uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+      # 683796dc616348 is the window machine lost in Fly's 2026-10-16 host restarts: its host is unreachable, so Fly
+      # can neither update nor remove it, and flyctl refuses to deploy while it is in the set. The window now runs on
+      # 1854559f1704e8, on a volume restored from a snapshot. Drop the flag once the old machine is destroyed; an id
+      # that no longer exists matches nothing.
       - if: env.FLY_API_TOKEN != ''
-        run: flyctl deploy --remote-only
+        run: flyctl deploy --remote-only --exclude-machines 683796dc616348
