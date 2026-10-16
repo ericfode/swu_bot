@@ -55,9 +55,35 @@ function gameFacts(buf) {
 
 function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () => false, page = path.join(__dirname, 'web', 'game.html') } = {}) {
     const base = String(publicUrl ?? '').replace(/\/+$/, '');
-    let kit = null; // {mtimeMs, raw, gz, etag}
+    let kit = null; // {mtimeMs, raw, gz, etag, etagGz}
+    // the last few bot games read here, by size: every spectator of a live game polls, so they share one read of the
+    // replay per new move, and a poll with nothing new reads nothing (the store keeps each replay's size in memory)
+    const hot = new Map(); // run/game -> {size, buf}, oldest first; at most 16 and 48 MB
+    let hotBytes = 0;
+    const drop = (k) => {
+        hotBytes -= hot.get(k)?.size ?? 0;
+        hot.delete(k);
+    };
 
     const linkOf = (run, game) => `${base}/g/${encodeURIComponent(run)}/${encodeURIComponent(game)}`;
+    /** The replay as a reader gets it, or null. A game against people is read each time, as for the app's readers. */
+    function replay(run, game) {
+        if (peopleRun(run)) {
+            return replayFor(READER, run, game);
+        }
+        const k = `${run}/${game}`;
+        const hit = hot.get(k);
+        drop(k);
+        const buf = hit && store.hasReplay(run, game) && store.replaySize(run, game) === hit.size ? hit.buf : replayFor(READER, run, game);
+        if (buf) {
+            hot.set(k, { size: buf.length, buf });
+            hotBytes += buf.length;
+            while (hot.size > 16 || hotBytes > 48e6) {
+                drop(hot.keys().next().value);
+            }
+        }
+        return buf;
+    }
     /** Whether the run's document lists the game (a game that has not sent its first moves yet). */
     const listed = (run, game) => {
         const d = parseOr(store.getDoc('runs', run), null);
@@ -142,7 +168,7 @@ function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () 
             sendMessage(req, res, 404, 'There is no game at this address. Check the link, or ask whoever sent it.', sendText);
             return true;
         }
-        const buf = replayFor(READER, run, game);
+        const buf = replay(run, game);
         if (m[3]) {
             if (!buf) {
                 sendText(res, req, 404, 'text/plain', listed(run, game) ? 'no moves yet' : 'not found');

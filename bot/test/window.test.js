@@ -430,6 +430,24 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         assert.strictEqual(await more.text(), step(2));
         assert.strictEqual(Number(more.headers.get('x-size')), size + Buffer.byteLength(step(2)));
         assert.strictEqual(await (await go('/g/arena-t1-r1/g2/game.jsonl?from=999999')).text(), '');
+        // spectators polling a live game share one read of it per new move; a poll with nothing new reads nothing
+        const readReplay = w.store.readReplay;
+        let reads = 0;
+        w.store.readReplay = (...a) => (reads++, readReplay.apply(w.store, a));
+        try {
+            const at = size + Buffer.byteLength(step(2));
+            for (let i = 0; i < 5; i++) {
+                assert.strictEqual(await (await go(`/g/arena-t1-r1/g2/game.jsonl?from=${at}`)).text(), '');
+            }
+            assert.strictEqual(reads, 0);
+            w.store.appendReplay('arena-t1-r1', 'g2', at, Buffer.from(step(3)));
+            for (let i = 0; i < 5; i++) {
+                assert.strictEqual(await (await go(`/g/arena-t1-r1/g2/game.jsonl?from=${at}`)).text(), step(3));
+            }
+            assert.strictEqual(reads, 1);
+        } finally {
+            w.store.readReplay = readReplay;
+        }
         // listed, no moves yet: the page waits; the replay is not there yet
         assert.match(await (await go('/g/arena-t1-r1/g3')).text(), /A game about to start/);
         assert.strictEqual((await go('/g/arena-t1-r1/g3/game.jsonl')).status, 404);
