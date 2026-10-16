@@ -499,6 +499,20 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         } finally {
             Object.assign(zlib, { gzip, gzipSync });
         }
+        // a page view reads its title and preview from the replay's first line and last few KB, not the whole replay
+        assert.match(await (await go('/g/arena-t1-r1/g5')).text(), /<title>rush vs heuristic · SWU Arena/);
+        const toString = Buffer.prototype.toString;
+        let widest = 0;
+        Buffer.prototype.toString = function (...a) {
+            widest = Math.max(widest, this.length);
+            return toString.apply(this, a);
+        };
+        try {
+            assert.match(await (await go('/g/arena-t1-r1/g5')).text(), /heuristic won in round 7/);
+        } finally {
+            Buffer.prototype.toString = toString;
+        }
+        assert.ok(widest < 20000, `read ${widest} bytes as text for one page view`);
         // listed, no moves yet: the page waits; the replay is not there yet
         assert.match(await (await go('/g/arena-t1-r1/g3')).text(), /A game about to start/);
         assert.strictEqual((await go('/g/arena-t1-r1/g3/game.jsonl')).status, 404);

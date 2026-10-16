@@ -41,12 +41,15 @@ const parseOr = (s, d) => {
 const gzip = (bytes) => new Promise((ok, no) => zlib.gzip(bytes, (e, gz) => (e ? no(e) : ok(gz)))); // off the event loop
 const ended = (buf) => !!buf && /"t":"end"/.test(buf.subarray(Math.max(0, buf.length - 4000)).toString('utf8'));
 
-/** The two seats and the result from a replay's header and end lines, for the page's title and preview. */
+/**
+ * The two seats and the result from a replay's header and end lines, for the page's title and preview: read from those
+ * two slices only, since a replay may hold 32 MB and every page view asks.
+ */
 function gameFacts(buf) {
-    const text = buf ? buf.toString('utf8') : '';
-    const nl = text.indexOf('\n');
-    const head = parseOr(nl < 0 ? text : text.slice(0, nl), null);
-    const end = parseOr(text.slice(-4000).split('\n').filter(Boolean).pop() ?? '', null);
+    buf ??= Buffer.alloc(0);
+    const nl = buf.indexOf(10);
+    const head = parseOr(buf.subarray(0, nl < 0 ? Math.min(buf.length, 1e6) : nl).toString('utf8'), null);
+    const end = parseOr(buf.subarray(Math.max(0, buf.length - 4000)).toString('utf8').split('\n').filter(Boolean).pop() ?? '', null);
     const seat = (id) => {
         const p = Array.isArray(head?.players) ? head.players.find((x) => x?.id === id) : null;
         const n = typeof p?.name === 'string' && p.name ? p.name : typeof p?.bot === 'string' && p.bot ? p.bot : id;
