@@ -36,7 +36,7 @@ function machine() {
             throw new TypeError('fetch failed');
         }
         if (u.pathname === '/v1/swarm/lineup.json') {
-            return answer(200, JSON.stringify(m.lineup ?? { bots: [], round: null }));
+            return answer(200, JSON.stringify(m.lineup ?? { bots: [], capMs: null, round: null }));
         }
         const tar = /^\/v1\/swarm\/bot\/([0-9a-f]{64})$/.exec(u.pathname);
         if (tar) {
@@ -226,7 +226,7 @@ test("the bots a person may pick: the JEPA bot, then the latest round's versions
     const nova = tarOf({ 'arena.json': '{"runtime":"wasi-p1"}', 'bot.wasm': 'nova' });
     const ember = tarOf({ 'arena.json': '{"runtime":"python-3.14-wasi"}', 'main.py': 'print(1)' });
     const pyro = tarOf({ 'arena.json': '{"runtime":"wasi-p1"}', 'bot.wasm': 'pyro' });
-    m.lineup = { round: 21, bots: [
+    m.lineup = { round: 21, capMs: 45000, bots: [
         { bundle: sha256(nova), bytes: nova.length, name: 'nova-v3' },
         { bundle: sha256(ember), bytes: ember.length, name: 'ember-v2' },
         { bundle: sha256(pyro), bytes: pyro.length, name: 'pyro-v1' },
@@ -237,8 +237,8 @@ test("the bots a person may pick: the JEPA bot, then the latest round's versions
     // this build has Python for bots (Dockerfile.games packs it): its sizes are in the machine's manifest
     m.sizes = { 'python-lib.json': 9000, 'python.wasm': 14000 };
     store.putDoc('arena', 'standings', JSON.stringify({ rounds: [], global: { 'nova-v3': 1500.4, 'pyro-v1': 1610 } }));
-    // Eric's time per bot per game (the arena settings), which rated rounds play now
-    store.putDoc('admin', 'arena-settings', JSON.stringify({ settings: { thinkCapSec: 45 } }));
+    // Eric's time per bot per game has changed since that round: a version plays under its round's
+    store.putDoc('admin', 'arena-settings', JSON.stringify({ settings: { thinkCapSec: 90 } }));
     const { go, close } = await serve(w);
     try {
         const pal = session(w, 'pal');
@@ -290,7 +290,7 @@ test('before any round, the JEPA bot is the only one to pick', async () => {
     const { go, close } = await serve(w);
     try {
         const r = (await (await go('/api/play/bots', { cookie: session(w, 'pal') })).json()).result;
-        assert.deepStrictEqual([r.round, r.capMs, r.bots.map((b) => b.name)], [null, 60000, ['jepa-tx-gate']]);
+        assert.deepStrictEqual([r.round, r.capMs, r.bots.map((b) => b.name)], [null, null, ['jepa-tx-gate']]);
         assert.deepStrictEqual(r.runtimes, {}, 'a build with no Python offers none');
     } finally {
         await close();

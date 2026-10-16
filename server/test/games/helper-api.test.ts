@@ -238,6 +238,7 @@ const tablesSetup = async () => {
   const m = await setup({
     lineup: async () => ({
       round: 7,
+      capMs: 45000,
       bots: [{ name: "b-v1", bundle: hex.b }, { name: "a-v2", bundle: hex.a }, { name: "c-v1", bundle: hex.c }, { name: "d-v3", bundle: hex.d }]
     })
   })
@@ -255,9 +256,9 @@ test("the tables' lineup: the latest round's versions whose tar is a regular fil
   const a = await call(m, "GET", "/v1/swarm/lineup.json", { build: null })
   assert.equal(a.status, 200)
   assert.equal(a.headers["content-type"], JSON_TYPE)
-  assert.deepEqual(a.json(), { round: 7, bots: [{ bundle: hex.a, bytes: 5, name: "a-v2" }, { bundle: hex.d, bytes: 10, name: "d-v3" }] })
+  assert.deepEqual(a.json(), { round: 7, capMs: 45000, bots: [{ bundle: hex.a, bytes: 5, name: "a-v2" }, { bundle: hex.d, bytes: 10, name: "d-v3" }] })
   // keys sorted, as every other answer's
-  assert.equal(a.text, `{"bots":[{"bundle":"${hex.a}","bytes":5,"name":"a-v2"},{"bundle":"${hex.d}","bytes":10,"name":"d-v3"}],"round":7}`)
+  assert.equal(a.text, `{"bots":[{"bundle":"${hex.a}","bytes":5,"name":"a-v2"},{"bundle":"${hex.d}","bytes":10,"name":"d-v3"}],"capMs":45000,"round":7}`)
   // a tar written later is in the next answer
   writeFileSync(path.join(m.bundles, `${hex.b}.tar`), "tar b")
   assert.deepEqual((await call(m, "GET", "/v1/swarm/lineup.json", { build: null })).json().bots.map((b: any) => b.name), ["b-v1", "a-v2", "d-v3"])
@@ -274,9 +275,9 @@ test("the tables' lineup before the first round, or with no lineup given, is emp
   const none = await setup({ lineup: async () => null })
   const a = await call(none, "GET", "/v1/swarm/lineup.json", { build: null })
   assert.equal(a.status, 200)
-  assert.equal(a.text, `{"bots":[],"round":null}`)
+  assert.equal(a.text, `{"bots":[],"capMs":null,"round":null}`)
   const bare = await setup()
-  assert.equal((await call(bare, "GET", "/v1/swarm/lineup.json", { build: null })).text, `{"bots":[],"round":null}`)
+  assert.equal((await call(bare, "GET", "/v1/swarm/lineup.json", { build: null })).text, `{"bots":[],"capMs":null,"round":null}`)
   const hex = sha256("tar a")
   writeFileSync(path.join(bare.bundles, `${hex}.tar`), "tar a")
   assert.equal((await call(bare, "GET", `/v1/swarm/bot/${hex}`, { build: null })).status, 404)

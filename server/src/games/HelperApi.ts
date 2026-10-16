@@ -13,8 +13,9 @@
  * - POST lease/<id>/heartbeat: 200 {continue: true} while this helper holds it, else 410
  * - POST lease/<id>/result {results, replays} or {failed}: 200, or 410 as for a heartbeat
  * - GET swarm/<file>: a file of the browser swarm built with this image
- * - GET swarm/lineup.json: the latest round's versions whose tar is in the bundles folder, in roster order:
- *   200 {round, bots: [{bundle, bytes, name}]}, or {round: null, bots: []} before the first round
+ * - GET swarm/lineup.json: the latest round's versions whose tar is in the bundles folder, in roster order, and its
+ *   time per bot per game: 200 {round, capMs, bots: [{bundle, bytes, name}]}, or {round: null, capMs: null, bots: []}
+ *   before the first round
  * - GET swarm/bot/<hex>: the tar of a version in that lineup, for a person playing it in their tab (else 404)
  * The swarm routes are the ones without the build header (the window learns the build from swarm/manifest.json, and
  * relays them with the swarm's own token) and the ones still served while the machine stops.
@@ -37,9 +38,13 @@ import { firstChars, tarSize } from "./Leases.ts"
 import * as Log from "./Log.ts"
 import type { Secrets } from "./Secrets.ts"
 
-/** The latest round's versions, in roster order, each with its bundle's sha256 (RoundSpec bots and bundles). */
+/**
+ * The latest round's versions, in roster order, each with its bundle's sha256 (RoundSpec bots and bundles), and the
+ * round's time per bot per game (RoundSpec capMs).
+ */
 export interface Lineup {
   readonly round: number
+  readonly capMs: number
   readonly bots: ReadonlyArray<{ readonly name: string; readonly bundle: string }>
 }
 
@@ -377,13 +382,13 @@ const swarmFile = async (o: HelperApiOptions, req: Req, res: Res, file: string) 
  */
 const tableLineup = async (o: HelperApiOptions) => {
   const lineup = o.lineup ? await o.lineup() : null
-  if (!lineup) return { bots: [], round: null }
+  if (!lineup) return { bots: [], capMs: null, round: null }
   const bots: Array<{ bundle: string; bytes: number; name: string }> = []
   for (const b of lineup.bots) {
     const bytes = tarSize(o.config.paths.bundles, b.bundle)
     if (bytes !== null) bots.push({ bundle: b.bundle, bytes, name: b.name })
   }
-  return { bots, round: lineup.round }
+  return { bots, capMs: lineup.capMs, round: lineup.round }
 }
 
 /** swarm/lineup.json, its keys sorted as every other answer's */

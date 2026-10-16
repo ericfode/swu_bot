@@ -15,7 +15,7 @@
  * Off (every route answers 503 or the page says so) unless SWARM_HELPER_TOKEN is set.
  *
  * The play page (play.js) plays arena bots in a person's tab: lineup() is the latest round's versions with their
- * bundles ({round, bots: [{name, bundle, bytes}]}, the machine's GET /v1/swarm/lineup.json) and sendBot() sends one
+ * bundles ({round, capMs, bots: [{name, bundle, bytes}]}, the machine's GET /v1/swarm/lineup.json) and sendBot() sends one
  * of those bundles (GET /v1/swarm/bot/<hex>). Both are kept on the window's disk (botDir), and a new lineup's bundles
  * are fetched at once, so the bots stay playable while the machine sleeps. botHere(hex) is a bundle the window has
  * now, without fetching it.
@@ -227,6 +227,8 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
     };
     const cleanLineup = (j) => ({
         round: Number.isInteger(j?.round) ? j.round : null,
+        // the round's time per bot per game, which a tab plays its bots under
+        capMs: Number.isSafeInteger(j?.capMs) && j.capMs >= 1000 ? j.capMs : null,
         bots: (Array.isArray(j?.bots) ? j.bots : []).filter((b) => b && /^[a-z][a-z0-9_]*-v\d+$/.test(String(b.name)) && HEX.test(String(b.bundle)))
             .map((b) => ({ name: String(b.name), bundle: String(b.bundle), bytes: Number.isSafeInteger(b.bytes) ? b.bytes : null })),
         at: new Date(now()).toISOString()

@@ -291,7 +291,7 @@ test("the helper API's tables lineup is the latest round in games.db: its versio
   await rt.runPromise(store.createRound(round(3, ["a-v1"], { "a-v1": a }), []))
   // a resident without a bundle is left out
   await rt.runPromise(store.createRound(round(4, ["b-v1", "heuristic", "a-v2"], { "a-v2": a, "b-v1": b }), []))
-  assert.deepEqual(await lineupOf(store), { round: 4, bots: [{ name: "b-v1", bundle: b }, { name: "a-v2", bundle: a }] })
+  assert.deepEqual(await lineupOf(store), { round: 4, capMs: 45000, bots: [{ name: "b-v1", bundle: b }, { name: "a-v2", bundle: a }] })
   await rt.dispose()
 
   const env = { SWU_WINDOW_TOKEN: TOKEN, GAMES_HELPER_TOKENS: `swarm:${sha256(swarmToken)}` }
@@ -302,7 +302,7 @@ test("the helper API's tables lineup is the latest round in games.db: its versio
   const headers = { authorization: `Bearer ${swarmToken}` }
   const lineup = await request(helper, "/v1/swarm/lineup.json", { method: "GET", headers, timeoutMs: 5000 })
   assert.equal(lineup.status, 200)
-  assert.equal(lineup.body.toString("utf8"), `{"bots":[{"bundle":"${b}","bytes":6,"name":"b-v1"},{"bundle":"${a}","bytes":5,"name":"a-v2"}],"round":4}`)
+  assert.equal(lineup.body.toString("utf8"), `{"bots":[{"bundle":"${b}","bytes":6,"name":"b-v1"},{"bundle":"${a}","bytes":5,"name":"a-v2"}],"capMs":45000,"round":4}`)
   const tar = await request(helper, `/v1/swarm/bot/${b}`, { method: "GET", headers, timeoutMs: 5000 })
   assert.equal(tar.status, 200)
   assert.equal(tar.contentType, "application/x-tar")

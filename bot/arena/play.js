@@ -61,7 +61,6 @@ const READY = [...FILES, ...Object.keys(MODELS)];
 const KEPT = [...READY, PYTHON.lib, PYTHON.wasm];
 const VERSION = /^[a-z][a-z0-9_]*-v\d+$/;
 const HEX = /^[0-9a-f]{64}$/;
-const CAP_MS = 60000; // the arena's time per bot per game when Eric has not set one (gamesctl.js THINK_CAP_MS)
 const TITLE = "Eric's JEPA bot";
 const ABOUT = 'A learned model of the game that looks ahead on simulations, as it plays in the arena. Its two models download once.';
 // the page's isolation: the swarm's pages use require-corp, which would block the card art (no CORP header on its CDN)
@@ -223,11 +222,6 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
         const f = swarm.botHere(hex);
         return f ? (typeof f.gz === 'string' ? fs.statSync(f.gz).size : f.gz.length) : null;
     };
-    // the time per bot per game rated rounds give now (Eric's setting on the window, else the machine's default)
-    const capMs = () => {
-        const sec = parseOr(store.getDoc('admin', 'arena-settings'), null)?.settings?.thinkCapSec;
-        return Number.isSafeInteger(sec) && sec > 0 ? sec * 1000 : CAP_MS;
-    };
     // bundle sha256 -> the runtime its arena.json names, read once the window has the bundle (null until then)
     const runtimes = new Map();
     const runtimeOf = (hex) => {
@@ -253,8 +247,9 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
         const models = build ? Object.keys(MODELS).map((n) => ({ ...fileOf(build, n), path: MODELS[n] })) : [];
         const total = (fs2, k) => (fs2.every((f) => Number.isSafeInteger(f[k])) ? fs2.reduce((a, f) => a + f[k], 0) : null);
         const out = [{ name: BOT, title: TITLE, kind: 'jepa', about: ABOUT, elo: null, files: models, bytes: total(models, 'bytes'), wire: total(models, 'wire') }];
-        const cap = capMs();
-        const rows = (l?.bots ?? []).filter((b) => Number.isSafeInteger(b.bytes)).map((b) => ({
+        // each version thinks for as long as it did in that round (a lineup with no time limit offers none)
+        const cap = l?.capMs ?? null;
+        const rows = (cap ? l.bots : []).filter((b) => Number.isSafeInteger(b.bytes)).map((b) => ({
             name: b.name, title: titleOf(b.name), kind: 'arena', about: null, elo: Number.isFinite(arena[b.name]) ? Math.round(arena[b.name]) : null,
             runtime: runtimeOf(b.bundle), capMs: cap, bundle: { url: `/play/bundle/${b.bundle}`, hex: b.bundle, bytes: b.bytes, wire: wireOf(b.bundle) }, bytes: b.bytes, wire: wireOf(b.bundle)
         }));

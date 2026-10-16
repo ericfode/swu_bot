@@ -206,7 +206,7 @@ not isolate it (Safari) can play only the JEPA bot.
   `bundle: {url, hex, bytes, wire}`). `runtimes` names the files of each interpreter a bundle may need
   (`python-3.14-wasi`: `{lib, wasm}`). The lineup is the swarm relay's (above), asked again when it is over a minute
   old. `runtime` is what the bundle's `arena.json` names, read once the window has the bundle (null before); `capMs` is
-  the time per bot per game rated rounds take now (Eric's setting, else 60 s). `bytes` and `wire` (about what a file
+  that round's time per bot per game, which the tab plays the version under. `bytes` and `wire` (about what a file
   downloads, gzipped) are null when the window does not know a size yet.
 - `POST /api/play/games {replay}`: the tab sends the finished game. Only from this site's own page (Origin) and as JSON;
   the header must seat `person` in seat 1 and `jepa-tx-gate` or an arena version in seat 2, with step lines and an

@@ -131,8 +131,8 @@ const within = <A>(p: Promise<A>, ms: number) =>
 
 /**
  * The latest round's lineup for the window's pages that play arena bots in a person's tab (helper API
- * swarm/lineup.json): its versions in roster order, each with the bundle the round wrote; a version without one is left
- * out. Null before the first round.
+ * swarm/lineup.json): its versions in roster order, each with the bundle the round wrote (a version without one is left
+ * out), and the round's time per bot per game. Null before the first round.
  */
 export const lineupOf = async (store: StoreService): Promise<Lineup | null> => {
   const row = await run(store.lastRound)
@@ -143,7 +143,7 @@ export const lineupOf = async (store: StoreService): Promise<Lineup | null> => {
     const bundle = Object.hasOwn(bundles, name) ? bundles[name] : undefined
     if (typeof bundle === "string") bots.push({ name, bundle })
   }
-  return { round: row.k, bots }
+  return { round: row.k, capMs: row.spec.capMs, bots }
 }
 
 /** Boots the machine; throws BootFailed when it cannot start. */
