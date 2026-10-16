@@ -448,6 +448,11 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         } finally {
             w.store.readReplay = readReplay;
         }
+        // a replay replaced whole (a resync) is read again, even at the same size
+        assert.strictEqual(await (await go('/g/arena-t1-r1/g1/game.jsonl')).text(), header('rush', 'c_clock') + end);
+        const redo = header('rush', 'c_clock') + end.replace('"p2"', '"p1"');
+        w.store.putReplay('arena-t1-r1', 'g1', Buffer.from(redo));
+        assert.strictEqual(await (await go('/g/arena-t1-r1/g1/game.jsonl')).text(), redo);
         // listed, no moves yet: the page waits; the replay is not there yet
         assert.match(await (await go('/g/arena-t1-r1/g3')).text(), /A game about to start/);
         assert.strictEqual((await go('/g/arena-t1-r1/g3/game.jsonl')).status, 404);

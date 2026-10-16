@@ -56,9 +56,10 @@ function gameFacts(buf) {
 function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () => false, page = path.join(__dirname, 'web', 'game.html') } = {}) {
     const base = String(publicUrl ?? '').replace(/\/+$/, '');
     let kit = null; // {mtimeMs, raw, gz, etag, etagGz}
-    // the last few bot games read here, by size: every spectator of a live game polls, so they share one read of the
-    // replay per new move, and a poll with nothing new reads nothing (the store keeps each replay's size in memory)
-    const hot = new Map(); // run/game -> {size, buf}, oldest first; at most 16 and 48 MB
+    // the last few bot games read here, by their file's stat: every spectator of a live game polls, so they share one
+    // read of the replay per new move, and a poll with nothing new reads nothing. An append grows the file; a whole
+    // replacement (Store.putReplay) renames a new file in, so its inode changes even at the same size.
+    const hot = new Map(); // run/game -> {sig, size, buf}, oldest first; at most 16 and 48 MB
     let hotBytes = 0;
     const drop = (k) => {
         hotBytes -= hot.get(k)?.size ?? 0;
@@ -74,9 +75,14 @@ function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () 
         const k = `${run}/${game}`;
         const hit = hot.get(k);
         drop(k);
-        const buf = hit && store.hasReplay(run, game) && store.replaySize(run, game) === hit.size ? hit.buf : replayFor(READER, run, game);
-        if (buf) {
-            hot.set(k, { size: buf.length, buf });
+        let sig = null;
+        try {
+            const st = fs.statSync(store.replayFile(run, game));
+            sig = `${st.ino}/${st.size}/${st.mtimeMs}`;
+        } catch {}
+        const buf = sig && hit?.sig === sig ? hit.buf : replayFor(READER, run, game);
+        if (buf && sig) {
+            hot.set(k, { sig, size: buf.length, buf });
             hotBytes += buf.length;
             while (hot.size > 16 || hotBytes > 48e6) {
                 drop(hot.keys().next().value);
