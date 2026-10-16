@@ -1205,7 +1205,7 @@ function appRights(A) {
 /** Home's pointer to the Join page: the one place a signed-in person learns they can bring their own Claude. */
 function playCard() {
   if (!HOSTED) return '';
-  return `<section class="box join-card"><div class="bh"><h3>Play</h3><a class="more" href="/tables">Play</a></div><p style="font-size:var(--fs-base)">Play Star Wars Unlimited against Eric's JEPA bot, one of the arena's bots or another person, in your browser with the real rules engine. Anyone with a GitHub account can play the bots; people Eric invited can also play each other. Games are kept for training, unrated.</p><p style="margin-top:8px"><a class="btn-link" href="/tables">Play now →</a></p></section>`;
+  return `<section class="box join-card"><div class="bh"><h3>Play</h3><a class="more" href="/tables">Play</a></div><p style="font-size:var(--fs-base)">Play Star Wars Unlimited against Eric's JEPA bot, one of the arena's bots or another person, in your browser with the real rules engine. Anyone with a GitHub account can play the bots or another person. Games are kept for training, unrated.</p><p style="margin-top:8px"><a class="btn-link" href="/tables">Play now →</a></p></section>`;
 }
 function joinCard() {
   if (!HOSTED) return '';
