@@ -73,11 +73,9 @@ except an admin changing the invite list from the app's Share page (below):
   page shows the invite list, the block list and the view links to admins, and `GET /api/share` adds `signin` and the
   submission `limits`.
 
-Files the window sends as they are (the app page, `/kit.js`, `/play/kit.js`, `/tables/kit.js`, small scripts) and the
-app's model (`/api/app`) are gzipped once per change and carry an ETag, so a browser that has them gets a 304 with no
-body (`static.js`). This matters most for `/api/app`: every open tab asks for it every 15 seconds (only while it is
-shown), and it is ~0.6 MB gzipped. The model is rebuilt at most every 30 seconds, and a rebuild that comes out the same
-keeps its ETag.
+The app's model (`/api/app`, ~0.6 MB gzipped) carries an ETag, so a tab that has it gets a 304 with no body. Every
+open tab asks for it every 15 seconds while it is shown (a hidden tab does not ask). The model is gzipped once per
+build, rebuilt at most every 30 seconds, and a build that comes out the same keeps its ETag.
 
 ## Through MCP
 

@@ -46,8 +46,8 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { atLeast, LOGIN } = require('./auth');
-const { cached, sendCached } = require('./static');
 const { normalizeDeck } = require('../decklists');
 
 const RUN = 'play';
@@ -196,7 +196,7 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
     }
     const sent = new Map(); // login -> times of the games they sent, the last day
     let woke = 0;
-    let kit = null; // {mtimeMs, entry}
+    let kit = null; // {mtimeMs, raw, gz}
 
     /** The GitHub login of a person signed in on this site who may play, or null. */
     const player = (who) => {
@@ -291,10 +291,12 @@ function createPlay({ store, swarm, auth, kitFile, wake = () => undefined, mode 
             return true;
         }
         if (!kit || kit.mtimeMs !== st.mtimeMs) {
-            kit = { mtimeMs: st.mtimeMs, entry: cached(fs.readFileSync(kitFile), 'text/javascript') };
+            const raw = fs.readFileSync(kitFile);
+            kit = { mtimeMs: st.mtimeMs, raw, gz: zlib.gzipSync(raw) };
         }
-        // gzipped once, with an ETag: a browser that has this kit gets a 304 (static.js)
-        sendCached(req, res, kit.entry);
+        const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
+        res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-cache', vary: 'accept-encoding', ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
+        res.end(gzip ? kit.gz : kit.raw);
         return true;
     }
 

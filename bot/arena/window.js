@@ -40,10 +40,15 @@ const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
 const { builderName, ownsName, notYours } = require('./api');
 const { createFeedback } = require('./feedback');
-const { createStatic, sendCached, cached } = require('./static');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
 const acceptsGzip = (req) => require('./server').acceptsGzip(req.headers['accept-encoding']);
+// whether the request's If-None-Match names this ETag (weak comparison: a list, or *)
+const hasTag = (req, etag) => {
+    const h = String(req.headers['if-none-match'] ?? '').trim();
+    const bare = (t) => t.trim().replace(/^W\//, '');
+    return !!h && !!etag && (h === '*' || h.split(',').some((t) => bare(t) === bare(etag)));
+};
 
 const ROOT = path.join(__dirname, '..', '..');
 // the collections a part may push; a friend reads the FRIEND ones raw, and the rest only through the app's public model
@@ -634,7 +639,7 @@ function appBuilder(store, { minMs = 10000, parts = null, staleMs = STALE_MS } =
         if (cache?.body !== body) {
             const version = settled ? `${v}.${settled}` : v;
             const text = `{"result":${body.slice(0, -1).replace(JSON.stringify(BUILT_AT), JSON.stringify(madeAt ?? null))},"version":${JSON.stringify(version)}}}`;
-            cache = { ...cached(text, 'application/json'), body };
+            cache = { text, gz: zlib.gzipSync(text), etag: `W/"${crypto.createHash('sha256').update(text).digest('base64url').slice(0, 27)}"`, body };
         }
         builtVersion = v;
         builtAt = Date.now();
@@ -1052,11 +1057,14 @@ function createWindow(opts = {}) {
         res.end(gzip ? zlib.gzipSync(text) : text);
     }
 
-    // files sent as they are: read and gzipped once per change, with an ETag, so a browser that has one gets a 304
-    // (the app page is 2.8 MB, its gzip ~0.8 MB); HTML pages get the feedback button, as in sendText
-    const files = createStatic({ transform: (buf, type) => (/^text\/html\b/.test(type) ? feedback.inject(buf) : buf), acceptsGzip });
     function serveFile(req, res, file, type) {
-        return files.send(req, res, file, type) || sendText(res, req, 404, 'text/plain', 'not found');
+        let text;
+        try {
+            text = fs.readFileSync(file);
+        } catch {
+            return sendText(res, req, 404, 'text/plain', 'not found');
+        }
+        return sendText(res, req, 200, type, text);
     }
 
     /** The request body, or too_large: refused up front when its length says so, else read to the end and dropped. */
@@ -1227,8 +1235,16 @@ function createWindow(opts = {}) {
             return apps(req, res, who);
         }
         if (parts[0] === 'app' && parts.length === 1) {
-            // every open tab asks every 15 s: one that has this model already gets a 304 and no body (static.js)
-            return sendCached(req, res, await appData(), { acceptsGzip });
+            const out = await appData();
+            const head = { 'content-type': 'application/json', 'cache-control': 'no-cache', vary: 'accept-encoding', etag: out.etag };
+            // every open tab asks every 15 s: one that has this model already gets a 304 and no body
+            if (hasTag(req, out.etag)) {
+                res.writeHead(304, head);
+                return res.end();
+            }
+            const gzip = acceptsGzip(req);
+            res.writeHead(200, { ...head, ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
+            return res.end(gzip ? out.gz : out.text);
         }
         if (parts[0] === 'docs') {
             const [, ns, id] = parts;

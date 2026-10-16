@@ -19,7 +19,6 @@ it, and it never runs a bot. `WINDOW.md` describes its API, sign-in and deploys.
 - `window.js`: the HTTP API and the document store. `server.js` starts it.
 - `auth.js`: who may do what (members, friends, the block list, view links, the project's token, the games
   machine's token, feeds).
-- `static.js`: files and the app's model sent with an ETag and a gzip made once, so a browser that has them gets a 304.
 - `oauth.js`, `mcp-http.js`: `/mcp`, the remote MCP server each person's app signs in to with GitHub. Builders submit
   bots there (`arena_submit`) and read their results.
 - `connect.js`: the device grant for an agent with no browser, such as a builder's Claude Code on their own computer.

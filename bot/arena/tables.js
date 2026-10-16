@@ -51,7 +51,6 @@ const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 const zlib = require('zlib');
 const { atLeast, LOGIN } = require('./auth');
-const { cached, sendCached } = require('./static');
 const { createLobby, LobbyError, MAX_MSG } = require('./lobby');
 const { swudbId, fetchSwudb, deckFromJson } = require('./swudb');
 const { normalizeDeck } = require('../decklists');
@@ -353,10 +352,12 @@ function createTables({
             return true;
         }
         if (!kit || kit.mtimeMs !== st.mtimeMs) {
-            kit = { mtimeMs: st.mtimeMs, entry: cached(fs.readFileSync(kitFile), 'text/javascript') };
+            const raw = fs.readFileSync(kitFile);
+            kit = { mtimeMs: st.mtimeMs, raw, gz: zlib.gzipSync(raw) };
         }
-        // gzipped once, with an ETag: a browser that has this kit gets a 304 (static.js)
-        sendCached(req, res, kit.entry, { headers: { 'cross-origin-resource-policy': 'same-origin' } });
+        const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
+        res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-cache', vary: 'accept-encoding', 'cross-origin-resource-policy': 'same-origin', ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
+        res.end(gzip ? kit.gz : kit.raw);
         return true;
     }
 

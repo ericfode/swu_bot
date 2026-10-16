@@ -27,14 +27,14 @@ async function serve(w) {
     return { srv, go, close: () => new Promise((r) => srv.close(r)) };
 }
 
-function makeWindow(name, { fetchImpl, wakeGames, staleMs, env = ENV, githubHas, kit } = {}) {
+function makeWindow(name, { fetchImpl, wakeGames, staleMs, env = ENV, githubHas } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
     const auth = createAuth({ dir: path.join(home, 'auth'), env, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins,
         blocked: () => JSON.parse(store.getDoc('admin', 'blocked') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
     const app = path.join(tmp, `${name}-app.html`);
     fs.writeFileSync(app, '<!doctype html><title>app</title>');
-    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs, githubHas, ...(kit ? { kit } : {}) });
+    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs, githubHas });
 }
 
 test('store: a replay grows only at its current size, and reads back whole across gzip members', () => {
@@ -1089,37 +1089,6 @@ test('mcp submit: a person fields 2 bots and sends 10 a day, the arena takes 20 
             assert.strictEqual((await call(eric, 'arena_submit', { ...bot, name })).value.name, name);
         }
         assert.deepStrictEqual(asked, ['ana-fast', 'ana-down', 'ana-two'], 'nor asks GitHub for an admin');
-    } finally {
-        await close();
-    }
-});
-
-test('the app page, the kit and the app model carry an ETag: a browser that has them gets a 304 with no body', async () => {
-    const kit = path.join(tmp, 'kit-etag.js');
-    fs.writeFileSync(kit, `/* kit */${'x'.repeat(5000)}`);
-    const w = makeWindow('w-etag', { kit });
-    const { go, close } = await serve(w);
-    try {
-        const pal = `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`;
-        for (const p of ['/', '/kit.js']) {
-            const a = await go(p, { cookie: pal, headers: { 'accept-encoding': 'gzip' } });
-            const tag = a.headers.get('etag');
-            assert.strictEqual(a.status, 200);
-            assert.match(tag, /^W\/"[\w-]{27}"$/);
-            assert.strictEqual(a.headers.get('cache-control'), 'no-cache', 'the browser asks each time, so a deploy shows at once');
-            const body = await a.text();
-            if (p === '/') {
-                assert.match(body, /feedback\.js/, 'the page still gets the feedback button');
-            }
-            const b = await go(p, { cookie: pal, headers: { 'if-none-match': tag } });
-            assert.strictEqual(b.status, 304);
-            assert.strictEqual(await b.text(), '');
-            assert.strictEqual((await go(p, { headers: { 'if-none-match': tag } })).status, 200, 'the sign-in page, not a 304, for someone not signed in');
-        }
-        fs.writeFileSync(kit, `/* kit 2 */${'y'.repeat(5000)}`);
-        const changed = await go('/kit.js', { cookie: pal, headers: { 'if-none-match': 'W/"old"' } });
-        assert.strictEqual(changed.status, 200);
-        assert.match(await changed.text(), /kit 2/);
     } finally {
         await close();
     }
