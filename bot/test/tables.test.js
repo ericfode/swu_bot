@@ -476,6 +476,9 @@ test('finished games are kept once for training, each player adds their seat, an
         const people = replay({ seed: 300, p1: me, p2: them, l2: 'person', winner: 'p1' });
         assert.strictEqual((await post('/api/tables/games', pal, { replay: people, seat: 'p2' })).status, 400, 'your seat is the one with your id');
         assert.strictEqual((await post('/api/tables/games', pal, { replay: replay({ p1: 'someone' }), seat: 'p1' })).status, 400);
+        // a replay under the limit whose JSON string is over it (each quote takes two bytes) reaches the replay check
+        const quoted = await post('/api/tables/games', pal, { replay: '"'.repeat(9e6), seat: 'p1' });
+        assert.deepStrictEqual([quoted.status, (await quoted.json()).error.code], [400, 'bad_request']);
         const kept = await result(await post('/api/tables/games', pal, { replay: people, seat: 'p1' }));
         assert.match(kept.id, /^open-0000012c-[0-9a-f]{8}$/);
         assert.deepStrictEqual(await result(await post('/api/tables/games', pal2, { replay: people, seat: 'p2' })), kept, 'the same game from the other player');

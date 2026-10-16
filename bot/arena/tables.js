@@ -426,7 +426,8 @@ function createTables({
         if (times.length >= PER_DAY) {
             return fail(429, 'too_many', `at most ${PER_DAY} games a day; this one was not kept`);
         }
-        const q = parseOr((await readBody(req, MAX_REPLAY + 4096)).toString('utf8'), null);
+        // the replay comes as a JSON string, where each quote and backslash of its lines takes two bytes
+        const q = parseOr((await readBody(req, 2 * MAX_REPLAY + 4096)).toString('utf8'), null);
         const replay = typeof q?.replay === 'string' ? q.replay : null;
         if (!replay || Buffer.byteLength(replay) > MAX_REPLAY) {
             return fail(400, 'bad_request', `send {"replay": "<the game as JSON Lines>", "seat": "p1" or "p2"}, at most ${MAX_REPLAY} bytes`);
