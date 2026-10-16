@@ -7,9 +7,10 @@
  * so copying it gives the decision on screen. The app's game page links here (Share), and a signed-out visitor who
  * opens an app link to a game (/#/games/<run>/<game>) is sent here by the sign-in page (auth.js).
  *
- * A game against people (window.js peopleRun: Karabast, /play, /tables) reads as every arena reader gets it, the person
- * as "a person", and opens only once it has ended: watched live, it would show a person the other side's hidden cards.
- * Bot games are watched live with both hands, as in the app: a bot in its sandbox cannot read this page.
+ * A game against people (window.js peopleRun(run, doc): Karabast, /play, /tables) reads as every arena reader gets it,
+ * the person as "a person", and opens only once it has ended: watched live, it would show a person the other side's
+ * hidden cards. Bot games are watched live with both hands, as in the app: a bot in its sandbox cannot read this page.
+ * A replay whose run document is gone is not shown, since only that document tells a game against people apart.
  *
  *   const games = createGameLinks({ store, publicUrl, kitFile, statics, replayFor, peopleRun });
  *   if (await games.route(req, res, url, { sendJson, sendText })) return;
@@ -125,11 +126,6 @@ function createGameLinks({ store, publicUrl, kitFile, statics, replayFor, people
         });
         return e.gz;
     }
-    /** Whether the run's document lists the game (a game that has not sent its first moves yet). */
-    const listed = (run, game) => {
-        const d = parseOr(store.getDoc('runs', run), null);
-        return Array.isArray(d?.games) && d.games.some((g) => g?.id === game);
-    };
 
     function sendMessage(req, res, code, text, sendText) {
         const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SWU Arena</title>
@@ -183,11 +179,23 @@ function createGameLinks({ store, publicUrl, kitFile, statics, replayFor, people
             sendMessage(req, res, 404, 'There is no game at this address. Check the link, or ask whoever sent it.', sendText);
             return true;
         }
-        const people = peopleRun(run);
+        // only a game whose run document is there: that document says whether the game is against people (and how they
+        // are masked), so a replay left behind when its run was deleted is never shown
+        const doc = parseOr(store.getDoc('runs', run), null);
+        if (!doc || typeof doc !== 'object') {
+            if (m[3]) {
+                sendText(res, req, 404, 'text/plain', 'not found');
+            } else {
+                sendMessage(req, res, 404, 'There is no game at this address. Check the link, or ask whoever sent it.', sendText);
+            }
+            return true;
+        }
+        const listed = Array.isArray(doc.games) && doc.games.some((g) => g?.id === game); // a game with no moves yet
+        const people = peopleRun(run, doc);
         const { buf, gen } = replay(run, game, people);
         if (m[3]) {
             if (!buf) {
-                sendText(res, req, 404, 'text/plain', listed(run, game) ? 'no moves yet' : 'not found');
+                sendText(res, req, 404, 'text/plain', listed ? 'no moves yet' : 'not found');
                 return true;
             }
             if (people && !ended(buf)) {
@@ -206,7 +214,7 @@ function createGameLinks({ store, publicUrl, kitFile, statics, replayFor, people
             sendText(res, req, 200, 'application/x-ndjson', buf.subarray(from), head);
             return true;
         }
-        if (!buf && !listed(run, game)) {
+        if (!buf && !listed) {
             sendMessage(req, res, 404, 'There is no game at this address. Check the link, or ask whoever sent it.', sendText);
             return true;
         }

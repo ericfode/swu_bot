@@ -512,6 +512,14 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         }
         assert.ok(!(await (await go('/g/karabast-p/k1')).text()).includes('bob'));
 
+        // a replay left behind when its run document is deleted is not shown: only the document tells people apart
+        w.store.putDoc('runs', 'feed-x', JSON.stringify({ id: 'feed-x', feed: 'x', bots: ['c-clock'], games: [{ id: 'f1', p1: 'opponent', p2: 'c-clock' }] }));
+        w.store.putReplay('feed-x', 'f1', Buffer.from(header('carol', 'c-clock') + end));
+        assert.ok(!(await (await go('/g/feed-x/f1/game.jsonl')).text()).includes('carol'));
+        w.store.deleteDoc('runs', 'feed-x');
+        assert.strictEqual((await go('/g/feed-x/f1/game.jsonl')).status, 404);
+        assert.strictEqual((await go('/g/feed-x/f1')).status, 404);
+
         // the viewer kit, as the window's /kit.js (static.js): kept by the browser (ETag), gzip only for a client that takes it
         const kitAt = `http://127.0.0.1:${srv.address().port}/g/kit.js`;
         const kit = await fetch(kitAt);

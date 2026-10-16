@@ -322,7 +322,8 @@ arena. A game being played follows live (the page fetches only the new lines eve
   to a game is sent to the game's page by the sign-in page (auth.js), so pasting either address works.
 - A game against a person (Karabast, `/play`, `/tables`: window.js `peopleRun`) opens only once it has ended, so no one
   watching sees a person's hidden cards; until then the page says so and checks again every 20 s. The person reads "a
-  person", as for every reader. Bot games are watched live with both hands, as in the app.
+  person", as for every reader. Bot games are watched live with both hands, as in the app. A replay whose run document
+  is gone is not shown, since only that document tells a game against people apart.
 - `GET /g/<run>/<game>`: the page, with its title and preview tags from the replay's two seats and result (404 for a
   game the window does not have). `GET /g/<run>/<game>/game.jsonl`: the replay as a reader gets it; `?from=<byte>`
   gives what came after that byte, with the whole size in `x-size`; 404 before the first moves, 409 for a game against
