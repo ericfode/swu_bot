@@ -16,7 +16,8 @@
  *
  *   GET  /g/<run>/<game>                  the page (web/game.html), with its title and preview from the replay
  *   GET  /g/<run>/<game>/game.jsonl       the replay as a reader gets it; ?from=<byte> gives what came after (x-size: the
- *                                         whole size), so a live page fetches only new lines
+ *                                         whole size), so a live page fetches only new lines; x-gen changes when the
+ *                                         replay is replaced whole, and the page then starts over
  *   GET  /g/kit.js                        the viewer kit (ETag, so a browser keeps it)
  */
 const crypto = require('crypto');
@@ -56,10 +57,8 @@ function gameFacts(buf) {
 function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () => false, page = path.join(__dirname, 'web', 'game.html') } = {}) {
     const base = String(publicUrl ?? '').replace(/\/+$/, '');
     let kit = null; // {mtimeMs, raw, gz, etag, etagGz}
-    // the last few bot games read here, by their file's stat: every spectator of a live game polls, so they share one
-    // read of the replay per new move, and a poll with nothing new reads nothing. An append grows the file; a whole
-    // replacement (Store.putReplay) renames a new file in, so its inode changes even at the same size.
-    const hot = new Map(); // run/game -> {sig, size, buf}, oldest first; at most 16 and 48 MB
+    // the last few games read here (at most 16 and 48 MB), oldest first: run/game -> {sig, gen, size, buf}
+    const hot = new Map();
     let hotBytes = 0;
     const drop = (k) => {
         hotBytes -= hot.get(k)?.size ?? 0;
@@ -67,28 +66,34 @@ function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () 
     };
 
     const linkOf = (run, game) => `${base}/g/${encodeURIComponent(run)}/${encodeURIComponent(game)}`;
-    /** The replay as a reader gets it, or null. A game against people is read each time, as for the app's readers. */
-    function replay(run, game) {
-        if (peopleRun(run)) {
-            return replayFor(READER, run, game);
-        }
+    /**
+     * The replay as a reader gets it and its generation, or {buf: null}. Every spectator of a live game polls, so the
+     * last few replays read are kept by their file's stat (plus, for a game against people, its run document's, which
+     * says how its people read): they share one read per new move, and a poll with nothing new reads nothing. An append
+     * grows the file and keeps its generation; a whole replacement (Store.putReplay, a resync) renames a new file in,
+     * so the inode, and with it the generation, changes even at the same size, and a live page starts over.
+     */
+    function replay(run, game, people) {
         const k = `${run}/${game}`;
         const hit = hot.get(k);
         drop(k);
-        let sig = null;
+        let st;
         try {
-            const st = fs.statSync(store.replayFile(run, game));
-            sig = `${st.ino}/${st.size}/${st.mtimeMs}`;
-        } catch {}
-        const buf = sig && hit?.sig === sig ? hit.buf : replayFor(READER, run, game);
-        if (buf && sig) {
-            hot.set(k, { sig, size: buf.length, buf });
+            st = fs.statSync(store.replayFile(run, game));
+        } catch {
+            return { buf: null, gen: null };
+        }
+        const sig = `${st.ino}/${st.size}/${st.mtimeMs}${people ? `/${store.changedAt(run)}` : ''}`;
+        const gen = hit?.sig === sig ? hit.gen : crypto.createHash('sha256').update(`${k}/${st.ino}/${st.birthtimeMs}`).digest('hex').slice(0, 16);
+        const buf = hit?.sig === sig ? hit.buf : replayFor(READER, run, game);
+        if (buf) {
+            hot.set(k, { sig, gen, size: buf.length, buf });
             hotBytes += buf.length;
             while (hot.size > 16 || hotBytes > 48e6) {
                 drop(hot.keys().next().value);
             }
         }
-        return buf;
+        return { buf, gen };
     }
     /** Whether the run's document lists the game (a game that has not sent its first moves yet). */
     const listed = (run, game) => {
@@ -131,8 +136,7 @@ function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () 
         sendText(res, req, code, 'text/html; charset=utf-8', html);
     }
 
-    function sendPage(req, res, run, game, buf, sendText) {
-        const people = peopleRun(run);
+    function sendPage(req, res, run, game, buf, people, sendText) {
         const f = buf ? gameFacts(buf) : { p1: 'p1', p2: 'p2', done: false };
         const title = buf ? `${f.p1} vs ${f.p2}` : 'A game about to start';
         const result = !buf ? 'Waiting for its first moves.' : f.winner ? `${f.winner} won${f.round ? ` in round ${f.round}` : ''}.` : f.draw ? 'A draw.' : f.done ? 'No winner.' : people ? 'Still being played; the replay opens when it ends.' : 'Playing now: watch it live.';
@@ -174,25 +178,26 @@ function createGameLinks({ store, publicUrl, kitFile, replayFor, peopleRun = () 
             sendMessage(req, res, 404, 'There is no game at this address. Check the link, or ask whoever sent it.', sendText);
             return true;
         }
-        const buf = replay(run, game);
+        const people = peopleRun(run);
+        const { buf, gen } = replay(run, game, people);
         if (m[3]) {
             if (!buf) {
                 sendText(res, req, 404, 'text/plain', listed(run, game) ? 'no moves yet' : 'not found');
                 return true;
             }
-            if (peopleRun(run) && !ended(buf)) {
+            if (people && !ended(buf)) {
                 sendText(res, req, 409, 'text/plain', 'a game against a person opens when it ends');
                 return true;
             }
             const from = Math.min(buf.length, Math.max(0, Number(url.searchParams.get('from')) || 0));
-            sendText(res, req, 200, 'application/x-ndjson', buf.subarray(from), { 'x-size': String(buf.length) });
+            sendText(res, req, 200, 'application/x-ndjson', buf.subarray(from), { 'x-size': String(buf.length), 'x-gen': gen });
             return true;
         }
         if (!buf && !listed(run, game)) {
             sendMessage(req, res, 404, 'There is no game at this address. Check the link, or ask whoever sent it.', sendText);
             return true;
         }
-        sendPage(req, res, run, game, buf, sendText);
+        sendPage(req, res, run, game, buf, people, sendText);
         return true;
     }
 

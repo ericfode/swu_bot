@@ -90,28 +90,37 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--gold); outline-
 
   let viewer = null;
   let size = 0; // bytes of the replay this page has
+  let gen = null; // which copy of the replay those bytes are from (x-gen)
   let partial = ''; // a line still being written
-  async function load() {
+  async function load(step = stepN) {
     let r;
     try { r = await fetch(src, { cache: 'no-store' }); } catch { r = null; }
     if (!r || !r.ok) {
       say(r?.status === 409 ? 'This game against a person is still being played. Its replay opens here when it ends.'
         : r?.status === 404 ? 'This game has not sent its first moves yet. It shows here as soon as it does.'
         : 'The game did not load. Trying again…');
-      setTimeout(load, r?.status === 409 ? 20000 : 4000);
+      setTimeout(() => load(step), r?.status === 409 ? 20000 : 4000);
       return;
     }
     const text = await r.text();
     size = Number(r.headers.get('x-size')) || new TextEncoder().encode(text).length;
+    gen = r.headers.get('x-gen');
+    partial = '';
     done = /"t":"end"/.test(text.slice(-4000));
+    try { viewer?.destroy(); } catch {}
     $('viewer').innerHTML = '';
-    viewer = SWUViewer.mount($('viewer'), { jsonl: text, follow: false, keyboard: 'window', persist: 'swuarena.game', ...(stepN ? { stepN } : {}), onStep: (i, n) => follow(n) });
+    viewer = SWUViewer.mount($('viewer'), { jsonl: text, follow: false, keyboard: 'window', persist: 'swuarena.game', ...(step ? { stepN: step } : {}), onStep: (i, n) => follow(n) });
     if (!done) setTimeout(tail, 2000);
   }
   // a game being played: fetch only what came after, every 2 s, until its end line
   async function tail() {
     try {
       const r = await fetch(`${src}?from=${size}`, { cache: 'no-store' });
+      // the replay was replaced whole (a resync): start over from its first byte, following live
+      if (r.ok && (r.headers.get('x-gen') !== gen || Number(r.headers.get('x-size')) < size)) {
+        load(0);
+        return;
+      }
       if (r.ok) {
         const add = await r.text();
         size = Number(r.headers.get('x-size')) || size + new TextEncoder().encode(add).length;

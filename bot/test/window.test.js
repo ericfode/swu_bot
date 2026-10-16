@@ -429,6 +429,8 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         const more = await go(`/g/arena-t1-r1/g2/game.jsonl?from=${size}`);
         assert.strictEqual(await more.text(), step(2));
         assert.strictEqual(Number(more.headers.get('x-size')), size + Buffer.byteLength(step(2)));
+        assert.match(first.headers.get('x-gen'), /^[0-9a-f]{16}$/);
+        assert.strictEqual(more.headers.get('x-gen'), first.headers.get('x-gen'), 'an append keeps the generation');
         assert.strictEqual(await (await go('/g/arena-t1-r1/g2/game.jsonl?from=999999')).text(), '');
         // spectators polling a live game share one read of it per new move; a poll with nothing new reads nothing
         const readReplay = w.store.readReplay;
@@ -448,21 +450,45 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         } finally {
             w.store.readReplay = readReplay;
         }
-        // a replay replaced whole (a resync) is read again, even at the same size
-        assert.strictEqual(await (await go('/g/arena-t1-r1/g1/game.jsonl')).text(), header('rush', 'c_clock') + end);
+        // a replay replaced whole (a resync) is read again, even at the same size, with a new generation so a live
+        // page starts over
+        const before = await go('/g/arena-t1-r1/g1/game.jsonl');
+        assert.strictEqual(await before.text(), header('rush', 'c_clock') + end);
         const redo = header('rush', 'c_clock') + end.replace('"p2"', '"p1"');
         w.store.putReplay('arena-t1-r1', 'g1', Buffer.from(redo));
-        assert.strictEqual(await (await go('/g/arena-t1-r1/g1/game.jsonl')).text(), redo);
+        const after = await go('/g/arena-t1-r1/g1/game.jsonl');
+        assert.strictEqual(await after.text(), redo);
+        assert.notStrictEqual(after.headers.get('x-gen'), before.headers.get('x-gen'));
         // listed, no moves yet: the page waits; the replay is not there yet
         assert.match(await (await go('/g/arena-t1-r1/g3')).text(), /A game about to start/);
         assert.strictEqual((await go('/g/arena-t1-r1/g3/game.jsonl')).status, 404);
 
         // a game against a person: closed while it is played (a person's hidden cards), then the person reads "a person"
         assert.match(await (await go('/g/karabast-p/k1')).text(), /<title>a person vs c-clock/);
-        assert.strictEqual((await go('/g/karabast-p/k1/game.jsonl')).status, 409);
-        w.store.appendReplay('karabast-p', 'k1', w.store.replaySize('karabast-p', 'k1'), Buffer.from(end));
+        const peopleSize = w.store.replaySize('karabast-p', 'k1');
+        let peopleReads = 0;
+        w.store.readReplay = (...a) => (peopleReads++, readReplay.apply(w.store, a));
+        try {
+            for (let i = 0; i < 5; i++) {
+                assert.strictEqual((await go('/g/karabast-p/k1/game.jsonl')).status, 409);
+            }
+            assert.strictEqual(peopleReads, 0, 'its page was read already; waiting readers read nothing more');
+        } finally {
+            w.store.readReplay = readReplay;
+        }
+        w.store.appendReplay('karabast-p', 'k1', peopleSize, Buffer.from(end));
         const masked = await (await go('/g/karabast-p/k1/game.jsonl')).text();
         assert.ok(!masked.includes('bob') && masked.includes('"bot":"a person"'), masked);
+        // a change to its run document (how its people read) is read again
+        w.store.putDoc('runs', 'karabast-p', JSON.stringify({ id: 'karabast-p', bots: ['c-clock'], games: [{ id: 'k1', p1: 'opponent', p2: 'c-clock', note: 'x' }] }));
+        peopleReads = 0;
+        w.store.readReplay = (...a) => (peopleReads++, readReplay.apply(w.store, a));
+        try {
+            assert.ok((await (await go('/g/karabast-p/k1/game.jsonl')).text()).includes('"bot":"a person"'));
+            assert.strictEqual(peopleReads, 1);
+        } finally {
+            w.store.readReplay = readReplay;
+        }
         assert.ok(!(await (await go('/g/karabast-p/k1')).text()).includes('bob'));
 
         // the viewer kit: kept by the browser (ETag), gzip only for a client that takes it
