@@ -107,7 +107,7 @@ function createArt({ fetchImpl = fetch, maxBytes = MAX_BYTES, now = Date.now, ti
         if (req.method !== 'GET' && req.method !== 'HEAD') {
             return send(405, 'GET only');
         }
-        if (!who.login && !atLeast(who.role, 'friend')) {
+        if ((!who.login || who.blocked) && !atLeast(who.role, 'friend')) {
             return send(401, 'sign in with GitHub first');
         }
         let buf;

@@ -13,11 +13,13 @@ builder ──/mcp arena_submit──▶ window (swu-arena) ──POST /wake─�
 ## The window (swu-arena)
 
 `ARENA_MODE=window node bot/arena/server.js` (`Dockerfile`, `fly.toml`) serves https://swu-arena.fly.dev: the arena
-and the research for invited friends, behind GitHub sign-in. It stores the documents and replays the other parts send
+and the research for anyone signed in with GitHub. It stores the documents and replays the other parts send
 it, and it never runs a bot. `WINDOW.md` describes its API, sign-in and deploys.
 
 - `window.js`: the HTTP API and the document store. `server.js` starts it.
-- `auth.js`: who may do what (friends, view links, the project's token, the games machine's token, feeds).
+- `auth.js`: who may do what (members, friends, the block list, view links, the project's token, the games
+  machine's token, feeds).
+- `static.js`: files and the app's model sent with an ETag and a gzip made once, so a browser that has them gets a 304.
 - `oauth.js`, `mcp-http.js`: `/mcp`, the remote MCP server each person's app signs in to with GitHub. Builders submit
   bots there (`arena_submit`) and read their results.
 - `connect.js`: the device grant for an agent with no browser, such as a builder's Claude Code on their own computer.

@@ -51,6 +51,7 @@ const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 const zlib = require('zlib');
 const { atLeast, LOGIN } = require('./auth');
+const { cached, sendCached } = require('./static');
 const { createLobby, LobbyError, MAX_MSG } = require('./lobby');
 const { swudbId, fetchSwudb, deckFromJson } = require('./swudb');
 const { normalizeDeck } = require('../decklists');
@@ -248,7 +249,7 @@ function createTables({
     /** The login of a person who may play here, or null. */
     const player = (who) => {
         const login = github(who);
-        return login && (on === 'github' || atLeast(who.role, 'friend')) ? login : null;
+        return login && !who.blocked && (on === 'github' || atLeast(who.role, 'friend')) ? login : null;
     };
     const openTo = (next) => typeof next === 'string' && (/^\/tables\/logs(?:[?#]|$)/.test(next) || (on === 'github' && /^\/tables(?:[/?#]|$)/.test(next)));
 
@@ -352,12 +353,10 @@ function createTables({
             return true;
         }
         if (!kit || kit.mtimeMs !== st.mtimeMs) {
-            const raw = fs.readFileSync(kitFile);
-            kit = { mtimeMs: st.mtimeMs, raw, gz: zlib.gzipSync(raw) };
+            kit = { mtimeMs: st.mtimeMs, entry: cached(fs.readFileSync(kitFile), 'text/javascript') };
         }
-        const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
-        res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-cache', vary: 'accept-encoding', 'cross-origin-resource-policy': 'same-origin', ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
-        res.end(gzip ? kit.gz : kit.raw);
+        // gzipped once, with an ETag: a browser that has this kit gets a 304 (static.js)
+        sendCached(req, res, kit.entry, { headers: { 'cross-origin-resource-policy': 'same-origin' } });
         return true;
     }
 

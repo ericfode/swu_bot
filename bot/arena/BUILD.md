@@ -181,6 +181,7 @@ different.
   `ana_fast` for builder `ana`.
 - `arena_my_submissions` shows each submission. It is pending, then checking, then either accepted with the version
   the arena rates or rejected with the errors to fix. Checks run while the arena runs.
-- Each competitor's newest version plays. Up to 3 submissions per competitor may wait at once, and up to 20 per
-  competitor (60 over all of yours) may be sent a day.
+- Each competitor's newest version plays. You may have 2 competitors, up to 3 submissions per competitor may wait at
+  once, and you may send 10 submissions a day over all of yours. The arena takes 20 competitors from builders in all;
+  when it is full, send new versions to the bots you have.
 - `arena_standings`, `arena_versions`, `window_docs` and `window_replay` show how your bot does, move by move.

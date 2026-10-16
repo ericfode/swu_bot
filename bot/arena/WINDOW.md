@@ -1,6 +1,6 @@
 # The arena window (swu-arena on Fly)
 
-The window is the arena and its research as invited friends see them, at https://swu-arena.fly.dev. Builders submit
+The window is the arena and its research as the people who sign in see them, at https://swu-arena.fly.dev. Builders submit
 bots here, the games machine (swu-arena-games, below) plays them and sends the results back, and the project's threads
 send their ladders and research the same way. The window itself never runs a bot.
 
@@ -69,8 +69,15 @@ except an admin changing the invite list from the app's Share page (below):
   `{"set": {"<name>": <value> or null}}` changes some of them, null going back to the default; admins only, from the
   app's own pages as for `/api/share`. The games machine reads them every minute with its own token, which may only
   read.
-- `GET /api/me` answers `{login, role}` (plus `guest: true` for a view link's guest) for the app; the Share page shows
-  the invite list and the view links to admins.
+- `GET /api/me` answers `{login, role, signin}` (plus `guest: true` for a view link's guest) for the app; the Share
+  page shows the invite list, the block list and the view links to admins, and `GET /api/share` adds `signin` and the
+  submission `limits`.
+
+Files the window sends as they are (the app page, `/kit.js`, `/play/kit.js`, `/tables/kit.js`, small scripts) and the
+app's model (`/api/app`) are gzipped once per change and carry an ETag, so a browser that has them gets a 304 with no
+body (`static.js`). This matters most for `/api/app`: every open tab asks for it every 15 seconds (only while it is
+shown), and it is ~0.6 MB gzipped. The model is rebuilt at most every 30 seconds, and a rebuild that comes out the same
+keeps its ETag.
 
 ## Through MCP
 
@@ -105,8 +112,13 @@ Its tools: `whoami`, the arena reads (`arena_status`, `arena_standings`, `arena_
 - `arena_submit {kind: js|python|wasm, note, files, base64?, entry?, name?}`: stores the bot in the `submissions`
   collection as `<login>.<time>`, state `pending`. The default `name` is the person's builder name (their login,
   lowercase, `_` for `-`); another name must start with it and `_`, and may not be the builder name of anyone else who
-  can sign in (the intake checks the prefix again). Limits: about 3 MB of files; per competitor 3 waiting at once
-  and 20 a day; 60 a day per person; and no competitor someone else owns. The window never runs it.
+  can sign in (the intake checks the prefix again; while anyone with GitHub may sign in, a name with a suffix is
+  refused when it is the builder name of another account on github.com, which the window asks GitHub). Limits: about 3
+  MB of files; per competitor 3 waiting at once and 20 a day; and no competitor someone else owns. Everyone but an
+  admin also has at most 2 competitors (`ARENA_BOTS_PER_PERSON`) and 10 submissions a day over all of them
+  (`ARENA_SUBMITS_PER_DAY`), and the arena takes at most 20 competitors from builders who are not admins
+  (`ARENA_OUTSIDE_BOTS`), because a round plays every pair of bots and so grows with the square of their number. An
+  admin has 60 submissions a day and any number of competitors. The window never runs it.
 - `arena_my_submissions`: the person's own submissions, without their files. Each is pending, then checking, then
   accepted (the version) or rejected (the error lines). A check that fails on the arena's side (no result) puts it back
   to pending, files and all, and it is tried again after a few minutes, three times at most.
@@ -137,8 +149,16 @@ person's connected apps are listed on the app's Build a bot page (Arena, Build a
 
 ## Who may do what (auth.js)
 
-- Friends sign in with GitHub. A login in `ARENA_ADMINS` (default ericfode) is an admin; one in `ARENA_INVITES` or the
-  invite document is a friend; anyone else sees who to ask. Sessions last 14 days and survive deploys.
+- People sign in with GitHub. A login in `ARENA_ADMINS` (default ericfode) is an admin; one in `ARENA_INVITES` or the
+  invite document is a friend. With `ARENA_SIGNIN=github` (set in `fly.toml` since 2026-10-16) anyone else with a
+  GitHub account is a member: a member reads what a friend reads and submits their own bots, within the limits below,
+  but only friends lend their browser to the swarm (its games are rated) and use the open tables while `ARENA_TABLES`
+  is `invited`. With `ARENA_SIGNIN=invited` (the default) anyone else sees who to ask. Sessions last 14 days and
+  survive deploys.
+- A login in the block list (`admin/blocked`, `{"logins": [...]}`; the Share page's Block, or `POST /api/share
+  {"block": "<login>"}` / `{"unblock": "<login>"}`) may not sign in, invited or not, nor play, send feedback or use its
+  apps; an admin is never blocked. It takes effect on the next request. The person's bots stay in the arena until
+  they are withdrawn.
 - A view link (`/v/<key>`, made on the Share page) lets in anyone holding it as a guest: role friend, no login, for 30
   days or until the link is removed.
 - The project's threads send `Authorization: Bearer <ARENA_PUSH_TOKEN>` (role project). Cloud sessions started since
