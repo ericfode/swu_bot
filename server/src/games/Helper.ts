@@ -13,17 +13,18 @@
  *   start), plays the lease's seed with play-seed.js in `<data>/helper/<slot>/<lease>/` (job.json, out/; the layout
  *   helper-tui.js reads), heartbeats meanwhile (the first at once: the machine's ack), posts the results and replays,
  *   removes the folder and claims again. A seed is never played twice here.
- * - as root, slot k plays as its own user, the bots' user's name and k (arena1 to arena16, made by the image), and
- *   every process of that user is killed when its play ends. A container has no PID namespace for a play, so this is
- *   what keeps a process a bot left running (one that left the play's process group) from reaching a later lease's
- *   files, or another slot's play.
+ * - as root, slot k plays as its own user, the bots' user's name and k (arena1 to arena16: the image makes them, and
+ *   boot makes any an older helper image lacks), and root kills every process of that user when its play ends
+ *   (bot/arena/ops/kill-user.py). A container has no PID namespace for a play, so this is what keeps a process a bot
+ *   left running (one that left the play's process group) from reaching a later lease's files, or another slot's
+ *   play. When they cannot all be killed, the lease fails and the helper stops: a new container starts clean.
  * - stopping (SIGTERM: docker stop, Ctrl-C in the live view) gives every seed in play back at once.
  *
  * Bundles (canonical tars, named by their sha256) are fetched once into `<data>/bundles`, which keeps them across
  * leases and restarts up to timing.bundlesLimit, the least recently used going first. The log lines are the Elixir
  * helper's, word for word: helper-tui.js parses them.
  */
-import { execFileSync, spawnSync } from "node:child_process"
+import { execFile, execFileSync } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
 import {
   chmodSync,
@@ -587,7 +588,7 @@ const playOptions = (h: Ctx, kind: "warm" | "play", args: ReadonlyArray<string>,
   env: childEnv(h.c, h.c.paths.home, { SWU_WASM_CACHE: h.c.paths.wasmCache }),
   // only root writes the wasm cache, which the plays read; compiling runs nothing of a bot
   as: kind === "warm" ? "root" : "arena",
-  ...(user ? { user: user.name } : {}),
+  ...(user ? { user } : {}),
   // plain setpriv: isolate.sh needs namespaces a Docker container does not grant; Docker is the helper's boundary
   isolate: false,
   timeoutMs,
@@ -613,16 +614,21 @@ const playFailed = (r: Result | null, timeoutMs: number): string => {
   }
 }
 
+const KILL_USER = path.resolve(import.meta.dirname, "..", "..", "..", "bot", "arena", "ops", "kill-user.py")
+
 /**
- * Kills every process of a slot's user (kill -1 as that user: all it may signal, which is its own processes). As
- * root, after each play; the play's process group is already gone, so this finds only what left the group.
+ * Kills every process of a slot's user, as root (kill-user.py: the user's processes cannot stop or signal it), after
+ * each play; the play's process group is already gone, so it finds only what left the group. Whether none is left.
  */
-const killLeft = (user: BotUser) => {
-  const r = spawnSync(process.execPath, ["-e", "try { process.kill(-1, 'SIGKILL') } catch (e) { if (e.code !== 'ESRCH') throw e }"], {
-    uid: user.uid, gid: user.gid, env: { PATH: "/usr/bin:/bin" }, cwd: "/", stdio: "ignore", timeout: 10_000
+const killLeft = (user: BotUser): Promise<boolean> =>
+  new Promise((resolve) => {
+    execFile("python3", ["-I", KILL_USER, String(user.uid)], {
+      env: { PATH: "/usr/local/bin:/usr/bin:/bin" }, cwd: "/", timeout: 30_000, killSignal: "SIGKILL"
+    }, (e, _out, err) => {
+      if (e) Log.error(`could not stop what ${user.name} left running (${String(err).trim().slice(0, 200) || e.message})`)
+      resolve(!e)
+    })
   })
-  if (r.status !== 0) Log.warn(`could not stop what ${user.name} left running (${r.error?.message ?? `exit ${r.status}`})`)
-}
 
 /** Plays a lease in `dir`: started at once; `done` is its outcome, `stop` ends it and waits until it is gone. */
 const startPlay = (h: Ctx, slot: string, lease: Lease, dir: string, timeoutMs: number) => {
@@ -671,8 +677,12 @@ const startPlay = (h: Ctx, slot: string, lease: Lease, dir: string, timeoutMs: n
       child = runChild(h.proc, playOptions(h, "play", ["--job", job, "--bundles", h.c.paths.bundles, "--work", dir], timeoutMs, user))
       const r = await child.result
       // however it ended: nothing of the slot's user runs on, so nothing swaps a replay for a link while it is read,
-      // and nothing waits for the next lease
-      if (user) killLeft(user)
+      // and nothing waits for the next lease; when that cannot be made sure, the helper stops (a new container starts
+      // with nothing of it)
+      if (user && !(await killLeft(user))) {
+        h.stop(1, `slot ${slot}: what the play left running as ${user.name} could not be stopped; stopping the helper`)
+        return { ok: false, why: "what the play left running could not be stopped" }
+      }
       if (r === null || r.kind !== "exit" || r.code !== 0) return { ok: false, why: playFailed(r, timeoutMs) }
       return resultBody(r.stdout, path.join(dir, "out"), user?.uid ?? null)
     } catch (e) {
@@ -936,12 +946,33 @@ const botUser = (name: string): BotUser => {
   }
 }
 
+const hasUser = (name: string) => {
+  try {
+    execFileSync("id", ["-u", name], { stdio: "ignore" })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A slot's user, made as the image makes it when it is missing (a helper image built by an older Dockerfile.helper). */
+const slotUser = (c: GamesConfig, name: string): BotUser => {
+  if (hasUser(name)) return botUser(name)
+  try {
+    execFileSync("useradd", ["--system", "--user-group", "--no-create-home", "--home-dir", c.paths.home, "--shell", "/usr/sbin/nologin", name], { stdio: "ignore", timeout: 30_000 })
+    Log.info(`made the user ${name}, which this image lacked`)
+  } catch {
+    throw new SetupError(`no user ${name}, and useradd could not make it: the plays could not run as the bots' user`)
+  }
+  return botUser(name)
+}
+
 /**
  * Before anything plays (Coord.Helper.prepare!): the server's folder for the pidfiles (0700) and the groups a crashed
  * run left reaped, `<data>/helper` wiped (0711 when the plays run as the bots' users, who must reach their own folders
- * in it, else 0700), and as root each slot's user found with nothing of it running, and the bots' HOME and the wasm
- * cache root's (0755): the HOME emptied, the cache emptied when it was not root's (an older image made it the bots'
- * user's; run.py loads only the entries of the folder's owner).
+ * in it, else 0700), and as root each slot's user found (or made), and the bots' HOME and the wasm cache root's (0755):
+ * the HOME emptied, the cache emptied when it was not root's (an older image made it the bots' user's; run.py loads
+ * only the entries of the folder's owner). Nothing of the slots' users runs yet: the helper starts in a new container.
  */
 const prepare = (c: GamesConfig, proc: ProcService): { readonly users: ReadonlyMap<string, BotUser> | null; readonly viewGid: number | null; readonly helperDir: string } => {
   mkdirSync(c.paths.server, { recursive: true, mode: 0o700 })
@@ -949,9 +980,8 @@ const prepare = (c: GamesConfig, proc: ProcService): { readonly users: ReadonlyM
   mkdirSync(c.paths.procs, { recursive: true, mode: 0o700 })
   proc.reapStale()
   const users = process.getuid?.() === 0
-    ? new Map(Array.from({ length: c.helperSlots }, (_, i) => [String(i + 1), botUser(`${c.arenaUser}${i + 1}`)] as const))
+    ? new Map(Array.from({ length: c.helperSlots }, (_, i) => [String(i + 1), slotUser(c, `${c.arenaUser}${i + 1}`)] as const))
     : null
-  for (const user of users?.values() ?? []) killLeft(user)
   const viewGid = users ? botUser(c.arenaUser).gid : null
   // the plays of a run that crashed are gone (reaped), and so are their work folders
   const helperDir = path.join(c.data, "helper")

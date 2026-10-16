@@ -26,7 +26,7 @@ export interface RunOptions {
   /** arena: the bots' user (no capabilities, no way to gain any) */
   readonly as: "root" | "arena"
   /** with as: "arena", this user in place of the config's bots' user (a helper slot plays as its own) */
-  readonly user?: string
+  readonly user?: { readonly name: string; readonly uid: number; readonly gid: number }
   /** inside isolate.sh's PID and mount namespaces, with the hidden paths covered and its own /tmp */
   readonly isolate: boolean
   /** isolate.sh --tmp (default <data>/tmp/<kind>) */
@@ -145,19 +145,15 @@ export const makeProc = (c: GamesConfig): ProcService => {
   let stopping = false
   const root = isRoot()
   const choom = root ? findExe("choom", BASE_PATH) : null
-  const users = new Map<string, { uid: number; gid: number } | null>()
-  const idsOf = (user: string) => {
+  const ids = (() => {
     if (!root) return null
-    if (!users.has(user)) {
-      try {
-        const id = (flag: string) => Number(execFileSync("id", [flag, user], { encoding: "utf8" }).trim())
-        users.set(user, { uid: id("-u"), gid: id("-g") })
-      } catch {
-        users.set(user, null)
-      }
+    try {
+      const id = (flag: string) => Number(execFileSync("id", [flag, c.arenaUser], { encoding: "utf8" }).trim())
+      return { uid: id("-u"), gid: id("-g") }
+    } catch {
+      return null
     }
-    return users.get(user) ?? null
-  }
+  })()
   const boot = kernelBoot()
 
   const wrap = (o: RunOptions): Array<string> => {
@@ -166,18 +162,17 @@ export const makeProc = (c: GamesConfig): ProcService => {
       const tmp = o.tmp ?? path.join(c.paths.tmp, o.kind)
       return [
         "bash", scripts(c).isolate,
-        ...(o.as === "arena" ? ["--user", o.user ?? c.arenaUser] : []),
+        ...(o.as === "arena" ? ["--user", o.user?.name ?? c.arenaUser] : []),
         "--tmp", tmp,
         ...[...c.hide, ...(o.hide ?? [])].flatMap((h) => ["--hide", h]),
         "--", ...o.argv
       ]
     }
     if (o.as === "arena") {
-      const user = o.user ?? c.arenaUser
-      const ids = idsOf(user)
-      if (!ids) throw new Error(`no user ${user} to run ${o.kind} as`)
+      const user = o.user ?? ids
+      if (!user) throw new Error(`no user ${c.arenaUser} to run ${o.kind} as`)
       return [
-        "setpriv", `--reuid=${ids.uid}`, `--regid=${ids.gid}`, "--clear-groups",
+        "setpriv", `--reuid=${user.uid}`, `--regid=${user.gid}`, "--clear-groups",
         "--inh-caps=-all", "--bounding-set=-all", "--no-new-privs", "--", ...o.argv
       ]
     }

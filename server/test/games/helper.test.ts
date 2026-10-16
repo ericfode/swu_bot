@@ -44,7 +44,8 @@ const tui = requireRepo(path.join(REPO, "bot", "arena", "ops", "helper-tui.js"))
 
 const ROOT = process.getuid?.() === 0
 // as root slot k plays as the user arena<k>, and the live view's reader runs as arena: the users the image makes (as
-// root these tests need arena and arena1 to arena4)
+// root these tests need arena; a missing arena<k> is made). As root a play's end kills every process of arena<k> in
+// this machine: never run two root test runs at once.
 const BOTS_USER = "arena"
 const uidOf = (user: string) => Number(spawnSync("id", ["-u", user], { encoding: "utf8" }).stdout.trim())
 const gidOf = (user: string) => Number(spawnSync("id", ["-g", user], { encoding: "utf8" }).stdout.trim())

@@ -25,8 +25,8 @@ file (pick 2A), with games played by Node (pick 1A). It has two parts:
   for `GAMES_IDLE_MIN` minutes it exits 0, and Fly leaves the machine stopped until the next wake.
 - **helper** (`COORD_ROLE=helper`): plays seeds the machine leases out, on a computer of Eric's
   ([bot/arena/HELPER.md](../bot/arena/HELPER.md)). A container gives a play no PID namespace, so as root slot k plays
-  as its own user (`ARENA_USER` and k: `arena1` to `arena16`, which the image makes) and every process of that user is
-  killed when the play ends.
+  as its own user (`ARENA_USER` and k: `arena1` to `arena16`, which the image makes) and root kills every process of
+  that user when the play ends (`bot/arena/ops/kill-user.py`); when it cannot, the helper stops.
 - **replay**: `node src/main-games.ts replay --results <arena-rK folder> --bundles <folder of tars> --names <file>
   --out <folder> [--only a,b] [--decks-dir <folder>]` plays a recorded round again from its seeds and compares every
   game and replay with the record (the stage 5 done check). It exits 0 only when every game came out the same.
