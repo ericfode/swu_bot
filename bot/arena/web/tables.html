@@ -456,16 +456,23 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       else if (d.msg && typeof d.msg.g === 'string') gameIn(d.msg.g);
     };
     es.onerror = () => { if (!link.closed && es.readyState === EventSource.CLOSED) link.onDown('the lobby closed the link'); };
+    // a stream that comes back (the browser reconnects it) may have missed what the lobby no longer keeps: onReopen
+    let opened = false;
+    es.onopen = () => {
+      if (opened && !link.closed) link.onReopen?.();
+      opened = true;
+    };
     let chain = Promise.resolve();
     const post = (msg) => {
       chain = chain.then(async () => {
-        for (let i = 0; i < 4 && !link.closed; i++) {
+        // in order, each one until the lobby takes it (a lost network or a restarting window only delays it)
+        for (let i = 0; !link.closed; i++) {
           try {
             await api('POST', `/api/tables/send?${q}`, { msg });
             return;
           } catch (e) {
             if (e.status >= 400 && e.status < 500) { link.onDown(e.message); return; }
-            await new Promise((ok) => setTimeout(ok, 500 * 2 ** i));
+            await new Promise((ok) => setTimeout(ok, Math.min(8000, 500 * 2 ** i)));
           }
         }
       });
@@ -655,13 +662,23 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       l.onDown = (why) => {
         if (g && !g.over) status(`The link to ${peerPid} dropped (${why}). The game waits for them.`, 'bad');
       };
+      l.onReopen = () => { if (cur === l) l.game({ t: 'again' }); };
     };
     attach(link);
     setLink?.(attach);
-    const eng = await loadEngine();
+    let eng;
+    try {
+      eng = await loadEngine();
+    } catch (e) {
+      toGuest({ t: 'refused', error: `the host's rules engine did not start (${e.message})` });
+      throw e;
+    }
     if (!joined) {
       await new Promise((ok, no) => {
-        const t = setTimeout(() => no(new Error('the other player did not send their deck')), 60000);
+        const t = setTimeout(() => {
+          toGuest({ t: 'refused', error: 'the host never got your deck' });
+          no(new Error('the other player did not send their deck'));
+        }, 60000);
         joinedWait = () => { if (joined) { clearTimeout(t); joinedWait = null; ok(); } };
       });
     }
@@ -698,9 +715,16 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       let a = 0;
       const acts = new Map(); // actions the host has not answered yet, by number
       let cur = link;
+      // what the host may never have had: the join before the start, else where this tab is, then unanswered actions
+      const sendAgain = (l) => {
+        l.game(g ? { t: 'resume', have } : joinMsg);
+        for (const [k, w] of acts) l.game({ t: 'act', a: k, act: w.act });
+      };
       const attach = (l, again = false) => {
         cur = l;
+        l.onReopen = () => { if (cur === l) sendAgain(l); };
         l.onGame = (o) => {
+          if (o?.t === 'again') { if (cur === l) sendAgain(l); return; }
           if (!o || !Number.isInteger(o.n) || o.n <= have) return;
           if (o.n !== have + 1) { l.game({ t: 'resume', have }); return; }
           have = o.n;
@@ -736,8 +760,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
         if (again) {
           // what the host sent and this tab missed (before the start, the join, which the host may never have had),
           // then the actions it may never have had (it plays each one once)
-          l.game(g ? { t: 'resume', have } : joinMsg);
-          for (const [k, w] of acts) l.game({ t: 'act', a: k, act: w.act });
+          sendAgain(l);
         }
       };
       const joinMsg = { t: 'join', v: 1, deck: deckRef(deckName), have: 0 };
@@ -781,7 +804,12 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       if (!id) stop(new Error('the other player left'));
       else if (!games.get(id)?.over) status(`${peer} left the table.`, 'bad');
     };
-    const game = await Promise.race([starting, stopped]);
+    const game = await Promise.race([starting, stopped]).catch(async (e) => {
+      await Promise.race([c.link.idle?.(), new Promise((ok) => setTimeout(ok, 5000))]);
+      c.link.close();
+      c.room.close();
+      throw e;
+    });
     id = game.id;
     setCancel(() => undefined);
     const g = games.get(game.id);
