@@ -286,6 +286,89 @@ test('a person\'s previews (the answers to a move\'s questions, played out on th
     assert.deepEqual(wrong, [], `every complete preview matched the real game: ${JSON.stringify(seen)}`);
 });
 
+test('a person takes back moves against a bot: the game plays again to their last real choice, and the replay keeps only the moves that stand', { skip: !ENGINE && 'engine or card data not built' }, async () => {
+    const { Env } = require('../env');
+    const { makeBot } = require('../players');
+    const { loadDecks } = require('../decklists');
+    const { seededRng } = require('../rng');
+    const { playTable } = require('../table/table');
+    const { replayTrace } = require('../trace');
+    const env = new Env();
+    const { decks } = loadDecks(path.join(ROOT, 'bot/decks/ash-meta-2026-09.json'), env);
+    const byName = (n) => decks.find((d) => d.metadata.name === n);
+    for (const seed of [7, 8]) {
+        const rng = seededRng(`undo-${seed}`);
+        const seen = []; // the person's decisions: board and choices
+        const looks = (m) => JSON.stringify([m.state, m.actions.map((a) => a.label)]);
+        let rewound = null;
+        const count = { undo: 0, queued: 0, rewinds: 0, failed: 0, offered: 0 };
+        let seat;
+        const send = (m) => {
+            if (m.t === 'rewind') {
+                if (m.error) {
+                    count.failed++;
+                } else {
+                    count.rewinds++;
+                    rewound = m;
+                }
+                return;
+            }
+            if (m.t !== 'decide') {
+                return;
+            }
+            if (rewound) {
+                // the decision taken back, asked again: the board the rewind showed, and a decision seen before
+                assert.deepStrictEqual(m.state, rewound.state);
+                assert.ok(seen.includes(looks(m)), 'the decision asked again is one the person was asked before');
+                rewound = null;
+            }
+            seen.push(looks(m));
+            count.offered += m.undo ? 1 : 0;
+            setImmediate(() => {
+                if (m.undo && count.undo < 12 && rng() < 0.15) {
+                    count.undo++;
+                    assert.equal(seat.answer({ t: 'undo' }), null);
+                    return;
+                }
+                let i = Math.floor(rng() * m.actions.length);
+                if (m.actions[i].kind === 'distribute') {
+                    i = m.actions.findIndex((a) => a.kind !== 'distribute');
+                    i = i < 0 ? 0 : i;
+                }
+                assert.equal(seat.answer({ t: 'act', seq: m.seq, i }), null);
+                // now and then, an undo while the bot thinks: it answers the next decision
+                if (m.actions.length > 1 && count.queued < 4 && rng() < 0.03) {
+                    count.queued++;
+                    assert.equal(seat.answer({ t: 'undo' }), null);
+                }
+            });
+        };
+        seat = new PersonSeat({ name: 'you', send });
+        assert.equal(seat.answer({ t: 'undo' }), null, 'an undo before any decision waits for one');
+        seat.undoNext = false;
+        const { result, replay } = await playTable({
+            env, person: seat, personSeat: 'p1', bot: makeBot('heuristic'), seed, key: `undo-test-${seed}`, send,
+            decks: { p1: byName('admiral-piett_jtl_blue'), p2: byName('ahsoka-tano_ash_yellow') }
+        });
+        assert.equal(result.outcome, 'won', result.error);
+        assert.ok(count.rewinds >= 5, `moves taken back: ${JSON.stringify(count)}`);
+        assert.equal(count.failed, 0, `every move could be taken back: ${JSON.stringify(count)}`);
+        const events = replay.trim().split('\n').map((l) => JSON.parse(l));
+        const steps = events.filter((e) => e.t === 'step');
+        assert.deepStrictEqual(steps.map((e) => e.n), steps.map((e, k) => k), 'the replay numbers its moves without gaps');
+        assert.equal(steps.at(-1).n, result.steps);
+        const check = await replayTrace(env, events);
+        assert.ok(check.ok, `the replay plays out the same again: ${check.diff}`);
+    }
+    // a decision with nothing to take back refuses an undo, and the decision stays open
+    const sent = [];
+    const p = new PersonSeat({ name: 'you', send: (m) => sent.push(m) });
+    const asked = p.decide(decide(1, [{ i: 0, kind: 'button', label: 'Pass' }, { i: 1, kind: 'button', label: 'Go' }]));
+    assert.match(p.answer({ t: 'undo' }), /no move to take back/);
+    assert.equal(p.answer({ t: 'act', seq: 1, i: 1 }), null);
+    assert.deepStrictEqual(await asked, { t: 'act', i: 1 });
+});
+
 test('the bot\'s look-ahead deals the person\'s hand, resources and deck again (protocol.js determinize)', { skip: !ENGINE && 'engine or card data not built' }, async () => {
     const { Env } = require('../env');
     const { loadDecks } = require('../decklists');

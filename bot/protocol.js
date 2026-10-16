@@ -33,6 +33,14 @@ class BotError extends Error {
     }
 }
 
+/** A seat that may take back moves (match.js `undo`: a person at a table) answered {t: 'undo'}. */
+class TakeBack extends Error {
+    constructor(seat) {
+        super(`${seat} takes back a move`);
+        this.seat = seat;
+    }
+}
+
 const short = (x) => JSON.stringify(x)?.slice(0, 160);
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 const now = () => process.hrtime.bigint();
@@ -137,6 +145,8 @@ class ClientSeat {
         this.seq = 0;
         this.times = [];
         this.revealed = [];
+        // match.js sets it before each decision of a seat that may take back moves and has one to take back
+        this.mayUndo = false;
     }
 
     /** Blame the bot. Its connection is closed: a bot that broke a game starts afresh at its next hello. */
@@ -212,7 +222,8 @@ class ClientSeat {
         }
         const marks = this.wantsNoEffect && eg.isActionWindow(pid);
         const msg = {
-            t: 'decide', seq, you: this.seat, sim: !!sim, ...(sim?.engine ? { simEngine: sim.engine } : {}), ms, prompt: promptView(eg, pid), state: view(eg, this.seat),
+            t: 'decide', seq, you: this.seat, sim: !!sim, ...(sim?.engine ? { simEngine: sim.engine } : {}), ...(this.mayUndo ? { undo: true } : {}),
+            ms, prompt: promptView(eg, pid), state: view(eg, this.seat),
             actions: actions.map((a, i) => {
                 const out = actionView(eg, a, i, pid);
                 if (marks && a.kind === 'card' && out.card?.id !== 'hidden' && eg.wouldDoNothing(pid, a.card)) {
@@ -229,6 +240,9 @@ class ClientSeat {
             sim?.finish();
         }
         this.times.push(msSince(t));
+        if (r?.t === 'undo' && msg.undo) {
+            throw new TakeBack(this.seat);
+        }
         if (r?.t !== 'act' || !Number.isInteger(r.i) || r.i < 0 || r.i >= actions.length) {
             this.fail(`expected {"t":"act","i":0..${actions.length - 1}}, got ${short(r)}`);
         }
@@ -483,4 +497,4 @@ function seatFor(bot, seat, game) {
     throw new Error(`${seat}: a bot needs decide() (protocol client) or choose() (native bot)`);
 }
 
-module.exports = { seatFor, ClientSeat, NativeSeat, Shadow, BotError, determinize, PROTOCOL, VERSIONS, LIMITS };
+module.exports = { seatFor, ClientSeat, NativeSeat, Shadow, BotError, TakeBack, determinize, withSplit, toEngine, PROTOCOL, VERSIONS, LIMITS };

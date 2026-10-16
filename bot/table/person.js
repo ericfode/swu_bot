@@ -8,11 +8,15 @@
  *   const seat = new PersonSeat({ name: 'you', send: (msg) => ... });   // send: every message for the screen
  *   playGame(env, { bots: [seat, bot], ... });
  *   seat.answer({ t: 'act', seq: 4, i: 2 })      -> null when taken, else why not (the person can try again)
+ *   seat.answer({ t: 'undo' })                   // take back the last real choice (decide.undo; table.js)
  *   seat.concede()                               // the game ends now; the other seat wins
  *
  * A person has no clock (timeoutMs Infinity: the referee sends ms null). Unlike a bot's, a person's wrong answer
  * (an old decision, an index out of range, a split that does not add up) is refused here and the decision stays open,
  * so a slip never loses the game; only concede() ends it early.
+ *
+ * Where the game lets the person take back moves (a game against a bot), decide.undo says there is one to take back,
+ * and {t: 'undo'} answers the decision with it; sent while the bot thinks, it answers the person's next decision.
  */
 
 const { lookAhead, withPreviews } = require('./preview');
@@ -70,8 +74,41 @@ class PersonSeat {
         this.pending = null; // { msg, resolve, sim }
         this.conceded = false;
         this.previews = previews;
-        this.ahead = null; // the previews after the last action window's move (preview.js lookAhead)
-        this.path = []; // the person's answers since that move
+        // every answer of the game: { i, n (the decision's number of actions), window (an action window's move), tree
+        // (its previews, preview.js lookAhead) }; a move taken back takes its answers off
+        this.answers = [];
+        this.undone = null; // the answers the last undo took off, until the game says it took the move back
+        this.undoNext = false; // an undo sent while the bot thinks: it answers the next decision that has one
+    }
+
+    /** The previews for the question `msg`: the last action window move's, along the answers given since. */
+    shown(msg) {
+        if (msg.prompt?.actionWindow) {
+            return msg;
+        }
+        const k = this.answers.findLastIndex((a) => a.window);
+        const tree = this.answers[k]?.tree;
+        return tree ? withPreviews(msg, tree.get(this.answers.slice(k + 1).map((a) => a.i).join(' '))) : msg;
+    }
+
+    /** Take off the answers of the move the game takes back: the last one with a choice, and the lone answers after it. */
+    back() {
+        const off = [];
+        while (this.answers.length && this.answers.at(-1).n === 1) {
+            off.unshift(this.answers.pop());
+        }
+        if (this.answers.length) {
+            off.unshift(this.answers.pop());
+        }
+        this.undone = off;
+    }
+
+    /** The game took the move back (table.js), or could not: then the answers stand. */
+    rewound(ok) {
+        if (!ok && this.undone) {
+            this.answers.push(...this.undone);
+        }
+        this.undone = null;
     }
 
     hello(msg) {
@@ -87,10 +124,14 @@ class PersonSeat {
         if (this.conceded) {
             return { t: 'error', error: 'conceded' };
         }
-        if (msg.prompt?.actionWindow) {
-            this.ahead = null;
+        if (this.undoNext) {
+            this.undoNext = false;
+            if (msg.undo) {
+                this.back();
+                return { t: 'undo' };
+            }
         }
-        const shown = this.ahead ? withPreviews(msg, this.ahead.get(this.path.join(' '))) : msg;
+        const shown = this.shown(msg);
         return new Promise((resolve) => {
             this.pending = { msg, resolve, sim: msg.sim && typeof sim === 'function' ? sim : null };
             this.send(shown);
@@ -100,6 +141,19 @@ class PersonSeat {
     /** The person's answer to the open decision: null when taken, else why it was refused (the decision stays open). */
     answer(reply) {
         const p = this.pending;
+        if (reply?.t === 'undo') {
+            if (!p) {
+                this.undoNext = true;
+                return null;
+            }
+            if (!p.msg.undo) {
+                return 'there is no move to take back';
+            }
+            this.pending = null;
+            this.back();
+            p.resolve({ t: 'undo' });
+            return null;
+        }
         if (!p) {
             return 'nothing to answer now';
         }
@@ -119,14 +173,14 @@ class PersonSeat {
             out.split = reply.split.map((e) => ({ id: e.id, amount: e.amount }));
         }
         this.pending = null;
-        if (p.sim && p.msg.prompt?.actionWindow && a.kind === 'card') {
+        const given = { i: reply.i, n: p.msg.actions.length, window: !!p.msg.prompt?.actionWindow, tree: null };
+        this.answers.push(given);
+        if (p.sim && given.window && a.kind === 'card') {
             // the move's questions are played out on the copy first; the move goes once that is done, failed or not
             lookAhead(p.sim, reply.i).then((tree) => {
-                this.ahead = tree.size ? tree : null;
-                this.path = [];
-            }, () => (this.ahead = null)).finally(() => p.resolve(this.conceded ? { t: 'error', error: 'conceded' } : out));
+                given.tree = tree.size ? tree : null;
+            }, () => undefined).finally(() => p.resolve(this.conceded ? { t: 'error', error: 'conceded' } : out));
         } else {
-            this.path.push(reply.i);
             p.resolve(out);
         }
         return null;

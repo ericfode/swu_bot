@@ -138,7 +138,8 @@ function createOpenHost({ send, sendPeer = () => undefined, env = new Env(), dec
                     sendPeer(m);
                 }
             };
-            host.done = playSeats({ env, seats, screens, decks: { [seat]: mine, [other]: theirs }, seed, key, stop })
+            // against a bot the person may take back moves (table.js); two people may not
+            host.done = playSeats({ env, seats, screens, decks: { [seat]: mine, [other]: theirs }, seed, key, stop, undo: guest ? [] : [seat] })
                 .catch((e) => {
                     ended({ t: 'end', winner: null, outcome: 'ERROR', round: 0, steps: 0, error: String(e?.message ?? e).slice(0, 200), by: null, conceded: false, concededBy: null, replay: null });
                     return { result: null, replay: null };

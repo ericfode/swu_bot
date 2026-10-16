@@ -13,9 +13,15 @@ Holotable #/play  ──decide/act──▶  referee (forceteki)  ◀──decid
 - `person.js`: `PersonSeat`, the person's protocol client. No clock (the referee sends `ms: null`). A wrong answer (an
   old decision, an index out of range, a split that does not add up) is refused and the decision stays open, so a slip
   never loses the game; `concede()` ends it. Its `ready` asks for `noEffect` marks (spec/protocol.md), so the screen
-  greys a card whose move would change nothing.
+  greys a card whose move would change nothing, and for simulations, on which it works out the result previews.
+- `preview.js`: the result preview. After the person's card move at an action window, the seat plays the move's
+  questions out on the referee's copy of the game and puts on each answer what it would do: damage, units that leave
+  play and how, upgrades that go, a game won. A bot choice with more than one answer stops it (`more`).
 - `table.js`: `playTable` plays one game and also tells the screen every move from either seat (`move`, with the
   board from the person's seat; a card the person cannot see is "a hidden card") and the end (`end`, with the replay).
+  Against a bot the person may take back moves (spec/protocol.md#undo): the game is played again from the start
+  through the moves that stand (about 2 ms a move in Node), the screen gets `rewind` and the replay keeps only the
+  moves that stand. A game of two people has no undo.
 - `serve.js`: a table on one computer, for trying it out. People pick a bot and two of the tournament deck lists;
   every game is written in the replay format to `replays/table/`, so Holotable lists it as the tournament `table`.
 
@@ -27,8 +33,9 @@ node bot/table/serve.js --site ../holotable/dist \
 
 `--bots-file` takes holocron's program list (build the C bots first: `make -C bots/c` there); `serve.js` offers the
 JEPA bot too. Tests: `node --test bot/test/table.test.js` (split checks, refused answers, conceding, and whole games a
-scripted person plays, checking that the bot's hidden cards never reach the person's screen, one of them through
-`host.js` against the JEPA bot), `bot/test/swarm-engine.test.js` (the play worker plays the same game as Node, and
+scripted person plays, checking that the bot's hidden cards never reach the person's screen, that previews match what
+the game then does, and that games with moves taken back replay the same, one of them through `host.js` against the
+JEPA bot), `bot/test/swarm-engine.test.js` (the play worker plays the same game as Node, and
 an arena bundle plays a whole game in `bot/swarm/play-host.js`) and `bot/test/play.test.js` (the window's side).
 
 ## The hosted table: /play on the arena window
