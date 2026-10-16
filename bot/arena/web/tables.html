@@ -333,12 +333,15 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       g.over = true;
       playing = false;
       const links = g.links?.() ?? [];
-      // a while after the end, once what this tab still sends (the end and its replay, in parts) has gone
+      // a while after the end, once the guest says it has the end (a host) or what this tab still sends has gone
       setTimeout(async () => {
-        await Promise.race([Promise.all(links.map((l) => l?.idle?.())), new Promise((ok) => setTimeout(ok, 300000))]);
+        const sent = g.settled ? g.settled() : Promise.all(links.map((l) => l?.idle?.()));
+        await Promise.race([sent, new Promise((ok) => setTimeout(ok, 300000))]);
         for (const l of links) l?.close?.();
       }, 15000);
-      if (m.replay) {
+      if (g.cancelled) {
+        // a game cancelled while it was dealt: nothing to keep
+      } else if (m.replay) {
         g.replay = m.replay;
         g.url = URL.createObjectURL(new Blob([m.replay], { type: 'application/x-ndjson' }));
         save(m.replay, g.seat);
@@ -601,8 +604,17 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     const log = []; // every message for the guest, numbered from 1
     let lastAct = 0; // the guest numbers its actions and sends unanswered ones again on a new link
     let g = null;
+    let guestHas = 0; // the last message the guest said it has (resume, got)
+    let endAt = 0; // the end's number in the log
+    let gotEnd = null;
+    const received = new Promise((ok) => { gotEnd = ok; });
+    const heard = (n) => {
+      guestHas = Math.max(guestHas, n);
+      if (endAt && guestHas >= endAt) gotEnd();
+    };
     const toGuest = (m) => {
       log.push(m);
+      if (m.t === 'msg' && m.msg?.t === 'end') endAt = log.length;
       cur.game({ n: log.length, m });
     };
     let cur = link;
@@ -612,13 +624,16 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
         if (o.t === 'join' && !joined) {
           joined = o;
         } else if (o.t === 'join' || o.t === 'resume') {
-          if (o.t === 'join') lastAct = 0; // a new page numbers its actions from 1 again
+          if (o.t === 'join') { lastAct = 0; guestHas = 0; } // a new page numbers its actions from 1 again
+          else heard(o.have ?? 0);
           for (let i = (o.have ?? 0); i < log.length; i++) l.game({ n: i + 1, m: log[i] });
         } else if (o.t === 'act' && g && Number.isInteger(o.a) && o.a > lastAct) {
           lastAct = o.a;
           eng.peerAct(o.a, o.act);
         } else if (o.t === 'concede' && g) {
           eng.peerConcede();
+        } else if (o.t === 'got' && Number.isInteger(o.have)) {
+          heard(o.have);
         }
         joinedWait?.();
       };
@@ -648,6 +663,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     }
     g = newGame(st.id, st.seat, 'host');
     g.links = () => [cur];
+    g.settled = () => received;
     for (const m of early) deliver(g, m);
     g.act = (act) => eng.act(act);
     g.concede = () => eng.concede();
@@ -689,6 +705,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
             ok({ id: m.id, seat: m.seat, opponent: m.opponent || peerPid });
           } else if (m.t === 'msg' && g) {
             deliver(g, m.msg);
+            if (m.msg.t === 'end') cur.game({ t: 'got', have });
           } else if (m.t === 'acted') {
             const w = acts.get(m.a);
             acts.delete(m.a);
@@ -734,10 +751,12 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     let id = null;
     const starting = side === 'host' ? hostGame(c.link, peer, deck, (fn) => { move = fn; }) : guestGame(c.link, peer, deck, (fn) => { move = fn; });
     // the room stays as the way back: a direct link that drops goes on through the lobby, on both sides, from the start
+    // (after the end too on the host's side: the end and its replay may still be on their way to the guest)
     if (c.link !== c.room) {
       c.link.onDown = () => {
-        if (id && games.get(id)?.over) return;
-        status('The direct link dropped: going on through the lobby.', 'busy');
+        const over = id && games.get(id)?.over;
+        if (over && side === 'guest') return;
+        if (!over) status('The direct link dropped: going on through the lobby.', 'busy');
         c.room.onSignal = () => undefined;
         move(c.room);
       };
@@ -798,12 +817,18 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
           es.onerror = () => { if (es.readyState === EventSource.CLOSED) { clearTimeout(timer); no(new Error('the lobby closed the queue: try again')); } };
         });
         if (!paired) {
-          // nobody came: a bot game, with one this browser can run
-          const eng = await loadEngine();
+          // nobody came: a bot game, with one this browser can run; Cancel still stops it until the game has started
+          let stopped = false;
+          let stop;
+          const halted = new Promise((_, no) => { stop = no; });
+          halted.catch(() => undefined);
+          setCancel(() => { stopped = true; stop(new Error('cancelled')); });
+          const eng = await Promise.race([loadEngine(), halted]);
           const runnable = info.bots.filter((b) => b.name === JEPA || (eng.isolated && b.url));
           const bot = runnable[Math.floor(Math.random() * runnable.length)] ?? info.bots[0];
           onState({ text: `Nobody came: you play ${bot.title || bot.name}.` });
-          const g = await table.start(bot.name, req.deck, RANDOM);
+          const g = await startBot(bot.name, req.deck, RANDOM, () => !stopped);
+          setCancel(() => undefined);
           return { ...g, opponent: bot.name };
         }
         return lobbyGame({ room: paired.room, side: paired.side, k: paired.k, peer: paired.peer }, paired.side, req.deck, onState, setCancel);
@@ -886,6 +911,31 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
   window.addEventListener('hashchange', () => {
     if (/(?:^#|&)join=[A-Za-z0-9]{6}\b/.test(location.hash) && !playing) location.reload();
   });
+  /** A game against a bot in this tab; wanted() false before the game starts stops it (a cancelled lobby fallback). */
+  async function startBot(bot, deck, botDeck, wanted = () => true) {
+    const eng = await loadEngine();
+    await loadBot(eng, bot);
+    progress(null);
+    if (!wanted()) throw new Error('cancelled');
+    const early = [];
+    let g = null;
+    eng.handlers.msg = (m) => (g ? deliver(g, m) : early.push(m));
+    const st = await eng.start({ mode: 'bot', bot, deck: deckRef(deck), botDeck: deckRef(botDeck), you: info.you });
+    g = newGame(st.id, st.seat, 'bot');
+    g.act = (act) => eng.act(act);
+    g.concede = () => eng.concede();
+    for (const m of early) deliver(g, m);
+    if (!wanted()) {
+      // cancelled while the worker dealt: end it there (the table takes one game at a time), and keep nothing
+      g.cancelled = true;
+      eng.concede();
+      throw new Error('cancelled');
+    }
+    playing = true;
+    const b = info.bots.find((x) => x.name === bot);
+    status(`Playing ${b?.title || bot}. The game runs in this tab.`, 'good');
+    return { id: st.id, seat: st.seat };
+  }
   const table = {
     options: async () => ({
       bots: info.bots.map((b) => b.name),
@@ -913,23 +963,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       saveCustom();
       return optionOf(deck);
     },
-    start: async (bot, deck, botDeck) => {
-      const eng = await loadEngine();
-      await loadBot(eng, bot);
-      progress(null);
-      const early = [];
-      let g = null;
-      eng.handlers.msg = (m) => (g ? deliver(g, m) : early.push(m));
-      const st = await eng.start({ mode: 'bot', bot, deck: deckRef(deck), botDeck: deckRef(botDeck), you: info.you });
-      g = newGame(st.id, st.seat, 'bot');
-      g.act = (act) => eng.act(act);
-      g.concede = () => eng.concede();
-      for (const m of early) deliver(g, m);
-      playing = true;
-      const b = info.bots.find((x) => x.name === bot);
-      status(`Playing ${b?.title || bot}. The game runs in this tab.`, 'good');
-      return { id: st.id, seat: st.seat };
-    },
+    start: (bot, deck, botDeck) => startBot(bot, deck, botDeck),
     act: (id, act) => games.get(id)?.act(act) ?? Promise.reject(new Error('no such game')),
     concede: (id) => {
       games.get(id)?.concede();
