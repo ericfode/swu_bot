@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SWU Open Tables</title>
+<title>SWU Arena Play</title>
 <style>
 /* The open tables (bot/arena/tables.js): a bar over Holotable's play screen (SWUViewer.mountPlay). Every game runs in
    a player's tab (tables-worker.js): a bot game here, a people game in the host's tab, with the guest's tab linked to
@@ -50,15 +50,12 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
 .game .head.lost { color: var(--p2); }
 .game .meta { grid-column: 1; font: 500 12px/1.4 var(--mono); color: var(--dim); overflow-wrap: anywhere; }
 .game button { grid-row: 1 / span 2; grid-column: 2; }
-.wait { max-width: 560px; margin: 12vh auto 0; padding: 0 16px; display: grid; gap: 10px; }
-.wait h1 { margin: 0; font: 650 26px/1.2 var(--display); }
-.wait p { margin: 0; color: var(--dim); }
 </style>
 </head>
 <body>
 <div class="bar">
-  <a class="brand" href="/tables">SWU Arena</a>
-  <span class="title">Open tables</span>
+  <a class="brand" href="/">SWU Arena</a>
+  <span class="title">Play</span>
   <span data-feedback-slot=""></span>
   <span class="grow"></span>
   <span class="status" id="status" data-tone="busy" role="status" aria-live="polite"><i></i><span>Loading…</span></span>
@@ -67,7 +64,6 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
   <a class="btn" href="/tables/logs">Logs</a>
   <span class="who" id="who"></span>
 </div>
-<div id="wait" class="wait" hidden><h1>Getting the tables ready</h1><p id="wait-text"></p></div>
 <div id="table"></div>
 <div id="viewer-wrap" hidden>
   <div><button id="back" type="button">Back to the table</button></div>
@@ -91,7 +87,8 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     const m = /^([A-Z0-9]{2,6})_(\d{3})$/.exec(code);
     return m ? `/art/${m[1]}/${m[2]}${back ? '-b' : ''}.png` : null;
   });
-  const JEPA = 'jepa-tx-gate';
+  // the note under the bot screen for a person who may play only the bots (the old /play page's)
+  const BOTS_NOTE = 'You play with the real rules engine, which runs in this browser tab and downloads while you choose. The bot sees only what its seat sees: your hand and both decks stay hidden from it.';
   const RANDOM = 'random';
   const CUSTOM_KEY = 'swu-tables-decks';
   const SESSION_KEY = 'swu-tables-link';
@@ -207,139 +204,400 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
   /** What a game takes for a deck name: a list's name, or the deck itself for one people added. */
   const deckRef = (name) => (!name || name === RANDOM ? name : custom.find((d) => d.metadata.name === name) ?? name);
 
-  // ---------------------------------------------------------------- the engine: tables-worker.js, loaded when first needed
-  let engine = null;
-  async function fetchBytes(url, label, size = null) {
-    const r = await fetch(url);
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      throw new Error(j.error?.message || `${label}: HTTP ${r.status}`);
+  // ---------------------------------------------------------------- downloads (the old /play page's): each file once,
+  // shared by whatever needs it. The engine starts as soon as the page has its file list, since every game needs it; a
+  // bot's own files come while the versus screen shows that bot (table.prepare) or a game against it starts, and stop
+  // when nobody wants them, so looking through the bots does not fetch them all.
+  const size = (n) => (n == null ? '?' : n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(n < 104857600 ? 1 : 0)} MB`);
+  const sleep = (ms, signal) => new Promise((ok, no) => {
+    const t = setTimeout(ok, ms);
+    signal?.addEventListener('abort', () => { clearTimeout(t); no(new DOMException('cancelled', 'AbortError')); }, { once: true });
+  });
+  const tab = {
+    worker: null, // the tables worker, made once the engine is here
+    up: false, // the worker said ready
+    fetched: new Set(), // URLs downloaded in this tab
+    bytes: new Map(), // URL -> bytes downloaded and not yet given to the worker
+    sent: new Set() // what the worker has: 'jepa' (its models), a bundle's sha256, 'python'
+  };
+  /** A downloaded file's bytes, handed over: a failed hand-over downloads it again. */
+  const take = (url) => {
+    const b = tab.bytes.get(url);
+    tab.bytes.delete(url);
+    tab.fetched.delete(url);
+    return b;
+  };
+
+  // ---- the opponents
+  const titleOf = (bot) => bot.title || bot.name;
+  const byName = (name) => info.bots.find((b) => b.name === name) ?? null;
+  // an interpreter an arena bot needs (null: none, or this arena does not have it)
+  const runtimeOf = (bot) => (bot.kind === 'arena' && bot.runtime && bot.runtime !== 'wasi-p1' ? info.runtimes?.[bot.runtime] ?? null : null);
+  function unavailable(bot) {
+    if (bot.kind !== 'arena') return null;
+    if (!window.crossOriginIsolated) return 'This browser cannot run arena bots on this page. Recent Chrome, Edge, Firefox and Safari can.';
+    if (bot.runtime !== 'wasi-p1' && !runtimeOf(bot)) return `It needs the ${bot.runtime} runtime, which this arena does not have yet.`;
+    return null;
+  }
+  // the line under a bot's name on the versus screen
+  function noteOf(bot) {
+    if (bot.kind === 'jepa') return bot.about || null;
+    const parts = [info.round != null ? `round ${info.round}` : null, bot.runtime === 'wasi-p1' ? 'WebAssembly' : bot.runtime ? 'Python' : null, bot.capMs ? `${Math.round(bot.capMs / 1000)} s a game` : null];
+    return parts.filter(Boolean).join(' · ') || null;
+  }
+  const ENGINE_ONLY = { kind: 'engine' };
+  /**
+   * What a game against this bot needs that the worker does not have yet: [{group, url, bytes, wire, keep}], downloaded
+   * in this tab or not. bytes: the file as the page reads it (unzipped); wire: about what it downloads (gzipped); keep:
+   * the bytes go to the worker. The engine's files leave the list once the worker is made.
+   */
+  function filesOf(bot) {
+    const out = [];
+    if (!info.ready) return out; // the games machine is waking up: the file list comes with it
+    const add = (group, f, keep) => {
+      if (f && !out.some((x) => x.url === f.url)) out.push({ group, url: f.url, bytes: f.bytes ?? null, wire: f.wire ?? f.bytes ?? null, keep });
+    };
+    if (!tab.worker) {
+      add('Rules engine', info.files.pack, true);
+      add('Rules engine', info.files.worker, false);
     }
-    const total = size || Number(r.headers.get('content-length')) || 0;
-    if (!r.body || !total) {
-      return new Uint8Array(await r.arrayBuffer());
+    if (bot.kind === 'jepa' && !tab.sent.has('jepa')) {
+      for (const f of bot.files ?? []) add(`${titleOf(bot)}: its models`, f, true);
     }
-    const reader = r.body.getReader();
-    const parts = [];
-    let got = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      parts.push(value);
-      got += value.length;
-      // with gzip the length header is the compressed size: the bar fills to the end and waits there
-      progress(Math.min(0.98, got / total));
-      status(`Downloading ${label}: ${mb(got)}`, 'busy');
+    if (bot.kind === 'arena') {
+      add('Bot runner', info.files.botWorker, false);
+      if (!tab.sent.has(bot.bundle.hex)) add(titleOf(bot), bot.bundle, true);
+      const rt = runtimeOf(bot);
+      if (rt && !tab.sent.has('python')) {
+        add('Python for bots', rt.lib, true);
+        add('Python for bots', rt.wasm, true);
+      }
     }
-    const out = new Uint8Array(got);
-    let at = 0;
-    for (const p of parts) { out.set(p, at); at += p.length; }
     return out;
   }
-  function loadEngine() {
-    engine ??= (async () => {
-      const t0 = performance.now();
-      const pack = await fetchBytes(info.files.pack, 'the rules engine');
-      progress(null);
-      status('Starting the rules engine…', 'busy');
-      const worker = new Worker(info.files.worker);
-      const waits = { ready: null, started: null, deck: new Map(), bot: new Map(), acted: [] };
-      const handlers = { msg: () => undefined, peer: () => undefined, peerActed: () => undefined };
-      const ready = new Promise((ok, no) => { waits.ready = { ok, no }; });
-      worker.onmessage = (e) => {
-        const m = e.data;
-        if (m.t === 'ready') {
-          if (m.cardText) SWUViewer.loadCardText(m.cardText);
-          waits.ready.ok(m);
-        } else if (m.t === 'started' || m.t === 'refused') {
-          const w = waits.started;
-          waits.started = null;
-          if (m.t === 'started' && m.cardText) SWUViewer.loadCardText(m.cardText);
-          if (w) m.t === 'started' ? w.ok(m) : w.no(new Error(m.error));
-        } else if (m.t === 'botReady') {
-          const w = waits.bot.get(m.name);
-          waits.bot.delete(m.name);
-          if (w) m.error ? w.no(new Error(m.error)) : w.ok();
-        } else if (m.t === 'deckChecked') {
-          const w = waits.deck.get(m.n);
-          waits.deck.delete(m.n);
-          if (w) m.error ? w.no(new Error(m.error)) : w.ok(m.deck);
-        } else if (m.t === 'acted') {
-          const a = waits.acted.shift();
-          if (a) m.error ? a.no(new Error(m.error)) : a.ok({ ok: true });
-        } else if (m.t === 'msg') {
-          handlers.msg(m.msg);
-        } else if (m.t === 'peer') {
-          handlers.peer(m.msg);
-        } else if (m.t === 'peerActed') {
-          handlers.peerActed(m);
-        } else if (m.t === 'error') {
-          console.error('[tables]', m.message);
-          waits.ready.no(new Error(String(m.message).split('\n')[0]));
-          handlers.msg({ t: 'fatal', error: String(m.message).split('\n')[0] });
-        }
-      };
-      worker.onerror = (e) => waits.ready.no(new Error(e.message || 'the game worker did not start'));
-      worker.postMessage({ t: 'init', packBytes: pack, botWorker: info.files.botWorker, pythonLib: info.files.pythonLib, pythonWasm: info.files.pythonWasm }, [pack.buffer]);
-      const r = await ready;
-      status(`Rules engine ready (${Math.round((performance.now() - t0) / 1000)} s).`, 'good');
+  // the files every game shares: they keep downloading whoever stops looking
+  const shared = (url) => !!info.files && [info.files.pack, info.files.worker, info.files.botWorker].some((f) => f.url === url);
+  const sum = (items) => items.reduce((a, x) => a + (x.wire ?? x.bytes ?? 0), 0);
+
+  const loads = new Map(); // url -> {it, got, raw, wire, waiting, error, ctl, want, promise}
+  const watchers = new Set(); // functions that report progress (prepare, and the bar while the engine comes)
+  let pinged = false;
+  function ping() {
+    if (pinged) return;
+    pinged = true;
+    setTimeout(() => {
+      pinged = false;
+      for (const w of watchers) w();
+    }, 150);
+  }
+  /** Starts a file's download, or joins the one under way; {promise} settles when the tab has it. */
+  function load(it) {
+    if (tab.fetched.has(it.url)) return { promise: Promise.resolve() };
+    const had = loads.get(it.url);
+    if (had && !had.error) return had;
+    const l = { it, got: 0, raw: it.bytes, wire: it.wire, waiting: false, error: null, ctl: new AbortController(), want: had?.want ?? 0, promise: null };
+    loads.set(it.url, l);
+    l.promise = download(l).then(() => {
+      loads.delete(it.url);
+      ping();
+    }, (e) => {
+      if (l.ctl.signal.aborted) {
+        if (loads.get(it.url) === l) loads.delete(it.url);
+      } else {
+        l.error = String(e?.message || e);
+        console.error('[tables]', l.error);
+      }
+      ping();
+      throw e;
+    });
+    l.promise.catch(() => undefined);
+    return l;
+  }
+  /** Keeps a bot's own files downloading while someone wants them: the returned function lets go. */
+  function want(bot) {
+    const urls = filesOf(bot).filter((it) => !shared(it.url)).map((it) => it.url);
+    for (const it of filesOf(bot)) {
+      const l = load(it);
+      if (!shared(it.url) && l.ctl) l.want++;
+    }
+    return () => {
+      for (const u of urls) {
+        const l = loads.get(u);
+        if (l && --l.want <= 0 && !l.error) l.ctl.abort();
+      }
+    };
+  }
+  /** Downloads one file, counting its bytes as they come (unzipped: x-raw-length is the total). */
+  async function download(l) {
+    const it = l.it;
+    const signal = l.ctl.signal;
+    for (let tries = 0; ; tries++) {
+      const r = await fetch(it.url, { signal });
+      if (r.status === 503 && tries < 18) {
+        // a bundle the window has not kept yet comes from the games machine, which may be asleep
+        l.waiting = true;
+        ping();
+        await sleep(10000, signal);
+        continue;
+      }
+      if (!r.ok) {
+        const j = await r.json().catch(() => null);
+        throw new Error(`${it.group}: ${j?.error?.message || `HTTP ${r.status}`}`);
+      }
+      l.waiting = false;
+      // x-raw-length: the file unzipped, what the body gives; content-length: what comes down the line
+      const raw = Number(r.headers.get('x-raw-length'));
+      if (raw > 0) {
+        l.raw = raw;
+        l.wire = Number(r.headers.get('content-length')) || l.wire;
+      }
+      const chunks = [];
       let n = 0;
-      return {
-        worker, handlers, isolated: r.isolated,
-        // files: [[path, bytes]] for the worker's disk (the JEPA bot's models, with the first game against it)
-        start: (game, files) => new Promise((ok, no) => {
-          if (waits.started) return no(new Error('a game is starting'));
-          waits.started = { ok, no };
-          worker.postMessage({ t: 'start', game, ...(files ? { files } : {}) });
-        }),
-        bot: (name, hex, tar, capMs) => new Promise((ok, no) => {
-          waits.bot.set(name, { ok, no });
-          worker.postMessage({ t: 'bot', name, hex, tar, capMs }, [tar.buffer]);
-        }),
-        checkDeck: (deck) => new Promise((ok, no) => {
-          const k = ++n;
-          waits.deck.set(k, { ok, no });
-          worker.postMessage({ t: 'checkDeck', n: k, deck });
-        }),
-        act: (act) => new Promise((ok, no) => {
-          waits.acted.push({ ok, no });
-          worker.postMessage({ t: 'act', act });
-        }),
-        peerAct: (n2, act) => worker.postMessage({ t: 'peerAct', n: n2, act }),
-        concede: () => worker.postMessage({ t: 'concede' }),
-        peerConcede: () => worker.postMessage({ t: 'peerConcede' })
-      };
-    })();
-    engine.catch(() => { engine = null; });
-    return engine;
+      if (r.body?.getReader) {
+        const reader = r.body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          n += value.length;
+          l.got = n;
+          ping();
+        }
+      } else {
+        const b = new Uint8Array(await r.arrayBuffer());
+        chunks.push(b);
+        n = b.length;
+        l.got = n;
+      }
+      if (raw > 0 && n !== raw) throw new Error(`${it.group}: the download was cut off (${size(n)} of ${size(raw)})`);
+      if (it.keep) {
+        const out = new Uint8Array(n);
+        let o = 0;
+        for (const c of chunks) {
+          out.set(c, o);
+          o += c.length;
+        }
+        tab.bytes.set(it.url, out);
+      }
+      tab.fetched.add(it.url);
+      return;
+    }
+  }
+  /** Where a bot's files are, as Holotable's Prep: all here and the engine started, or what is left of the total. */
+  function prepOf(bot) {
+    if (!info.ready) return { ready: false, left: null, total: null, waiting: true, note: wakeNote(), error: engineError };
+    let total = 0;
+    let got = 0;
+    let known = true;
+    let waiting = false;
+    let error = null;
+    for (const it of filesOf(bot)) {
+      const l = loads.get(it.url);
+      const wire = l?.wire ?? it.wire;
+      if (wire == null) {
+        known = false;
+        continue;
+      }
+      const raw = l?.raw ?? it.bytes;
+      total += wire;
+      got += tab.fetched.has(it.url) ? wire : l && raw ? wire * Math.min(1, l.got / raw) : 0;
+      waiting = waiting || !!l?.waiting;
+      error = error || l?.error || null;
+    }
+    const ready = tab.up && filesOf(bot).every((it) => tab.fetched.has(it.url));
+    return { ready, left: known ? Math.max(0, Math.round(total - got)) : null, total: known ? Math.round(total) : null, waiting, error: error || engineError };
   }
 
-  // the JEPA bot's models: downloaded once per visit, the first time someone plays it, and sent with that game
-  let jepaSent = false;
-  let jepaFiles = null;
-  async function loadJepa() {
-    if (jepaSent) return null;
-    jepaFiles ??= (async () => {
-      const out = [];
-      for (const f of info.files.models ?? []) out.push([f.path, await fetchBytes(f.url, "Eric's JEPA bot's models", f.bytes)]);
-      progress(null);
-      return out;
-    })();
-    jepaFiles.catch(() => { jepaFiles = null; });
-    return jepaFiles;
+  // ---- the game files come from the games machine. The window keeps the last build's on its disk, so they load while
+  // the machine sleeps; after a new build (or a lost disk) the screen opens anyway and waits for the machine to wake up,
+  // saying how long (Holotable's loading bar under Play)
+  let waking = null;
+  let wokeAt = null;
+  let pressed = 0; // games asked for that still wait for files: the screen that owns them stays mounted
+  let pairing = 0; // pairings open (Table.pair): their panel stays mounted too
+  let mounted = null;
+  const clock = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+  function wakeNote() {
+    if (wokeAt === null) return 'Waking the games machine';
+    const ms = Date.now() - wokeAt;
+    return `Waking the games machine · ${clock(ms)} ${ms < 90000 ? 'of ~1:00' : '(slow today)'}`;
   }
-  // arena bots: the bundle, downloaded once per visit, unpacked in the worker
-  const botsLoaded = new Set();
-  async function loadBot(eng, name) {
-    if (name === JEPA || botsLoaded.has(name)) return;
-    const b = info.bots.find((x) => x.name === name);
-    if (!b?.url) throw new Error(`no bot ${name} here`);
-    if (!eng.isolated) throw new Error('this browser cannot run arena bots here (try Chrome, Edge or Firefox); Eric\'s JEPA bot works everywhere');
-    const tar = await fetchBytes(b.url, b.title || name, b.bytes);
+  /** Settles once the window has the game files (info.ready), with the bots' files listed again; polls meanwhile. */
+  function filesReady() {
+    if (info.ready) return Promise.resolve();
+    if (!waking) {
+      wokeAt = Date.now();
+      const tick = setInterval(ping, 1000);
+      status(`Waking the games machine. Pick ${info.people.length ? 'a way to play, ' : ''}your opponent and your deck meanwhile.`, 'busy');
+      waking = (async () => {
+        try {
+          for (let tries = 0; ; tries++) {
+            await sleep(4000);
+            const next = await api('GET', '/api/tables/info').catch(() => null);
+            if (next?.ready) {
+              const had = info.bots.map((b) => b.name).join();
+              info = next;
+              // the JEPA bot's models are files of the build, so it is listed only now: the screen shows it
+              if (info.bots.map((b) => b.name).join() !== had && mounted && !playing && !pressed && !pairing) {
+                mounted.destroy();
+                mounted = SWUViewer.mountPlay($('table'), { table });
+              }
+              return;
+            }
+            if (tries >= 75) throw new Error('The games machine did not wake up. Try again in a few minutes.');
+          }
+        } finally {
+          clearInterval(tick);
+          wokeAt = null;
+          ping();
+        }
+      })();
+      waking.catch((e) => {
+        waking = null;
+        engineError = String(e?.message || e);
+        status(engineError, 'bad');
+        ping();
+      });
+    }
+    return waking;
+  }
+
+  // ---------------------------------------------------------------- the engine: tables-worker.js, started once its
+  // files are here; the bar shows it coming
+  let engine = null;
+  let engineError = null;
+  function engineBar() {
+    if (tab.worker || engineError || playing) {
+      progress(null);
+      watchers.delete(engineBar);
+      return;
+    }
+    const p = prepOf(ENGINE_ONLY);
+    if (p.total) {
+      progress((p.total - p.left) / p.total);
+      status(`Downloading the rules engine: ${size(p.total - p.left)} of ${size(p.total)}`, 'busy');
+    }
+  }
+  function loadEngine() {
+    if (!engine) {
+      engineError = null;
+      watchers.add(engineBar);
+      engine = (async () => {
+        await filesReady();
+        const t0 = performance.now();
+        await Promise.all(filesOf(ENGINE_ONLY).map((it) => load(it).promise));
+        return startEngine(t0);
+      })();
+      engine.catch((e) => {
+        engine = null;
+        engineError = String(e?.message || e);
+        progress(null);
+        ping();
+      });
+    }
+    return engine;
+  }
+  async function startEngine(t0) {
     progress(null);
-    status(b.runtime === 'python' ? `Starting ${b.title || name} (the Python runtime downloads once, about 30 MB)…` : `Starting ${b.title || name}…`, 'busy');
-    await eng.bot(name, b.bundle, tar, b.capMs);
-    botsLoaded.add(name);
+    status('Starting the rules engine…', 'busy');
+    const pack = take(info.files.pack.url);
+    const worker = new Worker(info.files.worker.url);
+    tab.worker = worker;
+    const waits = { ready: null, started: null, deck: new Map(), bot: new Map(), acted: [] };
+    const handlers = { msg: () => undefined, peer: () => undefined, peerActed: () => undefined };
+    const ready = new Promise((ok, no) => { waits.ready = { ok, no }; });
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.t === 'ready') {
+        if (m.cardText) SWUViewer.loadCardText(m.cardText);
+        waits.ready.ok(m);
+      } else if (m.t === 'started' || m.t === 'refused') {
+        const w = waits.started;
+        waits.started = null;
+        if (m.t === 'started' && m.cardText) SWUViewer.loadCardText(m.cardText);
+        if (w) m.t === 'started' ? w.ok(m) : w.no(new Error(m.error));
+      } else if (m.t === 'botReady') {
+        const w = waits.bot.get(m.name);
+        waits.bot.delete(m.name);
+        if (w) m.error ? w.no(new Error(m.error)) : w.ok();
+      } else if (m.t === 'deckChecked') {
+        const w = waits.deck.get(m.n);
+        waits.deck.delete(m.n);
+        if (w) m.error ? w.no(new Error(m.error)) : w.ok(m.deck);
+      } else if (m.t === 'acted') {
+        const a = waits.acted.shift();
+        if (a) m.error ? a.no(new Error(m.error)) : a.ok({ ok: true });
+      } else if (m.t === 'msg') {
+        handlers.msg(m.msg);
+      } else if (m.t === 'peer') {
+        handlers.peer(m.msg);
+      } else if (m.t === 'peerActed') {
+        handlers.peerActed(m);
+      } else if (m.t === 'error') {
+        console.error('[tables]', m.message);
+        waits.ready.no(new Error(String(m.message).split('\n')[0]));
+        handlers.msg({ t: 'fatal', error: String(m.message).split('\n')[0] });
+      }
+    };
+    worker.onerror = (e) => waits.ready.no(new Error(e.message || 'the game worker did not start'));
+    // Python comes with the first Python bot (eng.bot); the URLs are the worker's own way to fetch it
+    const py = info.runtimes ? Object.values(info.runtimes)[0] : null;
+    worker.postMessage({ t: 'init', packBytes: pack, botWorker: info.files.botWorker.url, pythonLib: py?.lib.url, pythonWasm: py?.wasm.url }, [pack.buffer]);
+    let r;
+    try {
+      r = await ready;
+    } catch (e) {
+      // a failed start leaves nothing behind: the next try downloads the engine and starts a new worker
+      worker.terminate();
+      tab.worker = null;
+      throw e;
+    }
+    tab.up = true;
+    ping();
+    status(`Rules engine ready (${Math.round((performance.now() - t0) / 1000)} s).`, 'good');
+    let n = 0;
+    return {
+      worker, handlers, isolated: r.isolated,
+      // files: [[path, bytes]] for the worker's disk (the JEPA bot's models, with the first game against it)
+      start: (game, files) => new Promise((ok, no) => {
+        if (waits.started) return no(new Error('a game is starting'));
+        waits.started = { ok, no };
+        worker.postMessage({ t: 'start', game, ...(files ? { files } : {}) });
+      }),
+      // an arena version's bundle, and Python's files with the first Python bot (all handed over to the worker)
+      bot: (name, hex, tar, capMs, python) => new Promise((ok, no) => {
+        waits.bot.set(name, { ok, no });
+        worker.postMessage({ t: 'bot', name, hex, tar, capMs, ...(python ? { python } : {}) }, [tar.buffer, ...(python ? [python.lib.buffer, python.wasm.buffer] : [])]);
+      }),
+      checkDeck: (deck) => new Promise((ok, no) => {
+        const k = ++n;
+        waits.deck.set(k, { ok, no });
+        worker.postMessage({ t: 'checkDeck', n: k, deck });
+      }),
+      act: (act) => new Promise((ok, no) => {
+        waits.acted.push({ ok, no });
+        worker.postMessage({ t: 'act', act });
+      }),
+      peerAct: (n2, act) => worker.postMessage({ t: 'peerAct', n: n2, act }),
+      concede: () => worker.postMessage({ t: 'concede' }),
+      peerConcede: () => worker.postMessage({ t: 'peerConcede' })
+    };
+  }
+
+  /**
+   * Gives the worker what a game against this bot needs that it does not have yet: an arena version's bundle (and
+   * Python, with the first Python bot). Returns the JEPA bot's models for the start message, or null.
+   */
+  async function readyBot(eng, bot) {
+    if (bot.kind === 'arena' && !tab.sent.has(bot.bundle.hex)) {
+      if (!eng.isolated) throw new Error(unavailable(bot) || 'this browser cannot run arena bots here');
+      const rt = runtimeOf(bot);
+      const python = rt && !tab.sent.has('python') ? { lib: take(rt.lib.url), wasm: take(rt.wasm.url) } : null;
+      await eng.bot(bot.name, bot.bundle.hex, take(bot.bundle.url), bot.capMs, python);
+      tab.sent.add(bot.bundle.hex);
+      if (python) tab.sent.add('python');
+    }
+    return bot.kind === 'jepa' && !tab.sent.has('jepa') ? (bot.files ?? []).map((f) => [f.path, tab.bytes.get(f.url)]) : null;
   }
 
   // ---------------------------------------------------------------- games this page follows (Holotable's Table.follow)
@@ -926,8 +1184,8 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
           const halted = new Promise((_, no) => { stop = no; });
           halted.catch(() => undefined);
           setCancel(() => { stopped = true; stop(new Error('cancelled')); });
-          const eng = await Promise.race([loadEngine(), halted]);
-          const runnable = info.bots.filter((b) => b.name === JEPA || (eng.isolated && b.url));
+          await Promise.race([loadEngine(), halted]);
+          const runnable = info.bots.filter((b) => !unavailable(b));
           const bot = runnable[Math.floor(Math.random() * runnable.length)] ?? info.bots[0];
           onState({ text: `Nobody came: you play ${bot.title || bot.name}.` });
           const g = await startBot(bot.name, req.deck, RANDOM, () => !stopped);
@@ -939,7 +1197,8 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       if (req.how === 'direct') return directHost(req.deck, onState, (fn) => { answerFn = fn; }, setCancel);
       throw new Error(`no way to pair: ${req.how}`);
     })();
-    done.catch(() => undefined);
+    pairing++;
+    done.finally(() => { pairing--; }).catch(() => undefined);
     return {
       done,
       cancel: () => { cancelled = true; cancel(); },
@@ -1030,39 +1289,65 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     if (/(?:^#|&)join=[A-Za-z0-9]{6}\b/.test(location.hash) && !playing) location.reload();
   });
   /** A game against a bot in this tab; wanted() false before the game starts stops it (a cancelled lobby fallback). */
-  async function startBot(bot, deck, botDeck, wanted = () => true) {
-    const eng = await loadEngine();
-    await loadBot(eng, bot);
-    const files = bot === JEPA ? await loadJepa() : null;
-    progress(null);
-    if (!wanted()) throw new Error('cancelled');
-    const early = [];
-    let g = null;
-    eng.handlers.msg = (m) => (g ? deliver(g, m) : early.push(m));
-    const st = await eng.start({ mode: 'bot', bot, deck: deckRef(deck), botDeck: deckRef(botDeck), you: info.you }, files ?? undefined);
-    // the worker keeps the models once a game has started with them (about 2 MB, copied to it)
-    if (files) { jepaSent = true; jepaFiles = null; }
-    g = newGame(st.id, st.seat, 'bot');
-    g.act = (act) => eng.act(act);
-    g.concede = () => eng.concede();
-    for (const m of early) deliver(g, m);
-    if (!wanted()) {
-      // cancelled while the worker dealt: end it there (the table takes one game at a time), and keep nothing
-      g.cancelled = true;
-      eng.concede();
-      throw new Error('cancelled');
+  async function startBot(name, deck, botDeck, wanted = () => true) {
+    let bot = byName(name);
+    const why = bot ? unavailable(bot) : `no bot named ${name}`;
+    if (why) throw new Error(why);
+    let release = () => undefined;
+    pressed++;
+    try {
+      status(`Getting ${titleOf(bot)} ready…`, 'busy');
+      await filesReady();
+      if (!wanted()) throw new Error('cancelled');
+      bot = byName(name) ?? bot;
+      // its files keep coming while it starts, whatever the screen stops looking at
+      release = want(bot);
+      const eng = await loadEngine();
+      await Promise.all(filesOf(bot).map((it) => load(it).promise));
+      if (!wanted()) throw new Error('cancelled');
+      const files = await readyBot(eng, bot);
+      if (!wanted()) throw new Error('cancelled');
+      const early = [];
+      let g = null;
+      eng.handlers.msg = (m) => (g ? deliver(g, m) : early.push(m));
+      const st = await eng.start({ mode: 'bot', bot: bot.name, deck: deckRef(deck), botDeck: deckRef(botDeck), you: info.you }, files ?? undefined);
+      // the worker keeps the models once a game has started with them: this tab lets go of its copy
+      if (files) {
+        tab.sent.add('jepa');
+        for (const f of bot.files) tab.bytes.delete(f.url);
+      }
+      g = newGame(st.id, st.seat, 'bot');
+      g.act = (act) => eng.act(act);
+      g.concede = () => eng.concede();
+      for (const m of early) deliver(g, m);
+      if (!wanted()) {
+        // cancelled while the worker dealt: end it there (the table takes one game at a time), and keep nothing
+        g.cancelled = true;
+        eng.concede();
+        throw new Error('cancelled');
+      }
+      playing = true;
+      progress(null);
+      status(`Playing ${titleOf(bot)}. The game runs in this tab.`, 'good');
+      return { id: st.id, seat: st.seat };
+    } catch (e) {
+      if (String(e?.message) !== 'cancelled') status(`${titleOf(bot)} did not start: ${String(e?.message || e)}`, 'bad');
+      throw e;
+    } finally {
+      pressed--;
+      release();
     }
-    playing = true;
-    const b = info.bots.find((x) => x.name === bot);
-    status(`Playing ${b?.title || bot}. The game runs in this tab.`, 'good');
-    return { id: st.id, seat: st.seat };
   }
   const table = {
     options: async () => ({
       bots: info.bots.map((b) => b.name),
-      botInfo: Object.fromEntries(info.bots.map((b) => [b.name, { title: b.title, owner: b.owner, elo: b.elo, bytes: b.bytes, note: b.runtime === 'python' ? 'Python: the first game downloads its runtime' : b.note ?? null }])),
+      botInfo: Object.fromEntries(info.bots.map((b) => [b.name, {
+        title: titleOf(b), owner: b.owner, elo: b.elo, note: noteOf(b), bytes: sum(filesOf(b).filter((x) => !shared(x.url))) || null, unavailable: unavailable(b), featured: b.kind === 'jepa'
+      }])),
       decks: [...info.decks, ...custom.map(optionOf)],
       botDeck: RANDOM,
+      // /tables?bot=<name> (and the old /play?bot=<name>) opens on that opponent
+      bot: (() => { const w = new URLSearchParams(location.search).get('bot'); return w && byName(w) ? w : null; })(),
       people: info.people,
       importDeck: true,
       you: info.you,
@@ -1084,6 +1369,30 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       saveCustom();
       return optionOf(deck);
     },
+    prepare(name, onPrep) {
+      const bot = byName(name);
+      if (!bot || unavailable(bot)) {
+        onPrep({ ready: false, left: null, total: null });
+        return () => undefined;
+      }
+      loadEngine().catch(() => undefined);
+      let stopped = false;
+      // the bot's own files once the page knows them (after the games machine woke up, when it was asleep)
+      let release = info.ready ? want(bot) : null;
+      if (!release) {
+        filesReady().then(() => {
+          if (!stopped && byName(name)) release = want(byName(name));
+        }, () => undefined);
+      }
+      const tell = () => onPrep(prepOf(byName(name) ?? bot));
+      watchers.add(tell);
+      tell();
+      return () => {
+        stopped = true;
+        watchers.delete(tell);
+        release?.();
+      };
+    },
     start: (bot, deck, botDeck) => startBot(bot, deck, botDeck),
     act: (id, act) => games.get(id)?.act(act) ?? Promise.reject(new Error('no such game')),
     concede: (id) => {
@@ -1104,7 +1413,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     replayUrl: (id) => games.get(id)?.url ?? null,
     watch: (id) => (games.get(id)?.replay ? () => { backTo = 'table'; watch(games.get(id).replay); } : null),
     pair,
-    note: 'Play anyone: a friend, whoever is in the lobby, or any arena bot. The real rules engine runs in a player\'s browser.',
+    note: 'Play anyone: a friend, whoever is in the lobby, or any arena bot. The real rules engine runs in a player\'s browser and downloads while you choose.',
     missing: 'Reload the page to try again.'
   };
 
@@ -1114,34 +1423,29 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       status('The page did not load completely. Reload it.', 'bad');
       return;
     }
-    for (let tries = 0; ; tries++) {
-      try {
-        info = await api('GET', '/api/tables/info');
-      } catch (e) {
-        status(`The arena did not answer: ${e.message}`, 'bad');
-        return;
-      }
-      $('who').textContent = `@${info.login} · ${info.you}`;
-      if (info.ready) break;
-      $('wait').hidden = false;
-      $('table').hidden = true;
-      $('wait-text').textContent = info.why || 'The game files are not here yet.';
-      status('Waiting for the game files…', 'busy');
-      if (tries >= 30) {
-        status('The game files did not come. Try again later.', 'bad');
-        return;
-      }
-      await new Promise((ok) => setTimeout(ok, 10000));
+    try {
+      info = await api('GET', '/api/tables/info');
+    } catch (e) {
+      status(`The arena did not answer: ${e.message}`, 'bad');
+      return;
     }
-    $('wait').hidden = true;
+    $('who').textContent = `@${info.login} · ${info.you}`;
+    if (!info.ready && !info.waking) {
+      // a window that cannot serve the game files at all (no helper token) says why
+      status(info.why || 'The game files are not here.', 'bad');
+      return;
+    }
     show('table');
-    if (!window.crossOriginIsolated) {
-      // without isolation only the JEPA bot (in the worker itself) can play; arena bots need a SharedArrayBuffer
-      info.bots = info.bots.filter((b) => b.name === JEPA);
-    }
-    const arena = info.bots.length - 1;
-    status(`Ready: ${info.decks.length} deck lists, ${arena ? `${arena} arena bots and ` : ''}Eric's JEPA bot.`, 'good');
-    SWUViewer.mountPlay($('table'), { table });
+    // a person who may play only the bots gets the bot screen alone (info.people is empty)
+    if (!info.people.length) table.note = BOTS_NOTE;
+    const joining = !!joinCode;
+    mounted = SWUViewer.mountPlay($('table'), { table });
+    if (info.ready) status(info.people.length ? 'Pick a way to play, an opponent and your deck.' : 'Pick your opponent and your deck.', 'idle');
+    // a game needs the engine (a guest's does not: it draws the host's game), so it downloads while the person chooses
+    if (joining) return;
+    loadEngine().then(() => {
+      if (!playing) status(`${info.people.length ? 'Pick a way to play, an opponent and your deck.' : 'Pick your opponent and your deck.'} The rules engine is loaded.`, 'good');
+    }, (e) => status(`The rules engine did not load: ${String(e?.message || e)}`, 'bad'));
   }
   main();
 })();

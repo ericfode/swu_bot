@@ -270,7 +270,7 @@ function route() {
 function renderNav(r) {
   const secs = SECTIONS.filter(s => !(s.lab && S.aud === 'public'));
   $('nav').innerHTML = secs.map(s => `<a href="${s.id ? href(s.id) : '#/'}" class="${s.lab ? 'lab' : ''}" ${s.id === r.sec ? 'aria-current="page"' : ''}>${s.label}</a>`).join('');
-  $('tabbar').innerHTML = secs.filter(s => !s.lab).map(s => `<a href="${s.id ? href(s.id) : '#/'}" ${s.id === r.sec ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${s.icon}"/></svg>${s.label}</a>`).join('') + (HOSTED ? '<a href="/play" class="tab-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.8v14.4L19 12z"/></svg>Play</a>' : '');
+  $('tabbar').innerHTML = secs.filter(s => !s.lab).map(s => `<a href="${s.id ? href(s.id) : '#/'}" ${s.id === r.sec ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${s.icon}"/></svg>${s.label}</a>`).join('') + (HOSTED ? '<a href="/tables" class="tab-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.8v14.4L19 12z"/></svg>Play</a>' : '');
   const sec = secs.find(s => s.id === r.sec), cur = r.parts[0] === 'runs' ? 'runs' : r.parts[1] || '';
   const sub = sec?.sub && !(r.sec === 'games' && r.parts[0] === 'games' && r.parts.length > 2) ? sec.sub : null;
   $('subnav').innerHTML = sub ? sub.map(([k, l]) => `<a href="${href(sec.id, k)}" ${k === cur || (k === 'builders' && cur === 'competitors') ? 'aria-current="page"' : ''}>${l}</a>`).join('') : '';
@@ -1205,7 +1205,7 @@ function appRights(A) {
 /** Home's pointer to the Join page: the one place a signed-in person learns they can bring their own Claude. */
 function playCard() {
   if (!HOSTED) return '';
-  return `<section class="box join-card"><div class="bh"><h3>Play a bot</h3><a class="more" href="/play">Play</a></div><p style="font-size:var(--fs-base)">Play Star Wars Unlimited against Eric's JEPA bot or one of the arena's bots, in your browser with the real rules engine. Anyone with a GitHub account can play; games are saved here, unrated.</p><p style="margin-top:8px"><a class="btn-link" href="/play">Play now →</a></p></section>`;
+  return `<section class="box join-card"><div class="bh"><h3>Play</h3><a class="more" href="/tables">Play</a></div><p style="font-size:var(--fs-base)">Play Star Wars Unlimited against Eric's JEPA bot, one of the arena's bots or another person, in your browser with the real rules engine. Anyone with a GitHub account can play the bots; people Eric invited can also play each other. Games are kept for training, unrated.</p><p style="margin-top:8px"><a class="btn-link" href="/tables">Play now →</a></p></section>`;
 }
 function joinCard() {
   if (!HOSTED) return '';

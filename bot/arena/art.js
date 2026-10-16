@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Card art through the window, for its cross-origin isolated pages (/play and /tables). An arena bot's stdin is a
+ * Card art through the window, for its cross-origin isolated play page (/tables). An arena bot's stdin is a
  * SharedArrayBuffer, so those pages are isolated, with COEP require-corp: the one mode Safari has (it has no
  * credentialless). Under require-corp a page loads an image from another site only when that site allows it (a CORP or
  * CORS header), and swu-db's CDN sends neither. So the pages point the viewer kit's art at /art/ (setArtResolver) and the

@@ -93,6 +93,34 @@ test("an arena version is guarded with its round's thinking time, and 45 s when 
     assert.deepStrictEqual([host.capOf('tinybot-v2'), host.capOf('other-v1'), host.capOf('tiny-v1')], [30000, CAP_MS, CAP_MS]);
 });
 
+test("a person plays Eric's JEPA bot: the bot's random deck is the seed's pick, hello has no card data, and the card text has leaders and tokens", { skip }, async () => {
+    const { createOpenHost } = require('../table/open');
+    const { pickDecks } = require('../table/host');
+    const { seededRng } = require('../rng');
+    const { decks } = require('../decklists').loadDecks(path.join(ROOT, 'bot/decks/ash-meta-2026-09.json'), env());
+    assert.equal(pickDecks(decks, decks[0].metadata.name, 'random', 30).theirs, decks[30 % decks.length]);
+    const msgs = [];
+    let onMsg = () => undefined;
+    const host = createOpenHost({ env: env(), send: (m) => (msgs.push(m), onMsg(m)) });
+    const g = host.start({ mode: 'bot', bot: 'jepa-tx-gate', deck: 'darth-vader_jtl_yellow', you: 'pl_dddddd', seed: 11, key: 'jepa-test' });
+    onMsg = scripted((r) => host.act(r), seededRng('jepa'));
+    msgs.filter((m) => m.t === 'decide').forEach(onMsg); // a decision sent before the script was set
+    const { result, replay } = await host.done;
+    assert.equal(result.outcome, 'won', result.error);
+    const header = JSON.parse(replay.split('\n')[0]);
+    const seats = { p1: header.players[0].bot, p2: header.players[1].bot };
+    assert.deepStrictEqual([seats[g.seat], seats[g.seat === 'p1' ? 'p2' : 'p1']], ['pl_dddddd', 'jepa-tx-gate']);
+    // the person's screen got hello without the card data the JEPA bot built its card tables from
+    const hello = msgs.find((m) => m.t === 'hello');
+    assert.deepStrictEqual([hello.you, hello.deck.metadata.name, 'cards' in hello], [g.seat, 'darth-vader_jtl_yellow', false]);
+    assert.equal(msgs.at(-1).t, 'end');
+    // card text for the start screen and for cards with no art
+    const text = host.cardText();
+    assert.equal(text.schema, 'swu-card-text/1');
+    assert.equal(text.cards[decks[0].leader.id].ty[0], 'leader');
+    assert.ok(Object.values(text.cards).some((c) => c.t === 'Shield' && c.ty.includes('token')));
+});
+
 test('a person plays an arena bot made by the registry, and a custom deck list (SWUDB export form) is checked first', { skip }, async () => {
     const { createOpenHost } = require('../table/open');
     const { seededRng } = require('../rng');

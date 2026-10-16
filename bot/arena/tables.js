@@ -1,7 +1,8 @@
 'use strict';
 /**
- * The window's open tables (/tables): people play each other, or any arena bot, on Holotable's play screen. Every
- * game runs in a player's browser tab (bot/table/open.js in tables-worker.js, on the swarm's engine pack): a bot game
+ * The window's play page (/tables, the open tables): people play each other, or any arena bot, on Holotable's play
+ * screen. It is the only play page (Eric, 2026-10-16: "there should be just one play page"): the app's Play button opens
+ * it, /play sends people here, and its opponents and downloads are the old /play page's. Every game runs in a player's browser tab (bot/table/open.js in tables-worker.js, on the swarm's engine pack): a bot game
  * in the person's own tab, a people game in the host's tab, with the guest's tab linked to it. The window only puts
  * people in touch (lobby.js: invite codes, the queue, the WebRTC handshake, and a relay when the two browsers cannot
  * reach each other), lists the bots, reads SWUDB decks (swudb.js), and keeps the finished games for training, with an
@@ -15,16 +16,24 @@
  *   if (await tables.route(req, res, url, who, helpers)) return;     // helpers: {sendJson, sendText, readBody}
  *   tables.openTo(next)   // whether GitHub sign-in may return a login with no role to `next` (auth.js openTo)
  *
- * ARENA_TABLES says who may play: 'invited' (the default), 'github' (anyone signed in with GitHub) or 'off'. Reader
- * tokens are for anyone signed in with GitHub whatever the mode.
+ * ARENA_TABLES says who may play other people: 'invited' (the default), 'github' (anyone signed in with GitHub) or 'off'.
+ * ARENA_PLAY says, in the same words, who may play the bots (the old /play page's setting). The page is for anyone who
+ * may do either; info.people is empty for a person who may play only bots. Reader tokens are for anyone signed in with
+ * GitHub whatever the modes.
  *
  *   GET  /tables                         the page (web/tables.html, cross-origin isolated so arena bots can run)
+ *   GET  /play                           sends the person to /tables (with its query: /play?bot=<name>)
  *   GET  /tables/kit.js                  the viewer kit
  *   GET  /tables/<file>?b=<build>        engine.json, tables-worker.js, bot-worker.js, python-lib.json, python.wasm, and
- *                                        the JEPA bot's models (tx-t10.safetensors, tx-t10-e.safetensors)
+ *                                        the JEPA bot's models (tx-t10.safetensors, tx-t10-e.safetensors); each answer
+ *                                        says its unzipped size in x-raw-length
  *   GET  /tables/bot/<sha256>.tar        an arena bot's bundle (swarm-relay.js lineup)
  *   GET  /tables/logs                    how to read the logs; a button for your reader token
- *   GET  /api/tables/info                {mode, login, you, admin, ready, build, files, why?, decks, bots, people, games}
+ *   GET  /api/tables/info                {mode, play, login, you, admin, ready, build, files, runtimes, round, why?,
+ *                                        waking?, decks, bots, people, games}: files {pack, worker, botWorker}, each
+ *                                        {url, bytes, wire}; runtimes, the interpreters a bundle may need ({lib, wasm}
+ *                                        each); bots below. Not ready: why, and waking when the games machine is starting
+ *                                        (the page opens anyway and asks again)
  *   POST /api/tables/deck {text}         a SWUDB link or a pasted deck list -> {deck}
  *   POST /api/tables/invite              -> {room, code, k}: a room you host; your friend joins with the code
  *   POST /api/tables/join {code}         -> {room, k, peer}
@@ -43,6 +52,13 @@
  *
  * Games are kept in the run "tables" as a people run (window.js peopleRun), unrated; who played which seat is kept in
  * admin/tables-people for admins only.
+ *
+ * A bot of info.bots is {name, title, kind, owner, elo, note, bytes, wire, ...}: Eric's JEPA bot first (kind 'jepa',
+ * about, and files [{url, path, bytes, wire}]: its models, which the page fetches and sends with its first game), then
+ * the latest round's versions by rating (kind 'arena': bundle {url, hex, bytes, wire}, runtime ('wasi-p1', or an
+ * interpreter of runtimes the page also fetches) and capMs, its time per game; they need a cross-origin isolated page).
+ * bytes: what the bot itself is, unzipped; wire: about what it downloads (gzipped), null when the window does not know
+ * yet. Every name, title and number is data from the arena: the page sets them with textContent.
  */
 const crypto = require('crypto');
 const fs = require('fs');
@@ -62,6 +78,9 @@ const MODES = new Set(['off', 'invited', 'github']);
 const MODELS = { 'tx-t10.safetensors': '/app/vendor/jepa/tx-t10.safetensors', 'tx-t10-e.safetensors': '/app/vendor/jepa/tx-t10-e.safetensors' };
 const FILES = ['engine.json', 'tables-worker.js', 'bot-worker.js', 'python-lib.json', 'python.wasm', ...Object.keys(MODELS)];
 const NEEDED = ['engine.json', 'tables-worker.js', 'bot-worker.js'];
+const PYTHON = { runtime: 'python-3.14-wasi', lib: 'python-lib.json', wasm: 'python.wasm' };
+const JEPA_TITLE = "Eric's JEPA bot";
+const JEPA_ABOUT = 'A learned model of the game that looks ahead on simulations, as it plays in the arena. Its two models download once.';
 const PEOPLE = ['lobby', 'invite', 'join', 'direct'];
 // the page: SharedArrayBuffer (a bot blocks on its stdin) needs cross-origin isolation, with require-corp since Safari
 // has no credentialless; the card art comes through the window (art.js), as the CDN's own would be blocked (browsers
@@ -90,6 +109,28 @@ const parseOr = (text, dflt) => {
 };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const sha = (x) => crypto.createHash('sha256').update(x).digest('hex');
+
+/** The bytes of file `name` at the top of a canonical bundle tar (bot/compiled/bundle.py: ustar, plain files), or null. */
+function tarFile(tar, name) {
+    for (let off = 0; off + 512 <= tar.length;) {
+        const h = tar.subarray(off, off + 512);
+        if (h.every((x) => x === 0)) {
+            break;
+        }
+        const field = (o, n) => h.subarray(o, o + n).toString('latin1').split('\0')[0];
+        const size = parseInt(field(124, 12).trim() || '0', 8);
+        if (!Number.isSafeInteger(size) || size < 0) {
+            return null;
+        }
+        const prefix = field(345, 155);
+        const rel = (prefix ? `${prefix}/${field(0, 100)}` : field(0, 100)).replace(/^\.\//, '');
+        if (rel === name && String.fromCharCode(h[156] || 48) === '0') {
+            return tar.subarray(off + 512, off + 512 + size);
+        }
+        off += 512 + Math.ceil(size / 512) * 512;
+    }
+    return null;
+}
 
 /** The ISO week of a time, as 2026-W42. */
 function isoWeek(iso) {
@@ -224,10 +265,11 @@ const TAR_END = Buffer.alloc(1024);
 
 function createTables({
     store, swarm, auth, kitFile, arena = { status: () => ({ competitors: [] }), versions: () => null }, wake = () => undefined,
-    mode = process.env.ARENA_TABLES || 'invited', page = path.join(__dirname, 'web', 'tables.html'), decksFile = DECKS,
+    mode = process.env.ARENA_TABLES || 'invited', play = process.env.ARENA_PLAY || 'invited', page = path.join(__dirname, 'web', 'tables.html'), decksFile = DECKS,
     fetchImpl = globalThis.fetch, now = Date.now, lobby = createLobby({ now }), perDay = PER_DAY, maxRows = MAX_ROWS
 } = {}) {
     const on = MODES.has(mode) ? mode : 'invited';
+    const botsOn = MODES.has(play) ? play : 'invited';
     const sentGames = new Map(); // login -> times of the games they sent, the last day, and a slot per upload under way
     const rate = new Map(); // `${what}:${login}` -> times, the last hour
     const deckCache = new Map(); // SWUDB id -> {at, deck}
@@ -245,12 +287,16 @@ function createTables({
 
     /** A GitHub login signed in on this site (not a view link's guest), or null. */
     const github = (who) => (who.via === 'cookie' && !who.guest && typeof who.login === 'string' && LOGIN.test(who.login) ? who.login.toLowerCase() : null);
-    /** The login of a person who may play here, or null. */
+    /** Whether mode m lets this signed-in person play: anyone in 'github', people Eric invited in 'invited'. */
+    const allows = (m, who) => m === 'github' || (m === 'invited' && atLeast(who.role, 'friend'));
+    /** The login of a person who may play here (other people, the bots, or both), or null. */
     const player = (who) => {
         const login = github(who);
-        return login && (on === 'github' || atLeast(who.role, 'friend')) ? login : null;
+        return login && (allows(on, who) || allows(botsOn, who)) ? login : null;
     };
-    const openTo = (next) => typeof next === 'string' && (/^\/tables\/logs(?:[?#]|$)/.test(next) || (on === 'github' && /^\/tables(?:[/?#]|$)/.test(next)));
+    /** Whether this person may play other people here, not only the bots. */
+    const withPeople = (who) => allows(on, who);
+    const openTo = (next) => typeof next === 'string' && (/^\/tables\/logs(?:[?#]|$)/.test(next) || ((on === 'github' || botsOn === 'github') && /^\/tables(?:[/?#]|$)/.test(next)));
 
     const limited = (what, login, max, ms = 3600000) => {
         const k = `${what}:${login}`;
@@ -319,23 +365,48 @@ function createTables({
         };
     };
 
-    // ---- the bots (4B): Eric's JEPA bot, and every version of the arena's latest round whose bundle the window has ----
-    async function bots() {
-        const out = [{ name: JEPA, title: "Eric's JEPA bot", owner: 'ericfode', elo: null, bytes: null, runtime: 'js', url: null, bundle: null }];
-        const lineup = swarm.on() ? await swarm.lineup().catch(() => null) : null;
+    // bytes: a file as the page reads it (unzipped); wire: about what it downloads (gzipped); null when not known
+    const fileOf = (build, name) => ({ url: `/tables/${name}?b=${encodeURIComponent(build)}`, bytes: swarm.fileSize?.(build, name) ?? null, wire: swarm.fileSize?.(build, name, { gz: true }) ?? null });
+    const wireOf = (hex) => {
+        const f = swarm.botHere?.(hex);
+        return f ? (typeof f.gz === 'string' ? fs.statSync(f.gz).size : f.gz.length) : null;
+    };
+    // bundle sha256 -> the runtime its arena.json names, read once the window has the bundle (null: none named)
+    const runtimes = new Map();
+    const runtimeOf = (hex) => {
+        if (!runtimes.has(hex)) {
+            const f = swarm.botHere?.(hex);
+            if (!f) {
+                return null;
+            }
+            const m = tarFile(typeof f.raw === 'string' ? fs.readFileSync(f.raw) : f.raw, 'arena.json');
+            const r = parseOr(m?.toString('utf8'), null)?.runtime;
+            runtimes.set(hex, typeof r === 'string' ? r : null);
+        }
+        return runtimes.get(hex);
+    };
+
+    // ---- the bots (4B): Eric's JEPA bot, then every version of the arena's latest round, by rating ----
+    async function bots(build, lineup) {
+        const total = (files, k) => (files.every((f) => Number.isSafeInteger(f[k])) ? files.reduce((a, f) => a + f[k], 0) : null);
+        const models = build ? Object.entries(MODELS).map(([name, p]) => ({ ...fileOf(build, name), path: p })) : [];
+        const out = [{ name: JEPA, title: JEPA_TITLE, kind: 'jepa', owner: 'ericfode', about: JEPA_ABOUT, elo: null, note: null, files: models, bytes: total(models, 'bytes'), wire: total(models, 'wire') }];
         const comps = Array.isArray(arena.status()?.competitors) ? arena.status().competitors : [];
         for (const b of lineup?.bots ?? []) {
             const agent = b.name.replace(/-v\d+$/, '');
             const c = comps.find((x) => x?.latest === b.name) ?? comps.find((x) => x?.name === agent) ?? null;
             const v = (arena.versions(agent) ?? []).find((x) => x?.name === b.name);
             const files = Array.isArray(v?.files) ? v.files : [];
+            // the bundle's own arena.json once the window has it, else what the submission's files say
+            const runtime = runtimeOf(b.bundle) ?? (files.some((f) => /\.py$/.test(f)) ? PYTHON.runtime : 'wasi-p1');
+            const bytes = Number.isSafeInteger(b.bytes) ? b.bytes : null;
             out.push({
-                name: b.name, title: typeof c?.title === 'string' ? c.title : agent, owner: typeof c?.owner === 'string' ? c.owner.replace(/^github:/, '') : null,
-                elo: Number.isFinite(c?.elo) ? Math.round(c.elo) : null, bytes: b.bytes, runtime: files.some((f) => /\.py$/.test(f)) ? 'python' : 'wasm',
-                url: `/tables/bot/${b.bundle}.tar`, bundle: b.bundle, capMs: lineup.capMs ?? null, note: typeof v?.note === 'string' ? v.note.slice(0, 160) : null
+                name: b.name, title: typeof c?.title === 'string' ? c.title : agent, kind: 'arena', owner: typeof c?.owner === 'string' ? c.owner.replace(/^github:/, '') : null,
+                elo: Number.isFinite(c?.elo) ? Math.round(c.elo) : null, note: typeof v?.note === 'string' ? v.note.slice(0, 160) : null, runtime, capMs: lineup.capMs ?? null,
+                bundle: { url: `/tables/bot/${b.bundle}.tar`, hex: b.bundle, bytes, wire: wireOf(b.bundle) }, bytes, wire: wireOf(b.bundle)
             });
         }
-        return [out[0], ...out.slice(1).sort((a, b) => (b.elo ?? -1) - (a.elo ?? -1))];
+        return [out[0], ...out.slice(1).sort((a, b) => (b.elo ?? -1) - (a.elo ?? -1) || a.name.localeCompare(b.name))];
     }
 
     function sendPage(req, res, code, html, sendText, headers = {}) {
@@ -366,11 +437,13 @@ function createTables({
         const doc = runDoc();
         const mine = doc.games.filter((r) => r.p1 === pid || r.p2 === pid).slice(-30).reverse().map((r) => brief(r, pid));
         const admin = who.role === 'admin';
+        const lineup = swarm.on() ? await swarm.lineup().catch(() => null) : null;
         const out = {
-            on: true, mode: on, login, you: pid, admin, decks: deckOptions, people: PEOPLE, bots: await bots(), games: mine, played: doc.games.length, lobby: lobby.stats()
+            on: true, mode: on, play: botsOn, login, you: pid, admin, decks: deckOptions, people: withPeople(who) ? PEOPLE : [], round: lineup?.round ?? null,
+            games: mine, played: doc.games.length, lobby: lobby.stats()
         };
         if (!swarm.on()) {
-            return sendJson(res, 200, { result: { ...out, ready: false, why: 'The game files are off on this window (no SWARM_HELPER_TOKEN).' } }, req);
+            return sendJson(res, 200, { result: { ...out, bots: await bots(null, lineup), ready: false, why: 'The game files are off on this window (no SWARM_HELPER_TOKEN).' } }, req);
         }
         const m = await swarm.currentManifest();
         const build = m?.build ?? swarm.cachedBuild(NEEDED);
@@ -382,12 +455,11 @@ function createTables({
                 woke = now();
                 wake();
             }
-            return sendJson(res, 200, { result: { ...out, ready: false, why: 'The game files come from the games machine, which is starting. This takes about a minute.' } }, req);
+            return sendJson(res, 200, { result: { ...out, bots: await bots(null, lineup), ready: false, waking: true, why: 'The game files come from the games machine, which is starting. This takes about a minute.' } }, req);
         }
-        const q = `?b=${encodeURIComponent(build)}`;
-        const models = Object.entries(MODELS).map(([name, p]) => ({ url: `/tables/${name}${q}`, path: p, bytes: swarm.fileSize?.(build, name) ?? null }));
-        const files = { pack: `/tables/engine.json${q}`, worker: `/tables/tables-worker.js${q}`, botWorker: `/tables/bot-worker.js${q}`, pythonLib: `/tables/python-lib.json${q}`, pythonWasm: `/tables/python.wasm${q}`, models };
-        return sendJson(res, 200, { result: { ...out, ready: true, build, files } }, req);
+        const files = { pack: fileOf(build, 'engine.json'), worker: fileOf(build, 'tables-worker.js'), botWorker: fileOf(build, 'bot-worker.js') };
+        const runtimesNow = { [PYTHON.runtime]: { lib: fileOf(build, PYTHON.lib), wasm: fileOf(build, PYTHON.wasm) } };
+        return sendJson(res, 200, { result: { ...out, bots: await bots(build, lineup), runtimes: runtimesNow, ready: true, build, files } }, req);
     }
 
     async function importDeck(req, res, login, { sendJson, readBody }) {
@@ -575,6 +647,12 @@ function createTables({
 
     async function route(req, res, url, who, { sendJson, sendText, readBody }) {
         const p = url.pathname;
+        if (p === '/play' || p === '/play/') {
+            // the old play page: there is one play page now, and /play?bot=<name> still opens on that bot
+            res.writeHead(302, { location: `/tables${url.search}`, 'cache-control': 'no-cache' });
+            res.end();
+            return true;
+        }
         if (p !== '/tables' && !p.startsWith('/tables/') && !p.startsWith('/api/tables/')) {
             return false;
         }
@@ -596,7 +674,7 @@ function createTables({
             }
             return true;
         }
-        if (on === 'off') {
+        if (on === 'off' && botsOn === 'off') {
             if (p.startsWith('/api/')) {
                 fail(404, 'not_found', 'the open tables are off');
             } else {
@@ -612,10 +690,11 @@ function createTables({
             }
             const back = encodeURIComponent(url.pathname + url.search);
             if (github(who)) {
-                return sendPage(req, res, 403, auth.shell(`<h1>Open tables</h1><p>You are signed in to GitHub as <b>@${esc(who.login)}</b>. The open tables are open to people Eric invited to the arena, and <b>@${esc(who.login)}</b> is not on the list yet.</p><p>Send Eric your GitHub username, <b>${esc(who.login)}</b>. Once he has added it, reload this page.</p><p><a href="/auth/logout">Sign out</a></p>`), sendText);
+                return sendPage(req, res, 403, auth.shell(`<h1>Play</h1><p>You are signed in to GitHub as <b>@${esc(who.login)}</b>. Playing here is open to people Eric invited to the arena, and <b>@${esc(who.login)}</b> is not on the list yet.</p><p>Send Eric your GitHub username, <b>${esc(who.login)}</b>. Once he has added it, reload this page.</p><p><a href="/auth/logout">Sign out</a></p>`), sendText);
             }
-            const who2 = on === 'github' ? 'Anyone with a GitHub account can play.' : 'The open tables are open to people Eric invited to the arena.';
-            return sendPage(req, res, 200, auth.shell(`<h1>Open tables</h1><p>Play Star Wars Unlimited against other people or any arena bot, on the real rules engine in your browser. Finished games are kept for training under a random player id.</p><p>${who2} Sign in with GitHub: GitHub asks once whether SWU Arena may see your username, and nothing else is shared.</p><p><a class="btn" href="/auth/github?next=${back}">Sign in with GitHub</a></p>`), sendText);
+            const may = (m) => (m === 'github' ? 'anyone with a GitHub account' : m === 'invited' ? 'people Eric invited to the arena' : null);
+            const who2 = may(on) === may(botsOn) ? `Open to ${may(on)}.` : [may(botsOn) && `The bots are open to ${may(botsOn)}`, may(on) && `games against other people to ${may(on)}`].filter(Boolean).join(', ') + '.';
+            return sendPage(req, res, 200, auth.shell(`<h1>Play</h1><p>Play Star Wars Unlimited against other people or any arena bot, on the real rules engine in your browser. Finished games are kept for training under a random player id.</p><p>${who2} Sign in with GitHub: GitHub asks once whether SWU Arena may see your username, and nothing else is shared.</p><p><a class="btn" href="/auth/github?next=${back}">Sign in with GitHub</a></p>`), sendText);
         }
         try {
             if (p === '/tables' || p === '/tables/') {
@@ -655,6 +734,11 @@ function createTables({
             }
             const q = (k) => url.searchParams.get(k) ?? '';
             const pid = () => pidOf(login);
+            // pairing with other people (the lobby, invites, codes) is for people who may play people, not only bots
+            if (/^\/api\/tables\/(?:invite|join|queue|stream|send|leave)$/.test(p) && !withPeople(who)) {
+                fail(403, 'forbidden', `@${login} may play the bots here, and games against other people are for people Eric invited to the arena`);
+                return true;
+            }
             if (p === '/api/tables/deck' && req.method === 'POST') {
                 await importDeck(req, res, login, { sendJson, readBody });
                 return true;
@@ -751,7 +835,7 @@ function createTables({
         return true;
     }
 
-    return { route, openRoute, openTo, mode: on, lobby, close: () => lobby.close() };
+    return { route, openRoute, openTo, mode: on, play: botsOn, lobby, close: () => lobby.close() };
 }
 
 module.exports = { createTables, checkReplay, rowOf, isoWeek, pageOf, tarEntry, RUN };
