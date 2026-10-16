@@ -649,10 +649,10 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
           if (o.t === 'join') { lastAct = 0; guestHas = 0; } // a new page numbers its actions from 1 again
           else heard(o.have ?? 0);
           for (let i = (o.have ?? 0); i < log.length; i++) l.game({ n: i + 1, m: log[i] });
-        } else if (o.t === 'act' && g && Number.isInteger(o.a) && o.a > lastAct) {
+        } else if (o.t === 'act' && g && !g.over && Number.isInteger(o.a) && o.a > lastAct) {
           lastAct = o.a;
           eng.peerAct(o.a, o.act);
-        } else if (o.t === 'concede' && g) {
+        } else if (o.t === 'concede' && g && !g.over) {
           eng.peerConcede();
         } else if (o.t === 'got' && Number.isInteger(o.have)) {
           heard(o.have);
@@ -907,53 +907,67 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     return { stopped, wanted: () => !halted, started: () => setCancel(() => undefined) };
   }
 
+  /** Runs a pasted-code pairing; when it fails (a timeout, a bad code, a refused game) the peer connection closes. */
+  async function linkUp(pc, run) {
+    try {
+      return await run();
+    } catch (e) {
+      try { pc.close(); } catch { /* gone */ }
+      throw e;
+    }
+  }
+
   async function directHost(deck, onState, setAnswer, setCancel) {
     loadEngine().catch(() => undefined);
     const pc = new RTCPeerConnection({ iceServers: STUN });
     const dc = pc.createDataChannel('swu', { ordered: true });
     const { stopped, started, wanted } = stopper(pc, setCancel);
-    await pc.setLocalDescription(await pc.createOffer());
-    onState({ text: 'Making your code…' });
-    await gathered(pc, 5000);
-    const code = await pack({ v: 1, sdp: pc.localDescription.sdp, pid: info.you }, OFFER);
-    const answered = new Promise((ok) => setAnswer(ok));
-    onState({ text: 'Send this code to your friend (any chat works). Then paste the code they send back.', code, askCode: 'Their answer code' });
-    const ans = await unpackCode(await Promise.race([answered, stopped]), ANSWER);
-    onState({ text: `Connecting to ${ans.pid}…`, code: null });
-    await pc.setRemoteDescription({ type: 'answer', sdp: ans.sdp });
-    try {
-      await Promise.race([opened(dc, 15000), stopped]);
-    } catch (e) {
-      pc.close();
-      if (e.message === 'cancelled') throw e;
-      throw new Error('the two browsers could not reach each other directly; use an invite link instead (it can go through the lobby)');
-    }
-    const link = channelLink(pc, dc);
-    const game = await Promise.race([hostGame(link, ans.pid, deck, null, wanted), stopped]);
-    started();
-    status(`Playing ${ans.pid}, linked directly.`, 'good');
-    return game;
+    // any failure before the game starts closes the peer connection, so no late peer reaches a page that gave up
+    return linkUp(pc, async () => {
+      await pc.setLocalDescription(await pc.createOffer());
+      onState({ text: 'Making your code…' });
+      await gathered(pc, 5000);
+      const code = await pack({ v: 1, sdp: pc.localDescription.sdp, pid: info.you }, OFFER);
+      const answered = new Promise((ok) => setAnswer(ok));
+      onState({ text: 'Send this code to your friend (any chat works). Then paste the code they send back.', code, askCode: 'Their answer code' });
+      const ans = await unpackCode(await Promise.race([answered, stopped]), ANSWER);
+      onState({ text: `Connecting to ${ans.pid}…`, code: null });
+      await pc.setRemoteDescription({ type: 'answer', sdp: ans.sdp });
+      try {
+        await Promise.race([opened(dc, 15000), stopped]);
+      } catch (e) {
+        if (e.message === 'cancelled') throw e;
+        throw new Error('the two browsers could not reach each other directly; use an invite link instead (it can go through the lobby)');
+      }
+      const link = channelLink(pc, dc);
+      const game = await Promise.race([hostGame(link, ans.pid, deck, null, wanted), stopped]);
+      started();
+      status(`Playing ${ans.pid}, linked directly.`, 'good');
+      return game;
+    });
   }
 
   async function directJoin(text, deck, onState, setCancel) {
     const offer = await unpackCode(text, OFFER);
     const pc = new RTCPeerConnection({ iceServers: STUN });
     const { stopped, started } = stopper(pc, setCancel);
-    let dc = null;
-    const got = new Promise((ok) => { pc.ondatachannel = (e) => { dc = e.channel; ok(); }; });
-    await pc.setRemoteDescription({ type: 'offer', sdp: offer.sdp });
-    await pc.setLocalDescription(await pc.createAnswer());
-    onState({ text: 'Making your answer code…' });
-    await gathered(pc, 5000);
-    const code = await pack({ v: 1, sdp: pc.localDescription.sdp, pid: info.you }, ANSWER);
-    onState({ text: `Send this answer code back to ${offer.pid}. The game starts when they paste it.`, code });
-    await Promise.race([got, stopped, new Promise((_, no) => setTimeout(() => no(new Error('your friend did not connect within 5 minutes')), 300000))]);
-    await Promise.race([opened(dc, 30000), stopped]);
-    const link = channelLink(pc, dc);
-    const game = await Promise.race([guestGame(link, offer.pid, deck), stopped]);
-    started();
-    status(`Playing ${offer.pid}, linked directly.`, 'good');
-    return game;
+    return linkUp(pc, async () => {
+      let dc = null;
+      const got = new Promise((ok) => { pc.ondatachannel = (e) => { dc = e.channel; ok(); }; });
+      await pc.setRemoteDescription({ type: 'offer', sdp: offer.sdp });
+      await pc.setLocalDescription(await pc.createAnswer());
+      onState({ text: 'Making your answer code…' });
+      await gathered(pc, 5000);
+      const code = await pack({ v: 1, sdp: pc.localDescription.sdp, pid: info.you }, ANSWER);
+      onState({ text: `Send this answer code back to ${offer.pid}. The game starts when they paste it.`, code });
+      await Promise.race([got, stopped, new Promise((_, no) => setTimeout(() => no(new Error('your friend did not connect within 5 minutes')), 300000))]);
+      await Promise.race([opened(dc, 30000), stopped]);
+      const link = channelLink(pc, dc);
+      const game = await Promise.race([guestGame(link, offer.pid, deck), stopped]);
+      started();
+      status(`Playing ${offer.pid}, linked directly.`, 'good');
+      return game;
+    });
   }
 
   // ---------------------------------------------------------------- the table Holotable plays through
