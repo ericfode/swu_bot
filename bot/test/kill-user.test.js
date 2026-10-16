@@ -1,8 +1,9 @@
 'use strict';
 // bot/arena/ops/kill-user.py: what a games helper runs as root after each play of a slot. It kills every process of
 // the slot's user, also ones that keep forking, hop from pid to pid, try to stop it, or run on in a thread after their
-// main thread exited, and nothing of anyone else. Needs root and the users arena15 and arena16 (the images make arena1
-// to arena16); as root it kills every process of arena16 in this machine.
+// main thread exited, and nothing of anyone else; two at once (two slots ending together) both finish. Needs root and
+// the users arena15 and arena16 (the images make arena1 to arena16); as root it kills every process of both in this
+// machine.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -136,6 +137,35 @@ test('kill-user.py: every process of the user goes, however it hides or fights b
     }
 });
 
+test('kill-user.py: two at once, for two slots whose plays ended together, both finish with their users gone', { skip: !ready && 'needs root and the users arena15 and arena16' }, async () => {
+    // every killer kills as real uid nobody, so two that overlapped would kill each other: they take turns
+    const run = (uid) => new Promise((resolve) => {
+        const p = spawn('python3', ['-I', KILL_USER, String(uid)], { stdio: ['ignore', 'ignore', 'pipe'] });
+        let err = '';
+        p.stderr.on('data', (d) => {
+            err += d;
+        });
+        p.on('close', (code) => resolve({ code, err }));
+    });
+    try {
+        for (let i = 0; i < 100; i++) {
+            asUser(SLOT, 'import time; time.sleep(120)');
+            asUser(OTHER, 'import time; time.sleep(120)');
+            const end = Date.now() + 5000;
+            while ((!liveOf(SLOT).length || !liveOf(OTHER).length) && Date.now() < end) {
+                await pause(10);
+            }
+            for (const r of await Promise.all([run(SLOT), run(OTHER)])) {
+                assert.strictEqual(r.code, 0, r.err);
+            }
+            assert.deepStrictEqual([...liveOf(SLOT), ...liveOf(OTHER)], [], `round ${i}`);
+        }
+    } finally {
+        spawnSync('python3', ['-I', KILL_USER, String(SLOT)], { timeout: 30000 });
+        spawnSync('python3', ['-I', KILL_USER, String(OTHER)], { timeout: 30000 });
+    }
+});
+
 test('kill-user.py: the thread trick hides a process from a check of the main thread alone', { skip: !(ready && SYS_EXIT) && 'needs root, arena16 and x64 or arm64' }, async () => {
     // what the test above guards against: the process's own status says zombie while a thread runs
     const p = asUser(SLOT, THREAD);
@@ -157,7 +187,7 @@ test('kill-user.py: the thread trick hides a process from a check of the main th
     assert.deepStrictEqual(liveOf(SLOT), []);
 });
 
-test('kill-user.py: refuses uid 0, nobody, a missing uid, and running as anyone but root', { skip: !ROOT && 'needs root' }, () => {
+test('kill-user.py: refuses uid 0, nobody, a missing uid, running as anyone but root, and a lock folder others reach', { skip: !ROOT && 'needs root' }, () => {
     for (const args of [['0'], ['65534'], [], ['x'], ['1', '2']]) {
         assert.strictEqual(spawnSync('python3', ['-I', KILL_USER, ...args]).status, 2, args.join(' '));
     }
@@ -165,5 +195,16 @@ test('kill-user.py: refuses uid 0, nobody, a missing uid, and running as anyone 
         const r = spawnSync('setpriv', [`--reuid=${SLOT}`, `--regid=${SLOT}`, '--clear-groups', '--', 'python3', '-I', KILL_USER, String(SLOT)], { encoding: 'utf8' });
         assert.strictEqual(r.status, 2);
         assert.match(r.stderr, /must run as root/);
+        // a lock another user could hold would let it stop every kill
+        const LOCK_DIR = '/run/swu-kill-user';
+        assert.strictEqual(spawnSync('python3', ['-I', KILL_USER, String(SLOT)]).status, 0);
+        fs.chmodSync(LOCK_DIR, 0o777);
+        try {
+            const open = spawnSync('python3', ['-I', KILL_USER, String(SLOT)], { encoding: 'utf8' });
+            assert.strictEqual(open.status, 2);
+            assert.match(open.stderr, /not a folder only root reaches/);
+        } finally {
+            fs.chmodSync(LOCK_DIR, 0o700);
+        }
     }
 });
