@@ -39,7 +39,8 @@ The window's play page (`/play`, `bot/arena/play.js`) loads the same `engine.jso
 `play-worker.js` (`play-host.js`): the referee and a table (`bot/table/host.js`) in one worker, a person at the other
 seat. The opponent is the JEPA bot, which runs in that worker, or a WebAssembly version of the arena's latest round,
 which runs in a bot worker as it does here (`processes.js`, `bot-worker.js`). Its stdin pipe is a SharedArrayBuffer, so
-the page is cross-origin isolated, with `credentialless` so the card art still loads. The JEPA bot's two models are
+the page is cross-origin isolated with `require-corp`, as the swarm's page is (Safari has no `credentialless`), and shows
+the card art through the window (`bot/arena/art.js`). The JEPA bot's two models are
 files of their own next to `engine.json` (`pack.js` MODELS), downloaded only by a person who picks that bot, and
 `build.js` adds every file's size to `manifest.json` for the page's progress bar. The page plays no arena games.
 

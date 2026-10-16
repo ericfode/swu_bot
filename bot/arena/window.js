@@ -33,6 +33,7 @@ const { createAuth, atLeast, LOGIN } = require('./auth');
 const { createSwarmRelay } = require('./swarm-relay');
 const { createPlay } = require('./play');
 const { createTables } = require('./tables');
+const { createArt } = require('./art');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
 const { builderName, ownsName, notYours } = require('./api');
@@ -673,6 +674,8 @@ function createWindow(opts = {}) {
     const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm'), botDir: path.join(home, 'swarm-bots') });
     // the play page (play.js): a person against a bot in their own tab, on the swarm's files; games come back here
     play = createPlay({ store, swarm, auth, kitFile, wake: () => wakeGames(), mode: opts.play ?? process.env.ARENA_PLAY });
+    // card art for the isolated pages (/play, /tables), which cannot show the CDN's images themselves (art.js)
+    const art = opts.art ?? createArt();
 
     const arenaDoc = (id) => parseOr(store.getDoc('arena', id), undefined);
     // the open tables (tables.js): people against people or any arena bot, every game in a player's tab
@@ -1239,6 +1242,9 @@ function createWindow(opts = {}) {
             const who = auth.who(req);
             if (who.role === 'bad') {
                 return sendJson(res, 401, { error: { code: 'unauthorized', message: 'wrong bearer token' } }, req);
+            }
+            if (await art.route(req, res, url, who)) {
+                return undefined;
             }
             if (await play.route(req, res, url, who, { sendJson, sendText, readBody })) {
                 return undefined;

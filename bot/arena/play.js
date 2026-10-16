@@ -15,8 +15,8 @@
  * 'github' (anyone signed in with GitHub), or 'off'. A view link's guest has no GitHub login, so it may not play.
  *
  *   GET  /play                        the page (play.html), the sign-in page, or why not; cross-origin isolated
- *                                     (credentialless, so card art from its CDN still loads): a bundle's stdin is a
- *                                     SharedArrayBuffer
+ *                                     (require-corp, which Safari has too; card art comes through the window, art.js):
+ *                                     a bundle's stdin is a SharedArrayBuffer
  *   GET  /play/kit.js                 the viewer kit, for people who may play but not read the arena
  *   GET  /play/<file>?b=<build>       a swarm file of that build (swarm-relay.js): engine.json, play-worker.js,
  *                                     bot-worker.js, the JEPA bot's models, python-lib.json and python.wasm; each
@@ -64,8 +64,9 @@ const VERSION = /^[a-z][a-z0-9_]{0,31}-v\d{1,6}$/;
 const HEX = /^[0-9a-f]{64}$/;
 const TITLE = "Eric's JEPA bot";
 const ABOUT = 'A learned model of the game that looks ahead on simulations, as it plays in the arena. Its two models download once.';
-// the page's isolation: the swarm's pages use require-corp, which would block the card art (no CORP header on its CDN)
-const PAGE_ISOLATED = { 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'credentialless' };
+// the page's isolation, as the swarm's pages have it: require-corp, since Safari has no credentialless. It blocks the
+// CDN's card art (no CORP header there), so the page shows the art through the window (art.js)
+const PAGE_ISOLATED = { 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp' };
 const MODES = new Set(['off', 'invited', 'github']);
 const MAX_REPLAY = 16e6; // a whole game; the longest arena game so far is ~14 MB
 const MAX_LINES = 40000;
