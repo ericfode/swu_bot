@@ -15,8 +15,9 @@
  * with `replay` the game's replay (spec/replay-format.md, both hands, written after the game) as JSON Lines text,
  * `conceded` whether this screen's person conceded and `concededBy` the seat that did, or null.
  *
- * A person against a bot may take back moves (`undo`, match.js): their decide then says undo: true, and the answer
- * {t: 'undo'} plays the game again up to their last real choice. Each screen then gets
+ * A person against a bot may take back moves (`undo`, match.js): their decide then says undo: true when there is a move
+ * to take back (false while there is none yet), and the answer {t: 'undo'} plays the game again up to their last real
+ * choice. Each screen then gets
  *
  *   { t: 'rewind', n, state }        the moves after move n are gone; the board is `state` again
  *   { t: 'rewind', error }           the move could not be taken back; the game goes on where it was
@@ -72,6 +73,12 @@ function describe(eg, pid, action, applied, personPid) {
 async function playSeats({ env, seats, screens, decks, seed, key = null, maxSteps = 6000, stop = null, undo = [] }) {
     const bots = [seats.p1, seats.p2];
     const people = Object.entries(screens).filter(([, send]) => typeof send === 'function');
+    // a person who may take back moves: their screen hears whether there is one to take back at every decision
+    for (const s of undo) {
+        if (seats[s] && 'takesBack' in seats[s]) {
+            seats[s].takesBack = true;
+        }
+    }
     const lines = [];
     let n = 0;
     const watch = {

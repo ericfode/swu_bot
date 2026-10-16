@@ -323,6 +323,7 @@ test('a person takes back moves against a bot: the game plays again to their las
                 rewound = null;
             }
             seen.push(looks(m));
+            assert.equal(typeof m.undo, 'boolean', 'a person who may take back moves hears at every decision whether one can be');
             count.offered += m.undo ? 1 : 0;
             setImmediate(() => {
                 if (m.undo && count.undo < 12 && rng() < 0.15) {

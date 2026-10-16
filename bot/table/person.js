@@ -80,6 +80,9 @@ class PersonSeat {
         this.answers = [];
         this.undone = null; // the answers the last undo took off, until the game says it took the move back
         this.undoNext = false; // an undo sent while the bot thinks: it answers the next decision that has one
+        // the table lets this person take back moves (table.js): each decision tells the screen whether one can be, so
+        // after a first real choice it can offer Undo while the bot thinks
+        this.takesBack = false;
     }
 
     /** The previews for the question `msg`: the last action window move's, along the answers given since. */
@@ -134,7 +137,7 @@ class PersonSeat {
             // the screen waits for the move to come back: it does not, and this decision is asked as usual
             this.send({ t: 'rewind', error: 'there is no move to take back' });
         }
-        const shown = this.shown(msg);
+        const shown = this.takesBack ? { ...this.shown(msg), undo: !!msg.undo } : this.shown(msg);
         return new Promise((resolve) => {
             this.pending = { msg, resolve, sim: msg.sim && typeof sim === 'function' ? sim : null };
             this.send(shown);
