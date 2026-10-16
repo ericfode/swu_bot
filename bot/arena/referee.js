@@ -42,6 +42,29 @@ const LOCK_STALE_NS_MS = 75000;
 // lists an engine bug ends too many games of (CLAUDE.md "Known engine bugs" 8: Barriss Offee ends 36% of Lando's)
 const ROUND_DECKS = { file: path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json'), skip: ['lando-calrissian_law_blue'] };
 
+/**
+ * The lists of a deck file, loaded and checked against the engine's card data (decklists.js loadDecks, as ladder.js
+ * --decks loads them before a round), less the lists named in `skip`: {file, sha256, names, skipped, lists}, the lists
+ * in normalizeDeck form, as play-seed.js takes them in a job. Loads the engine's card data (a few seconds).
+ */
+function deckLists(file, skip) {
+    const { loadDecks } = require('../decklists');
+    const set = loadDecks(file, new (require('../env').Env)());
+    const name = path.basename(file);
+    const unknown = skip.filter((n) => !set.decks.some((d) => d.metadata.name === n));
+    if (unknown.length) {
+        throw new Error(`${name} has no deck list ${unknown.join(', ')} to skip`);
+    }
+    const lists = set.decks.filter((d) => !skip.includes(d.metadata.name));
+    if (lists.length < 2) {
+        throw new Error(`${name} less the skipped lists leaves fewer than 2 decks`);
+    }
+    return { file: name, sha256: set.sha256, names: lists.map((d) => d.metadata.name), skipped: [...skip], lists };
+}
+
+/** The deck lists rated rounds deal (ROUND_DECKS), as deckLists gives them: what gamesctl round sends and bot/dev.js plays. */
+const roundDeckLists = () => deckLists(ROUND_DECKS.file, ROUND_DECKS.skip ?? []);
+
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
     return i > 0 ? process.argv[i + 1] : dflt;
@@ -490,8 +513,8 @@ function releaseLock() {
 async function runRound(round, bots, { games = Number(arg('games', 4)), seed, key, id = ladderIdOf(round) } = {}) {
     const dir = path.join(RESULTS, id);
     const cap = Number(roster.thinkCapMs);
-    // the watchdog waits 30 s past the wall cap (guard.js: 2 x cap), so a call the guard allows is never taken for a hang
-    const limits = Number.isFinite(cap) && cap > 0 ? ['--cap-ms', String(cap), '--hang-ms', String(2 * cap + 30000)] : [];
+    // the watchdog waits 30 s past the wall cap (game-pool.js roundLimits), so a call the guard allows is never taken for a hang
+    const limits = Number.isFinite(cap) && cap > 0 ? ['--cap-ms', String(cap), '--hang-ms', String(require('../game-pool').roundLimits(cap).hangMs)] : [];
     const args = [path.join(__dirname, '..', 'ladder.js'), '--bots', bots.join(','), '--games', String(games), '--seed', String(seed), '--key', key,
         '--id', id, '--out', RESULTS, '--workers', arg('workers', '3'), ...limits, '--decks', ROUND_DECKS.file, '--deal', 'seat', '--skip-decks', ROUND_DECKS.skip.join(','),
         '--record', '--resume'];
@@ -547,4 +570,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { ROUND_DECKS, cappedScore, scoreRound, anchoredBT, anchorsOf, residentName, globalElo, allRoundAnchors, lineup, publish, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };
+module.exports = { ROUND_DECKS, deckLists, roundDeckLists, cappedScore, scoreRound, anchoredBT, anchorsOf, residentName, globalElo, allRoundAnchors, lineup, publish, takeLock, releaseLock, roundSeed, roundKey, loadSecret, report, helpersLine, ladderIdOf, spawnBots, giveToBots };

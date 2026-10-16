@@ -28,7 +28,8 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
 
 ## Recording and tournaments
 - `match.js` — `playGame(env, {seed, bots, record, snapshot, key, limits})` plays one game; `view.js` — the board
-  snapshots replays record (`recorder.js` is an alias).
+  snapshots replays record (`recorder.js` gives the same `snapshot`, and `addReplayKey`, which writes a game's key on
+  its replay's end line).
 - `node bot/tournament.js --bots a,b,c --games 10 --out replays/my-run [--seed 1] [--key K|none]` writes `index.json` +
   `games/<id>.jsonl` (JSON Lines: `header`, `step` x N, `end`). First seat alternates each game.
 - `node bot/gate.js` — determinism gate: seeds 1-3 must give 594/342/486 steps (p2 wins) with and without recording.
@@ -44,8 +45,18 @@ Run from the **swu_bot repo root** (the engine submodule `forceteki/` needs `npm
 ## The bot protocol
 Every bot is a client of the bot protocol (`spec/protocol.md`): JSON messages, over stdio for a program in any
 language or as plain objects in process.
+- `dev.js` — the bot dev harness, `npm run dev -- <bot folder> --owner <login>` (or `--house` for one of the arena's own
+  bots): packs the folder as that submitter's `arena_submit` would and holds it to its rules, start-checks it with the
+  arena's checker (`arena/intake.js --check`), deals a gauntlet against `heuristic` and `rush` (or `--vs` folders) on
+  the rated rounds' deck lists and limits, plays each seed with `arena/play-seed.js` in the sandbox, and writes the
+  replays, the bot's transcripts and a report to `<folder>/.runs/`. Games lost by a fault or with no result that look
+  alike (kind, exception class, the bot's own line) are reported once, with an `--again` command that sends that game's
+  messages to the folder as it is now; 3 alike stop the run (`--all` plays on). `node bot/dev.js --view <run>` serves
+  that run's replays with the viewer kit on 127.0.0.1. It never sends anything to a window. It is the one way to run a
+  bot program locally.
 - `stdio.js` — `StdioClient` runs a bot program; `serve(client)` runs an in-process client as a program. No engine
-  dependency.
+  dependency. With `log` set, a client writes what it sent and read, the program's stderr and the sandbox's stats
+  next to that path (the ladder worker sets it under `SWU_BOT_LOG`, which `dev.js` uses).
 - `protocol.js` — the referee: hello/decide/over, time limits, blame (a bot that breaks a game loses it), simulations
   (`sim` requests) on a separate copy of the engine with hidden cards dealt again.
 - `game-cards.js` — the card data every protocol bot gets in `hello.cards`: the engine's card objects for both deck
@@ -57,9 +68,17 @@ language or as plain objects in process.
   back to forceteki otherwise. `state.js` exports a forceteki position in Kessel's format, `rust-view.js` builds the
   bot's view of a Rust position. `test/sims.test.js` plays a real game with them.
 - `rng.js` — seeded and keyed random streams; `view.js` — what a seat sees (board, prompt, actions).
-- Register programs by name in `external-bots.json` (or `$SWU_EXTERNAL_BOTS`); the registry in `players/index.js`
-  picks them up, so the name works in `--bots` for `tournament.js` and `ladder.js`. Example clients in Python and
-  JavaScript are in holocron's `bots/examples/`; the tests use copies in `test/fixtures/`.
+- `external-bots.json` (or the file `$SWU_EXTERNAL_BOTS` names) maps a name to a program the referee starts with
+  `StdioClient`, outside any sandbox, so the name works in `--bots` for `tournament.js` and `ladder.js`. It is the
+  referee's own plumbing for trusted programs (this repo's sandboxed `node-random-wasm`, holocron's research bots);
+  a bot for the arena is tested with `dev.js`. An entry is `{ cmd, args, cwd, env, stderr, timeoutMs,
+  startTimeoutMs, lang, stateful, inputs }`: the program (the bot itself, or a script that `exec`s it), its working
+  folder (default the repo root) and extra environment, `inherit` or `ignore` for its stderr, its `ms` for
+  `decide`/`over` and for `hello` (a game's own `limits` override them), a language label, `stateful: true` when it
+  learns from game to game (`ladder.js --resume` then plays the run again from the start), and other files it reads
+  (so `--resume` notices when they change). A tournament keeps one process per bot for the whole run (two when a game
+  needs the same bot in both seats). The tests' example clients are in `test/fixtures/`; they use the repo's own
+  modules, so they run only here.
 - `compiled/` — the WebAssembly sandbox the arena runs submitted bots in (`compiled/README.md`).
 
 ## Bots and the ladder

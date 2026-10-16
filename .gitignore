@@ -20,3 +20,6 @@ __pycache__/
 
 # SWU Arena app builds (app/build.mjs)
 app/dist/
+
+# runs of the bot dev harness (bot/dev.js), inside each bot folder
+.runs/

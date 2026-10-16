@@ -171,7 +171,9 @@ test('house-submit: a bundle goes as kind wasm with its binary files in base64, 
     assert.deepStrictEqual([js.kind, js.entry, js.base64], ['js', 'rush.js', undefined]);
     assert.strictEqual(houseDoc('py', dir({ 'main.py': 'x' }), { note: 'n', entry: 'main.py' }).kind, 'python');
     assert.throws(() => houseDoc('rush', dir({ 'rush.js': 'x' }), { note: 'n' }), /no bot\.js/);
-    assert.throws(() => houseDoc('rush', dir({ 'bot.js': 'x', 'a.bin': Buffer.from([0, 1]) }), { note: 'n' }), /a\.bin is not text/);
+    // a source bot's binary files go in base64 too, as arena_submit takes them
+    const bin = houseDoc('rush', dir({ 'bot.js': 'x', 'a.bin': Buffer.from([0, 1]) }), { note: 'n' });
+    assert.deepStrictEqual([bin.kind, bin.base64, Buffer.from(bin.files['a.bin'], 'base64')], ['js', ['a.bin'], Buffer.from([0, 1])]);
     assert.throws(() => houseDoc('Rush', dir({ 'bot.js': 'x' }), { note: 'n' }), /name/);
     assert.throws(() => houseDoc('rush', dir({ 'bot.js': 'x' }), { note: ' ' }), /--note/);
     assert.throws(() => houseDoc('rush', dir({ 'arena.json': '{}' }), { note: 'n', entry: 'x.js' }), /no --entry/);

@@ -454,13 +454,7 @@ function remoteLane({
             queue.splice(queue.indexOf(g), 1);
         }
         // gameMs is whole milliseconds on the wire (the relay takes an integer), which a fractional --cap-ms could make it not
-        const job = { v: 1, seed, key: keyOf(seed), maxSteps, capMs, hangMs, gameMs: Math.round(gameMs), games: games.map((g) => ({ id: g.id, p1: g.p1, p2: g.p2 })), bots };
-        if (games.some((g) => g.decks)) {
-            // the lists this seed plays, each once (a seed's games deal the same two)
-            const used = [...new Set(games.flatMap((g) => g.decks))];
-            job.decks = used.map((i) => decks[i]);
-            job.games.forEach((jg, n) => (jg.decks = games[n].decks.map((i) => used.indexOf(i))));
-        }
+        const job = require('./arena/play-seed').seedJob(seed, games, { key: keyOf(seed), limits: { maxSteps, capMs, hangMs, gameMs }, bots, decks });
         const hexes = Object.values(bots).filter((b) => b.bundle).map((b) => b.bundle);
         let res;
         try {

@@ -114,7 +114,7 @@ function pack(job, work) {
     }
     // JavaScript: the files in src/, bundled into one script (only files inside src/ can be required), then compiled
     // with QuickJS into bot.wasm by Javy. require('./stdio') gives the arena's serve(), next to the entry and at the top:
-    // a stdio.js the bot brings (bot/stdio.js, copied to test at home) is replaced, since Node's needs Node.
+    // a stdio.js the bot brings (such as a copy of bot/stdio.js) is replaced, since Node's needs Node.
     const src = path.join(work, 'src');
     fs.mkdirSync(src, { recursive: true });
     const files = writeFiles(src, job.files, job.base64);
@@ -123,19 +123,21 @@ function pack(job, work) {
     for (const dir of new Set([src, path.dirname(path.join(src, entry))])) {
         fs.copyFileSync(path.join(COMPILED, 'js', 'serve.js'), path.join(dir, 'stdio.js'));
     }
-    let script;
+    const { build, sourcePositions } = require('../compiled/js/bundle');
+    let bundled;
     try {
-        script = require('../compiled/js/bundle').bundle(path.join(src, entry), [job.name], { root: src });
+        bundled = build(path.join(src, entry), [job.name], { root: src });
     } catch (e) {
         throw new IntakeError(`could not bundle ${entry}: ${tail(e.message, work)}`);
     }
     const js = path.join(work, 'bot.bundle.js');
-    fs.writeFileSync(js, script);
+    fs.writeFileSync(js, bundled.script);
     const javy = path.join(TOOLS, `javy-${TOOLCHAIN.javy.version}`, 'javy');
     need(fs.existsSync(javy), 'the arena has no Javy yet; try again later');
     const wasm = path.join(out, 'bot.wasm');
     const r = spawnSync(javy, ['build', ...TOOLCHAIN.javy.flags, '-o', wasm, js], { encoding: 'utf8', timeout: 180000, cwd: work, env: toolEnv() });
-    need(r.status === 0, `Javy could not compile it:\n${tail(r.stderr || r.error?.message, work)}`);
+    // QuickJS names a place in the bundled script (function.mjs:LINE:COLUMN): say which of the bot's files and lines it is
+    need(r.status === 0, `Javy could not compile it:\n${tail(sourcePositions(r.stderr || r.error?.message || '', bundled.sources), work)}`);
     const m = manifest(job.name, 'js', wasm, 'wasi-p1', { cmd: './bot.wasm', args: [], env: {} }, job.owner);
     fs.writeFileSync(path.join(out, 'arena.json'), `${JSON.stringify(m, null, 2)}\n`);
     return out;
@@ -502,17 +504,25 @@ function hidden() {
         '/root/.arena-secret', '/root/.ccr-hearth-status-nudge', '/home/claude/.claude'];
 }
 
+/**
+ * The tools that packing and checking bots of these kinds needs and that are not here, by name: Javy for js, CPython for
+ * WASI for python, and wasmtime for Python (the python3 on PATH, as run.py starts) for every kind.
+ */
+function toolsMissing(kinds = KINDS) {
+    return [
+        kinds.includes('js') && !fs.existsSync(path.join(TOOLS, `javy-${TOOLCHAIN.javy.version}`, 'javy')) && 'Javy',
+        kinds.includes('python') && !fs.existsSync(path.join(TOOLS, TOOLCHAIN.runtimes['python-3.14-wasi'].dir, 'python.wasm')) && 'CPython for WASI',
+        spawnSync('python3', ['-I', '-c', 'import wasmtime'], { stdio: 'ignore', env: toolEnv() }).status !== 0 && 'wasmtime for Python'
+    ].filter(Boolean);
+}
+
 let toolsReady = false;
 /** Why the arena cannot check submissions yet (no wasmtime, Javy or CPython for WASI), or null once it can. */
 function toolchainMissing() {
     if (toolsReady) {
         return null;
     }
-    const missing = [
-        !fs.existsSync(path.join(TOOLS, `javy-${TOOLCHAIN.javy.version}`, 'javy')) && 'Javy',
-        !fs.existsSync(path.join(TOOLS, TOOLCHAIN.runtimes['python-3.14-wasi'].dir, 'python.wasm')) && 'CPython for WASI',
-        spawnSync('python3', ['-I', '-c', 'import wasmtime'], { stdio: 'ignore', env: toolEnv() }).status !== 0 && 'wasmtime for Python'
-    ].filter(Boolean);
+    const missing = toolsMissing();
     toolsReady = !missing.length;
     return missing.length ? `no ${missing.join(', ')} (the games image builds them; elsewhere see bot/compiled/README.md)` : null;
 }
@@ -666,7 +676,7 @@ async function main(argv) {
     process.stdout.write(`${JSON.stringify(res)}\n`);
 }
 
-module.exports = { pack, admit, packAndCheck, enter, checkIsolated, intakeOnce, release, stopCheckers, toolchainMissing, lastResult, bundleFiles, writeFiles, RETRIES };
+module.exports = { pack, admit, packAndCheck, enter, checkIsolated, intakeOnce, release, stopCheckers, toolchainMissing, toolsMissing, lastResult, bundleFiles, writeFiles, RETRIES, CHECK_MS };
 if (require.main === module) {
     main(process.argv.slice(2)).catch((e) => {
         console.error(e.stack ?? e.message);

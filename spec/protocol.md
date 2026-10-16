@@ -5,10 +5,9 @@ over a pipe to a program in any language, as plain objects to a JavaScript objec
 server API such as the arena's. Only the transport differs. Bots that drive the engine object directly are a special
 case for JavaScript search code ([bot-interface.md](bot-interface.md#native-bots)).
 
-Schema: [`schemas/protocol.schema.json`](schemas/protocol.schema.json). Reference clients, in holocron's `bots/examples/`:
-`random_bot.py` (Python, standard library), `random-bot.js` and `search-bot.js` (JavaScript, in process or as a program;
-the second searches with simulations). This repo's tests play copies of the two JavaScript ones
-(`bot/test/fixtures/`).
+Schema: [`schemas/protocol.schema.json`](schemas/protocol.schema.json). A bot for the arena is a program that reads
+these messages on stdin and writes its replies on stdout: [`bot/arena/BUILD.md`](../bot/arena/BUILD.md) has a whole
+bot in Python and in JavaScript, and [Running bot programs](#running-bot-programs) says how to play one.
 
 ## Conversation
 
@@ -45,15 +44,15 @@ referee                              bot
 
 - **stdio.** The referee starts the program and writes one JSON object per line (UTF-8, `\n`) to its stdin; the bot
   answers one line per reply on stdout and logs only to stderr. One program plays one seat at a time and may play many
-  games in a row, each starting with `hello`. End-of-file on stdin means exit. Implemented by `bot/stdio.js`
-  `StdioClient`; register programs in `bot/external-bots.json` (below).
+  games in a row, each starting with `hello`. End-of-file on stdin means exit. Every bot the arena plays is such a
+  program, run in its WebAssembly sandbox (`bot/compiled/run.py`, started by `bot/stdio.js` `StdioClient`).
 - **In process (JavaScript).** An object `{ name, hello?(msg), decide(msg, sim), over?(msg) }`. Each method returns
   the reply or a promise of it; `hello` defaults to `{"t":"ready","v":2}` and `over` to `{"t":"ok"}`. `sim(request)`
   returns a promise of the `simulated` reply: always `await` it. Messages are shared objects, so do not modify them.
-  `serve(client)` in `bot/stdio.js` runs the same object as a stdio program, so a bot tested in process can be
-  deployed as a program unchanged. In-process code runs inside the referee and can reach the engine, so it is trusted:
-  the referee enforces `ms` when control comes back to it (past it, `sim` promises never settle, so a loop of sims
-  cannot hold the referee up), but it cannot stop a synchronous loop.
+  A JavaScript bot program is written this way: `serve(client)` from `./stdio` (BUILD.md) answers the messages on
+  stdin with the object's replies. The referee's own `heuristic` and `rush` are such objects run inside the referee,
+  where code can reach the engine and is trusted: the referee enforces `ms` when control comes back to it (past it,
+  `sim` promises never settle, so a loop of sims cannot hold the referee up), but it cannot stop a synchronous loop.
 - **Request-response (HTTP, WebSocket, MCP tool calls).** One call per bot message: the call carries the bot's
   message and returns the referee's next message; the first call carries no message and returns `hello`. `ms` counts
   from when the referee hands its message out. Sessions, authentication and match-making belong to the server that
@@ -185,7 +184,7 @@ the action has them; plus:
 | `kind` | What it is | Extra |
 |---|---|---|
 | `button` | A prompt button (Pass, Done, a menu choice). | |
-| `card` | Click a card: play it, attack with it, target it, select it. | `card: { id, n, s, zone, ctl }` |
+| `card` | Click a card: play it, attack with it, target it, select it. | `card: { id, n, s, zone, ctl }`: `zone` is where the card is (`hand`, `resource`, `groundArena`, `spaceArena`, `base` for a base or a leader not deployed, `discard`, `deck`, `capture`, `outsideTheGame`, or `null`), `ctl` the seat that controls it |
 | `option` | A dropdown entry or a number (`label` `#<n>`). A "name a card" dropdown lists about 1,900 entries. | |
 | `displayCard` | Pick one of the shown cards (`arg` is its id). | |
 | `perCardButton` | A button on one shown card. | |
@@ -202,8 +201,7 @@ A legal split names only listed targets, each at most once, with integer amounts
 Some legal actions change nothing. Mystic Monastery's action, used while you already have the Force, leaves the board
 as it was, and when the opponent is out for the phase you get the same decision again. A bot that ranks such an action
 above passing repeats it until the step cap (`STEP_CAP`, nobody wins). Guard against it, for example by never making
-the same choice twice for the same `state`, `prompt` and `actions`, as the example search bot does
-(`bot/test/fixtures/search-bot.js`).
+the same choice twice for the same `state`, `prompt` and `actions`.
 
 ### `sim` → `simulated`
 
@@ -287,28 +285,14 @@ to finish before the next game is done. A failure here changes no result; the pr
 
 ## Running bot programs
 
-`bot/external-bots.json` (or the file named by `$SWU_EXTERNAL_BOTS`) maps a bot name to a program; the name then works
-in `node bot/tournament.js --bots ...` like any other bot.
+There is one way to run a bot program: the dev harness, `npm run dev -- <bot folder> --owner <your GitHub login>`. It
+packs the folder as `arena_submit` sends it, checks it with the arena's checker, and plays it in the arena's sandbox
+against `heuristic` and `rush` (or `--vs` other bot folders), on the rated rounds' deck lists and time rules, with
+replays, transcripts and a report. The bot only talks this protocol on stdin and stdout; the harness does the rest and
+sends nothing anywhere. `bot/arena/BUILD.md` ("Test locally") and the header of `bot/dev.js` describe it.
 
-```json
-{
-  "my-rust-bot": { "cmd": "../my-bot/target/release/my-bot", "args": ["mcts"], "lang": "rust" },
-  "py-random": { "cmd": "python3", "args": ["bots/examples/random_bot.py"], "cwd": "../holocron", "stderr": "ignore", "lang": "python" }
-}
-```
-
-| Option | Default | Meaning |
-|---|---|---|
-| `cmd`, `args` | required, `[]` | Program to start: the bot itself, or a script that `exec`s it (closing a program ends its stdin, then kills it 2 s later). |
-| `cwd`, `env` | repo root, `{}` | Working directory, extra environment variables. |
-| `stderr` | `inherit` | `inherit` shows the program's stderr, `ignore` drops it. |
-| `timeoutMs`, `startTimeoutMs` | 10000, 30000 | This bot's `ms` for `decide`/`over` and for `hello`. A game's own `limits` (`playGame`) override them. |
-| `lang` | none | Language label for replays and the dashboard (`rust`, `python`, ...). |
-| `stateful` | `false` | `true` when the program learns from game to game (after `over`): `bot/ladder.js --resume` then plays the run again from the start, as a resumed run would start the program fresh. |
-| `inputs` | none | Other files or folders the program reads (from `cwd`), so `bot/ladder.js --resume` notices when they change. Files named in `cmd`/`args`, and the files next to one outside the repo, already count. |
-
-A tournament keeps one process per bot for the whole run (two when a game needs the same bot in both seats). From
-JavaScript: `new StdioClient(name, options)` from `bot/stdio.js`, passed to `playGame` like any bot.
+In a rated game each bot has a thinking budget for the whole game (60 s by default) in place of the defaults in
+rule 2: every message's `ms` is the part of that budget the bot has left.
 
 ## Versions
 

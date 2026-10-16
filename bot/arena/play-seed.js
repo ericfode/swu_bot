@@ -309,10 +309,52 @@ if (require.main === module) {
         require('../game-pool').killChildren(null);
         process.exit(code);
     };
+    // started by the dev harness (bot/dev.js), in a process group of its own: once the harness is gone, even killed by
+    // SIGKILL, so is the group (this process, its workers' bot programs), so no game plays on alone. The games machine
+    // and helpers never set SWU_DEV_PARENT.
+    const parent = Number(process.env.SWU_DEV_PARENT);
+    if (Number.isSafeInteger(parent) && parent > 1) {
+        setInterval(() => {
+            if (process.ppid !== parent) {
+                try {
+                    process.kill(-process.pid, 'SIGKILL');
+                } catch {} // not a group leader: this process alone
+                done(1);
+            }
+        }, 1000).unref();
+    }
     main(process.argv.slice(2)).then((doc) => write(`${JSON.stringify(doc)}\n`, () => done(0)), (e) => {
         console.error(`play-seed: ${String(e?.message ?? e).split('\n')[0]}`);
         done(e instanceof Refused ? 2 : 1);
     });
+}
+
+/**
+ * A job for some games of one seed (each {id, p1, p2, decks?}), as the games machine builds it (server/src/games/
+ * Schedule.ts jobFor, which a server test pins equal to this) and as the remote lane offers it: `key` is the seed's game
+ * key (rng.js gameKey of the run key, never the run key) or null, gameMs whole milliseconds, `bots` each bot's entry
+ * ({kind: 'wasm', bundle} or {kind: 'resident'}, only the bots these games play are kept), and with deck lists (`decks`,
+ * all of them) only the lists these games use, in first-use order, each game's indices pointing into them.
+ */
+function seedJob(seed, games, { key, limits, bots, decks = null }) {
+    const named = {};
+    for (const n of games.flatMap((g) => [g.p1, g.p2])) {
+        if (!bots[n]) {
+            throw new Error(`${n} has no entry in bots`);
+        }
+        named[n] = bots[n];
+    }
+    const job = {
+        v: 1, seed, key, maxSteps: limits.maxSteps, capMs: limits.capMs, hangMs: limits.hangMs, gameMs: Math.round(limits.gameMs),
+        games: games.map((g) => ({ id: g.id, p1: g.p1, p2: g.p2 })), bots: named
+    };
+    if (decks && games.some((g) => g.decks)) {
+        // the lists this seed plays, each once (a seed's games deal the same two)
+        const used = [...new Set(games.flatMap((g) => g.decks))];
+        job.decks = used.map((i) => decks[i]);
+        job.games.forEach((jg, n) => (jg.decks = games[n].decks.map((i) => used.indexOf(i))));
+    }
+    return job;
 }
 
 /**
@@ -323,4 +365,4 @@ function gameDecks(job, g) {
     return g.decks ? { p1: normalizeDeck(job.decks[g.decks[0]]), p2: normalizeDeck(job.decks[g.decks[1]]) } : null;
 }
 
-module.exports = { RESIDENTS, IN_PROCESS, residentsHere, checkJob, checkResolved, gameDecks, Refused };
+module.exports = { RESIDENTS, IN_PROCESS, GAME_ID, residentsHere, checkJob, checkResolved, gameDecks, seedJob, Refused };

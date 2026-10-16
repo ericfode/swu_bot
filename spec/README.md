@@ -47,9 +47,10 @@ Real replays: `/mnt/project-files/games/demo/` (v1 fields) and `/mnt/project-fil
 The conformance checks (determinism, keyed seeds, time budgets, stdio/in-process parity, simulations leave no trace,
 numbered deals, replays play again, v1 bots, splits, simulation mistakes, bot failures and forfeits, untimed limits)
 were `bot/protocol-test.js`, which is in this repo's history only; `npm test` covers part of them. To try your own
-program, register it in `bot/external-bots.json` and play it:
-`node bot/tournament.js --bots my-bot,random --games 4 --out replays/try`, then validate the replays and check
-`index.json` for `ERROR` games and their `by`.
+bot, run `npm run dev -- <bot folder> --owner <your GitHub login>`: the arena's checker packs and starts it in the
+sandbox, it plays `heuristic` and `rush` as in a rated round, and the report names each kind of game it lost by its own
+fault, with the step, its last messages and a command that sends that game to it again (`bot/arena/BUILD.md`, "Test
+locally"). Its replays and `index.json` are in the formats above.
 
 ## Verified against real games
 

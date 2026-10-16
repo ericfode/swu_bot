@@ -21,7 +21,7 @@ it, and it never runs a bot. `WINDOW.md` describes its API, sign-in and deploys.
 - `oauth.js`, `mcp-http.js`: `/mcp`, the remote MCP server each person's app signs in to with GitHub. Builders submit
   bots there (`arena_submit`) and read their results.
 - `connect.js`: the device grant for an agent with no browser, such as a builder's Claude Code on their own computer.
-- `BUILD.md`: how to write and submit a bot. `/mcp` serves it as `arena_guide`.
+- `BUILD.md`: how to write, test (`npm run dev`) and submit a bot. `/mcp` serves it as `arena_guide`.
 - `push.js`: the client every part of the project uses to send its data to the window.
 
 `GET /` is the SWU Arena app (`app/`) when its friends build exists: run `npm run app -- --public` to make
@@ -107,7 +107,10 @@ reads), else `arena-home/` in the repo.
 The code, besides `gamesctl.js` and `intake.js`:
 
 - `play-seed.js`: plays one seed's games (a job: bots, decks, seed, key, limits) and answers their results and
-  replays; the only way the games machine and its helpers play a game.
+  replays; the only way the games machine and its helpers play a game. The dev harness (`bot/dev.js`,
+  `npm run dev -- <bot folder> --owner <login>`) plays a builder's games with it too, after arena_submit's rules and
+  the same check as the intake (`intake.js --check`), so a bot behaves there as it will in a round. Started by the
+  harness (`SWU_DEV_PARENT`), it stops its process group once the harness is gone.
 - `referee.js`: a round's rules, lineup and deck lists (`gamesctl round`) and its standings, `rounds/r<K>.md` and
   panels (`gamesctl publish`). Run by hand, it still plays a whole round through `bot/ladder.js` (local rehearsals).
 - `api.js`: competitors, versions and results (below).

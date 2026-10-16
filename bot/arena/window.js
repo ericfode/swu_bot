@@ -35,7 +35,7 @@ const { createPlay } = require('./play');
 const { createTables } = require('./tables');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
-const { builderName, ownsName } = require('./api');
+const { builderName, ownsName, notYours } = require('./api');
 
 // server.js's Accept-Encoding rule (q values, *); required on use because server.js requires this file
 const acceptsGzip = (req) => require('./server').acceptsGzip(req.headers['accept-encoding']);
@@ -83,6 +83,25 @@ function need(cond, code, msg) {
     if (!cond) {
         throw new WindowError(code, msg);
     }
+}
+
+/**
+ * arena_submit's checks of a submission's files (count, paths, size, base64 list, entry); throws WindowError. The dev
+ * harness (bot/dev.js) applies them to a folder packed as a builder's submission.
+ */
+function submitFiles({ files, base64 = [], entry }) {
+    need(files && typeof files === 'object' && !Array.isArray(files), 'bad_request', 'files: an object of path -> content');
+    const paths = Object.keys(files);
+    need(paths.length >= 1 && paths.length <= SUBMIT_FILES, 'bad_request', `files: 1 to ${SUBMIT_FILES} files`);
+    need(Array.isArray(base64) && base64.every((p) => typeof p === 'string' && p in files), 'bad_request', 'base64: a list of paths that are in files');
+    let bytes = 0;
+    for (const p of paths) {
+        need(/^[\w.-]+(\/[\w.-]+)*$/.test(p) && p.length <= 200 && !p.split('/').some((x) => x === '..' || x === '.' || x === '.git'), 'bad_request', `files: ${p} is not a plain relative path`);
+        need(typeof files[p] === 'string', 'bad_request', `files: ${p} must be a string`);
+        bytes += base64.includes(p) ? Math.floor(files[p].length * 3 / 4) : Buffer.byteLength(files[p]);
+    }
+    need(bytes <= SUBMIT_BYTES, 'too_large', `files: at most ${SUBMIT_BYTES / 1e6} MB in all`);
+    need(entry === undefined || (typeof entry === 'string' && entry in files), 'bad_request', 'entry: one of the files');
 }
 
 /**
@@ -760,7 +779,7 @@ function createWindow(opts = {}) {
         const { admins, fromEnv } = auth.fixed();
         const others = [...admins, ...fromEnv, ...invited()].map((x) => String(x).toLowerCase()).filter((x) => x !== login);
         if (!ownsName(login, n) || others.some((x) => builderName(x) === n)) {
-            return `"${n}" is not yours: use your builder name ${builderName(login)} (whoami), or it with _ and a suffix, e.g. ${builderName(login)}_fast`;
+            return notYours(login, n);
         }
         // a competitor of someone else's: the arena refuses it too, but say so now
         const theirs = (arenaMethods.status().competitors ?? []).find((c) => c?.name === n);
@@ -778,18 +797,7 @@ function createWindow(opts = {}) {
         need(!who.agent || name === undefined || name === null || name === who.agent, 'forbidden', `this agent's token submits only as ${who.agent}`);
         need(SUBMIT_KINDS.includes(kind), 'bad_request', `kind: one of ${SUBMIT_KINDS.join(', ')}`);
         need(typeof note === 'string' && note.trim() && note.length <= 300, 'bad_request', 'note: one line (up to 300 characters) saying what this version changes');
-        need(files && typeof files === 'object' && !Array.isArray(files), 'bad_request', 'files: an object of path -> content');
-        const paths = Object.keys(files);
-        need(paths.length >= 1 && paths.length <= SUBMIT_FILES, 'bad_request', `files: 1 to ${SUBMIT_FILES} files`);
-        need(Array.isArray(base64) && base64.every((p) => typeof p === 'string' && p in files), 'bad_request', 'base64: a list of paths that are in files');
-        let bytes = 0;
-        for (const p of paths) {
-            need(/^[\w.-]+(\/[\w.-]+)*$/.test(p) && p.length <= 200 && !p.split('/').some((x) => x === '..' || x === '.' || x === '.git'), 'bad_request', `files: ${p} is not a plain relative path`);
-            need(typeof files[p] === 'string', 'bad_request', `files: ${p} must be a string`);
-            bytes += base64.includes(p) ? Math.floor(files[p].length * 3 / 4) : Buffer.byteLength(files[p]);
-        }
-        need(bytes <= SUBMIT_BYTES, 'too_large', `files: at most ${SUBMIT_BYTES / 1e6} MB in all`);
-        need(entry === undefined || (typeof entry === 'string' && entry in files), 'bad_request', 'entry: one of the files');
+        submitFiles({ files, base64, entry });
         const n = name ?? who.agent ?? builderName(login);
         need(typeof n === 'string' && /^[a-z][a-z0-9_]{0,31}$/.test(n), 'bad_request', 'name: 1-32 characters, lowercase letters, digits and _, starting with a letter');
         const problem = nameProblem(login, n);
@@ -1297,4 +1305,4 @@ function createWindow(opts = {}) {
     return { handle, store, auth, wakeGames, tables };
 }
 
-module.exports = { createWindow, wakeGamesAt, Store, storeReader, settleRun, scrub, appBuilder, NS, FRIEND_NS };
+module.exports = { createWindow, wakeGamesAt, Store, storeReader, settleRun, scrub, appBuilder, submitFiles, NS, FRIEND_NS };

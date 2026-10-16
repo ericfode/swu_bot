@@ -42,8 +42,11 @@ npm run gate
 ```
 
 `setup` installs the exact lockfile dependency versions with `npm ci` at the root and in `forceteki`, builds the
-pinned engine, then downloads official card data. It does not start services or require API keys, and it needs no
-Rust or viewer build: Kessel and the viewer kit come prebuilt in `vendor/`. Native npm dependencies are installed for
+pinned engine, then downloads official card data. Last it sets up the sandbox submitted bots run in, for
+`npm run dev`: wasmtime for Python in `build/compiled/venv`, and Javy and CPython for WASI in `build/compiled/.tools`
+(checked against the sha256 in `bot/compiled/toolchain.json`; Javy is pinned for Linux and macOS). It needs
+Python 3 with its `venv` module; `--skip-sandbox` leaves the sandbox out. It does not start services or require API
+keys, and it needs no Rust or viewer build: Kessel and the viewer kit come prebuilt in `vendor/`. Native npm dependencies are installed for
 each machine; do not copy `node_modules` between macOS and Linux.
 
 The engine's TypeScript build can exceed Node's default 2 GB heap in a Linux workspace. On a machine with enough
@@ -70,7 +73,9 @@ steps with p2 winning each game.
 ## Restricted networks
 
 Dependency installation needs `registry.npmjs.org`; submodule initialization needs `github.com`. Real-game setup also
-needs `admin.starwarsunlimited.com`. Card artwork is optional and comes from `cdn.swu-db.com` while viewing replays.
+needs `admin.starwarsunlimited.com`. The sandbox needs `pypi.org` and `files.pythonhosted.org` (wasmtime) and
+`github.com` release downloads (Javy, CPython for WASI). Card artwork is optional and comes from `cdn.swu-db.com`
+while viewing replays.
 
 If the official card-data service is unavailable, `npm run setup -- --skip-cards` still builds the engine and
 `npm test` still runs; the tests that play real games skip or fail without card data. Retry
@@ -79,6 +84,8 @@ If the official card-data service is unavailable, `npm run setup -- --skip-cards
 ## Daily commands
 
 ```bash
+npm run dev -- ../my-bot --owner <login>   # play a bot folder as the arena does: checked, sandboxed, vs heuristic and rush
+node bot/dev.js --view ../my-bot/.runs/<run>   # watch that run's replays in the browser
 npm run random -- 3 1 6000          # random real seeded games; needs card data
 npm run gate                        # determinism gate
 npm run tournament -- --bots rush,heuristic,random --games 4 --out replays/demo   # with replays
@@ -87,8 +94,13 @@ npm run app                         # SWU Arena app -> app/dist/app.html
 npm test
 ```
 
-A ladder started where `SWU_WINDOW` is set (cloud sessions set it) sends its run to the live arena window; unset it
-for a test run. To look at replays, open them in Holotable (its own repo) or in the arena window.
+`npm run dev` is how to write a bot: the bot only reads protocol messages and answers them, and the harness packs it as
+its owner's `arena_submit` would (`--owner <GitHub login>`; `--house` for the arena's own bots), checks it with the
+arena's checker, plays it in the sandbox on the rated rounds' deck lists and time rules, and reports each kind of game
+it lost by its own fault or never finished, with a command that sends that game to the bot again (`bot/arena/BUILD.md`,
+"Test locally"). It never sends anything to the arena window, whatever the environment holds. A ladder started where
+`SWU_WINDOW` is set (cloud sessions set it) sends its run to the live arena window; unset it for a test run. To look at
+replays, open them in Holotable (its own repo) or in the arena window.
 
 ## Cloud and source-transfer setup
 
