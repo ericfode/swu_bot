@@ -83,6 +83,16 @@ test('a concession ends a people game for both screens, named by seat', { skip }
     assert.equal(host.peerAct({ t: 'act', seq: 1, i: 0 }), 'no game is being played');
 });
 
+test("an arena version is guarded with its round's thinking time, and 45 s when the lineup gives none", { skip }, () => {
+    const { createOpenHost, CAP_MS } = require('../table/open');
+    const host = createOpenHost({ env: env(), send: () => undefined });
+    assert.equal(host.capOf('tinybot-v2'), CAP_MS);
+    host.setCap('tinybot-v2', 30000);
+    host.setCap('other-v1', null);
+    host.setCap('tiny-v1', 5);
+    assert.deepStrictEqual([host.capOf('tinybot-v2'), host.capOf('other-v1'), host.capOf('tiny-v1')], [30000, CAP_MS, CAP_MS]);
+});
+
 test('a person plays an arena bot made by the registry, and a custom deck list (SWUDB export form) is checked first', { skip }, async () => {
     const { createOpenHost } = require('../table/open');
     const { seededRng } = require('../rng');

@@ -4,7 +4,7 @@
  * tab, with the referee in a worker (bot/swarm/build.js tables-worker.js) on the swarm's engine pack. Two kinds of game:
  *
  *   - a person against a bot: Eric's JEPA bot (jepa.js) or an arena version whose bundle the worker has unpacked
- *     under ARENA_HOME (players/index.js finds it there), guarded with the arena's per-game thinking time;
+ *     under ARENA_HOME (players/index.js finds it there), guarded with its round's thinking time per game (setCap);
  *   - two people: this tab's person and a guest whose browser is linked to this one. The guest's seat is a PersonSeat
  *     whose messages go to `sendPeer`, and its answers come back through peerAct. Both players are trusted (Eric,
  *     2026-10-16: "for the first version treat both players as trusted"): this tab holds both hands and the deal.
@@ -12,6 +12,7 @@
  *   const host = createOpenHost({ send, sendPeer });   // each: every table message (table.js) for that person, in order
  *   host.options()                                    // {decks, botDeck}: the tournament lists
  *   host.checkDeck(deck)                              // a deck list (SWUDB form) as games take it, or throws why not
+ *   host.setCap(bot, capMs) / host.capOf(bot)         // an arena version's thinking time per game (its lineup's capMs)
  *   await host.start({ mode: 'bot', bot, deck, botDeck, seed, key, you })        // {id, seat}
  *   await host.start({ mode: 'people', deck, peerDeck, you, peer, seed, key })   // {id, seat, peerSeat}
  *   host.act(reply) / host.peerAct(reply)             // null when taken, else why not (the decision stays open)
@@ -32,7 +33,7 @@ const { deckOptions, cardTextOf, RANDOM } = require('./host');
 const { jepaMaker, JEPA_NAME } = require('./jepa');
 
 const DECKS = require('path').join(__dirname, '..', 'decks', 'ash-meta-2026-09.json');
-const CAP_MS = 45000; // the arena's thinking time per bot per game (status thinkCapMs)
+const CAP_MS = 45000; // the arena's thinking time per bot per game when the lineup gives none (status thinkCapMs)
 const NAME = /^[A-Za-z0-9][\w .@#+()'&/,!?-]{0,79}$/; // as the window keeps games (tables.js)
 
 const seatsOf = (seed) => ((seed >>> 0) % 2 === 0 ? ['p1', 'p2'] : ['p2', 'p1']);
@@ -41,6 +42,7 @@ function createOpenHost({ send, sendPeer = () => undefined, env = new Env(), dec
     const { decks } = loadDecks(decksFile, env);
     const byName = new Map(decks.map((d) => [d.metadata.name, d]));
     const lookups = engineLookups(env);
+    const caps = new Map(); // arena version -> its round's capMs
     let jepa = null;
     let game = null;
 
@@ -54,7 +56,7 @@ function createOpenHost({ send, sendPeer = () => undefined, env = new Env(), dec
         if (!raw || (typeof raw.choose !== 'function' && typeof raw.decide !== 'function')) {
             throw new Error(`${name} is not a bot`);
         }
-        return guard(raw, { capMs });
+        return guard(raw, { capMs: host.capOf(name) });
     });
 
     /** A deck list ready for a game, or throws every problem with it. */
@@ -153,6 +155,12 @@ function createOpenHost({ send, sendPeer = () => undefined, env = new Env(), dec
         peerAct: (reply) => (game && !game.over && game.guest ? game.guest.answer(reply) : 'no game is being played'),
         concede: () => concede('person'),
         peerConcede: () => concede('guest'),
+        setCap: (name, ms) => {
+            if (Number.isSafeInteger(ms) && ms >= 1000) {
+                caps.set(name, ms);
+            }
+        },
+        capOf: (name) => caps.get(name) ?? capMs,
         cardText: (extra = []) => cardTextOf(env, [...decks, ...extra.map((d) => deckOf(d, 'deck'))])
     };
     return host;

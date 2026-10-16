@@ -48,7 +48,7 @@ function machine() {
         if (u.pathname === '/v1/swarm/manifest.json') {
             body = JSON.stringify({ build: 'b1', cards: 'c1' });
         } else if (u.pathname === '/v1/swarm/lineup.json') {
-            body = JSON.stringify({ round: 7, bots: [{ name: 'tinybot-v2', bundle: HEX, bytes: TAR.length }, { name: 'Bad Name', bundle: HEX }] });
+            body = JSON.stringify({ round: 7, capMs: 30000, bots: [{ name: 'tinybot-v2', bundle: HEX, bytes: TAR.length }, { name: 'Bad Name', bundle: HEX }] });
         } else if (u.pathname.startsWith('/v1/swarm/bot/')) {
             [status, body] = u.pathname.endsWith(HEX) ? [200, TAR] : [404, '{}'];
         }
@@ -251,6 +251,7 @@ test("the bots come from the arena's latest round, joined with the arena's own d
             ['tinybot-v2', 'Tiny Bot', 'pal2', 1234, 'python', `/tables/bot/${HEX}.tar`]
         ], 'a lineup entry with a bad name is dropped');
         assert.strictEqual(info.bots[1].note, 'small and quick');
+        assert.strictEqual(info.bots[1].capMs, 30000, "the round's thinking time, which the page sends with the bundle");
 
         await new Promise((r) => setTimeout(r, 50)); // the lineup's bundles are fetched in the background
         assert.ok(fs.existsSync(path.join(home, 'swarm-bots', `${HEX}.tar`)), 'kept on the window');
@@ -461,6 +462,29 @@ test('a slow upload is stamped when it is kept, so the kept list stays in played
         const rows = JSON.parse(store.getDoc('runs', 'tables')).games;
         assert.strictEqual(rows.at(-1).id, late.id, 'the slow upload is kept last');
         assert.ok(rows[0].playedAt < rows[1].playedAt, `${rows[0].playedAt} before ${rows[1].playedAt}`);
+    } finally {
+        await close();
+    }
+});
+
+test('games kept in the same millisecond get later times, so a reader going on from the last one gets the next', async () => {
+    const T = Date.parse('2026-10-16T03:00:00.000Z');
+    const { w, store } = makeWindow('stamps', { limits: { now: () => T } });
+    const { go, post, close } = await serve(w);
+    try {
+        const pal = session(w, 'pal');
+        const me = (await result(await go('/api/tables/info', { cookie: pal }))).you;
+        const token = (await result(await post('/api/tables/token', pal))).token;
+        const read = (p) => go(p, { headers: { authorization: `Bearer ${token}` } });
+        const first = (await result(await post('/api/tables/games', pal, { replay: replay({ seed: 900, p1: me }), seat: 'p1' }))).id;
+        const page = await result(await read('/api/open/games'));
+        assert.deepStrictEqual([page.games.map((g) => g.id), page.next], [[first], null]);
+        const since = page.games[0].playedAt;
+        const second = (await result(await post('/api/tables/games', pal, { replay: replay({ seed: 901, p1: me }), seat: 'p1' }))).id;
+        const rest = await result(await read(`/api/open/games?since=${encodeURIComponent(since)}`));
+        assert.deepStrictEqual(rest.games.map((g) => g.id), [second], 'the game kept later in the same millisecond');
+        const rows = JSON.parse(store.getDoc('runs', 'tables')).games;
+        assert.deepStrictEqual(rows.map((r) => r.playedAt), [new Date(T).toISOString(), new Date(T + 1).toISOString()]);
     } finally {
         await close();
     }

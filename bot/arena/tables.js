@@ -332,7 +332,7 @@ function createTables({
             out.push({
                 name: b.name, title: typeof c?.title === 'string' ? c.title : agent, owner: typeof c?.owner === 'string' ? c.owner.replace(/^github:/, '') : null,
                 elo: Number.isFinite(c?.elo) ? Math.round(c.elo) : null, bytes: b.bytes, runtime: files.some((f) => /\.py$/.test(f)) ? 'python' : 'wasm',
-                url: `/tables/bot/${b.bundle}.tar`, bundle: b.bundle, note: typeof v?.note === 'string' ? v.note.slice(0, 160) : null
+                url: `/tables/bot/${b.bundle}.tar`, bundle: b.bundle, capMs: lineup.capMs ?? null, note: typeof v?.note === 'string' ? v.note.slice(0, 160) : null
             });
         }
         return [out[0], ...out.slice(1).sort((a, b) => (b.elo ?? -1) - (a.elo ?? -1))];
@@ -467,8 +467,11 @@ function createTables({
         if (!row) {
             const id = `open-${game.header.seed.toString(16).padStart(8, '0')}-${sha256.slice(0, 8)}`;
             store.putReplay(RUN, id, Buffer.from(replay, 'utf8'));
-            // stamped as it joins the list, so the list stays in playedAt order when uploads overlap
-            row = rowOf(id, game, { sha256, bytes: Buffer.byteLength(replay), at: new Date(now()).toISOString() });
+            // stamped as it joins the list, each a millisecond after the last at least, so the list stays in playedAt
+            // order when uploads overlap and a reader that went on from the last game's time never skips a later one
+            const last = Date.parse(doc.games.at(-1)?.playedAt ?? '');
+            const at = Math.max(now(), Number.isFinite(last) ? last + 1 : 0);
+            row = rowOf(id, game, { sha256, bytes: Buffer.byteLength(replay), at: new Date(at).toISOString() });
             const all = [...doc.games, row];
             doc.games = all.slice(-maxRows);
             doc.bots = [...new Set([...doc.bots, ...game.header.players.filter((x) => x.lang !== 'person').map((x) => x.bot)])];

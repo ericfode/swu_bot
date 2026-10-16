@@ -286,9 +286,9 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
           waits.started = { ok, no };
           worker.postMessage({ t: 'start', game, ...(files ? { files } : {}) });
         }),
-        bot: (name, hex, tar) => new Promise((ok, no) => {
+        bot: (name, hex, tar, capMs) => new Promise((ok, no) => {
           waits.bot.set(name, { ok, no });
-          worker.postMessage({ t: 'bot', name, hex, tar }, [tar.buffer]);
+          worker.postMessage({ t: 'bot', name, hex, tar, capMs }, [tar.buffer]);
         }),
         checkDeck: (deck) => new Promise((ok, no) => {
           const k = ++n;
@@ -332,7 +332,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     const tar = await fetchBytes(b.url, b.title || name, b.bytes);
     progress(null);
     status(b.runtime === 'python' ? `Starting ${b.title || name} (the Python runtime downloads once, about 30 MB)…` : `Starting ${b.title || name}…`, 'busy');
-    await eng.bot(name, b.bundle, tar);
+    await eng.bot(name, b.bundle, tar, b.capMs);
     botsLoaded.add(name);
   }
 

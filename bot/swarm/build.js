@@ -173,13 +173,14 @@ self.onmessage = (e) => {
 `;
 
 // The tables worker's entry (bot/table/open.js). Messages in: {t: 'init', pack (its URL) or packBytes, botWorker,
-// pythonLib, pythonWasm}; {t: 'bot', name, hex, tar} unpacks an arena version's bundle (tar: Uint8Array) so the host
-// can make it; {t: 'checkDeck', n, deck}; {t: 'start', game: {mode, bot, deck, botDeck, peerDeck, you, peer}, files?};
-// {t: 'act', act}, {t: 'peerAct', n, act}, {t: 'concede'}, {t: 'peerConcede'}. Out: {t: 'ready', ms, build, cards,
-// options, cardText, isolated}; {t: 'botReady', name, error}; {t: 'deckChecked', n, deck, error}; {t: 'started', id,
-// seat, peerSeat, cardText} or {t: 'refused', error}; {t: 'acted', error}; {t: 'peerActed', n, error}; {t: 'msg', msg}
-// for every table message of this tab's person and {t: 'peer', msg} for the guest's (both end with the replay);
-// {t: 'error', message}. The seed and the key of each game come from the browser's crypto.getRandomValues.
+// pythonLib, pythonWasm}; {t: 'bot', name, hex, tar, capMs} unpacks an arena version's bundle (tar: Uint8Array) so the
+// host can make it, guarded with its round's capMs; {t: 'checkDeck', n, deck}; {t: 'start', game: {mode, bot, deck,
+// botDeck, peerDeck, you, peer}, files?}; {t: 'act', act}, {t: 'peerAct', n, act}, {t: 'concede'}, {t: 'peerConcede'}.
+// Out: {t: 'ready', ms, build, cards, options, cardText, isolated}; {t: 'botReady', name, error}; {t: 'deckChecked', n,
+// deck, error}; {t: 'started', id, seat, peerSeat, cardText} or {t: 'refused', error}; {t: 'acted', error};
+// {t: 'peerActed', n, error}; {t: 'msg', msg} for every table message of this tab's person and {t: 'peer', msg} for the
+// guest's (both end with the replay); {t: 'error', message}. The seed and the key of each game come from the browser's
+// crypto.getRandomValues.
 const TABLES_ENTRY = `
 const { createEngineRuntime } = load('./engine');
 const { createSpawn } = load('./processes');
@@ -249,6 +250,7 @@ async function addBot(msg) {
         if (runtime !== 'wasi-p1') {
             await ensurePython();
         }
+        host.setCap(msg.name, msg.capMs);
         post({ t: 'botReady', name: msg.name, error: null });
     } catch (e) {
         post({ t: 'botReady', name: msg.name, error: why(e) });
