@@ -98,8 +98,8 @@ git clone --recurse-submodules https://github.com/ericfode/swu_bot && cd swu_bot
 npm run setup        # the engine, the card data and the sandbox (wasmtime, Javy, CPython for WASI); Node 22
 ```
 
-Javy, which packs JavaScript bots, is pinned for Linux on x64 so far. On other computers setup says so, and the
-harness then packs Python bots and bundles only.
+Javy, which packs JavaScript bots, is pinned for Linux and macOS (x64 and ARM). On other computers setup says so,
+and the harness then packs Python bots and bundles only.
 
 Keep the bot in a folder of its own, holding only what you would send, and run
 

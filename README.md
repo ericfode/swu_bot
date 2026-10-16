@@ -44,7 +44,7 @@ npm run gate
 `setup` installs the exact lockfile dependency versions with `npm ci` at the root and in `forceteki`, builds the
 pinned engine, then downloads official card data. Last it sets up the sandbox submitted bots run in, for
 `npm run dev`: wasmtime for Python in `build/compiled/venv`, and Javy and CPython for WASI in `build/compiled/.tools`
-(checked against the sha256 in `bot/compiled/toolchain.json`; Javy is pinned for Linux on x64 so far). It needs
+(checked against the sha256 in `bot/compiled/toolchain.json`; Javy is pinned for Linux and macOS). It needs
 Python 3 with its `venv` module; `--skip-sandbox` leaves the sandbox out. It does not start services or require API
 keys, and it needs no Rust or viewer build: Kessel and the viewer kit come prebuilt in `vendor/`. Native npm dependencies are installed for
 each machine; do not copy `node_modules` between macOS and Linux.
