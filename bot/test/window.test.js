@@ -463,6 +463,8 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
         const zlib = require('zlib');
         const long = header('rush', 'heuristic') + Array.from({ length: 200 }, (_, i) => step(i)).join('') + end;
         w.store.putReplay('arena-t1-r1', 'g4', Buffer.from(long));
+        const big = header('rush', 'heuristic') + Array.from({ length: 200 }, (_, i) => `${JSON.stringify({ t: 'step', n: i, pad: 'x'.repeat(2000) })}\n`).join('') + end;
+        w.store.putReplay('arena-t1-r1', 'g5', Buffer.from(big));
         const [gzip, gzipSync] = [zlib.gzip, zlib.gzipSync];
         let [async, sync] = [0, 0];
         zlib.gzip = (...a) => (async++, gzip(...a));
@@ -477,6 +479,21 @@ test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay
             }
             assert.deepStrictEqual([async, sync], [1, 0]);
             assert.strictEqual(await (await fetch(at, { headers: { 'accept-encoding': 'gzip;q=0' } })).text(), long);
+            // a live poll's new lines are gzipped off the event loop too; a HEAD compresses nothing
+            const tail = await fetch(`${at}?from=${long.length - 2000}`, { headers: { 'accept-encoding': 'gzip' } });
+            assert.strictEqual(tail.headers.get('content-encoding'), 'gzip');
+            assert.strictEqual(await tail.text(), long.slice(-2000));
+            assert.strictEqual((await fetch(`${at}?from=${long.length - 2000}`, { method: 'HEAD', headers: { 'accept-encoding': 'gzip' } })).status, 200);
+            assert.deepStrictEqual([async, sync], [2, 0]);
+            // most of a big replay from any ?from (a page far behind, or anyone picking one) goes as it is: no request
+            // makes the window compress most of a replay again
+            for (let i = 0; i < 3; i++) {
+                const r = await fetch(`http://127.0.0.1:${srv.address().port}/g/arena-t1-r1/g5/game.jsonl?from=1`, { headers: { 'accept-encoding': 'gzip' } });
+                assert.strictEqual(r.headers.get('content-encoding'), null);
+                assert.strictEqual(r.headers.get('x-size'), String(big.length));
+                assert.strictEqual(await r.text(), big.slice(1));
+            }
+            assert.deepStrictEqual([async, sync], [2, 0]);
         } finally {
             Object.assign(zlib, { gzip, gzipSync });
         }

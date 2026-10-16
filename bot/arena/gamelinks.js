@@ -37,6 +37,7 @@ const parseOr = (s, d) => {
         return d;
     }
 };
+const gzip = (bytes) => new Promise((ok, no) => zlib.gzip(bytes, (e, gz) => (e ? no(e) : ok(gz)))); // off the event loop
 const ended = (buf) => !!buf && /"t":"end"/.test(buf.subarray(Math.max(0, buf.length - 4000)).toString('utf8'));
 
 /** The two seats and the result from a replay's header and end lines, for the page's title and preview. */
@@ -108,12 +109,11 @@ function createGameLinks({ store, publicUrl, kitFile, statics, replayFor, people
      * it, so every spectator who opens the page gets the same bytes without compressing them again.
      */
     function gzipped(k, buf) {
-        const gzip = () => new Promise((ok, no) => zlib.gzip(buf, (e, gz) => (e ? no(e) : ok(gz))));
         const e = hot.get(k);
         if (e?.buf !== buf) {
-            return gzip();
+            return gzip(buf);
         }
-        e.gz ??= gzip().then((gz) => {
+        e.gz ??= gzip(buf).then((gz) => {
             if (hot.get(k) === e) {
                 e.bytes += gz.length;
                 hotBytes += gz.length;
@@ -203,15 +203,17 @@ function createGameLinks({ store, publicUrl, kitFile, statics, replayFor, people
                 return true;
             }
             const from = Math.min(buf.length, Math.max(0, Number(url.searchParams.get('from')) || 0));
-            const head = { 'x-size': String(buf.length), 'x-gen': gen };
-            // the whole replay (opening the page) from the kept gzip; what came after `from` (a live poll) is small
-            if (from === 0 && buf.length > 1024 && require('./server').acceptsGzip(req.headers['accept-encoding'])) {
-                const gz = await gzipped(`${run}/${game}`, buf);
-                res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-cache', vary: 'accept-encoding', 'content-encoding': 'gzip', ...head });
-                res.end(req.method === 'HEAD' ? undefined : gz);
-                return true;
-            }
-            sendText(res, req, 200, 'application/x-ndjson', buf.subarray(from), head);
+            const body = buf.subarray(from);
+            // the whole replay (opening the page) from the kept gzip; what came after `from` (a live poll: a few new
+            // lines) gzipped off the event loop; a bigger part (a page far behind, or any ?from a client picks) goes as
+            // it is, so no request makes the window compress most of a replay again
+            const zip = body.length > 1024 && (from === 0 || body.length <= 256e3) && require('./server').acceptsGzip(req.headers['accept-encoding']);
+            const out = req.method === 'HEAD' ? undefined : !zip ? body : from === 0 ? await gzipped(`${run}/${game}`, buf) : await gzip(body);
+            res.writeHead(200, {
+                'content-type': 'application/x-ndjson', 'cache-control': 'no-cache', vary: 'accept-encoding', 'x-size': String(buf.length), 'x-gen': gen,
+                ...(zip ? { 'content-encoding': 'gzip' } : {})
+            });
+            res.end(out);
             return true;
         }
         if (!buf && !listed) {
