@@ -254,6 +254,8 @@ dialog.pal::backdrop { background: rgba(5, 8, 15, .45); }
   .tabbar a { display: grid; justify-items: center; gap: var(--sp-2); padding: var(--sp-8) 0 var(--sp-6); font-size: var(--fs-xs); color: var(--muted); }
   .tabbar a svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; }
   .tabbar a[aria-current="page"] { color: var(--accent); }
+  .tabbar a.tab-play { color: var(--accent); font-weight: 700; }
+  .top-right .playbtn { display: none; }
   .bothead { grid-template-columns: auto 1fr; } .bothead .stats { grid-column: 1 / -1; justify-content: flex-start; } .bothead .stats div { text-align: left; }
   .phase { grid-template-columns: 1fr; }
   .kanban { grid-template-columns: minmax(0, 1fr); }
@@ -550,6 +552,10 @@ figure.pd { margin: 0; }
 .pd figcaption { font-size: var(--fs-sm); color: var(--muted); margin-top: var(--sp-6); }
 /* share page */
 .searchbtn[hidden] { display: none; }
+/* the top bar's Play button: the window's /play page (bot/arena/play.js), so only where the window serves the app */
+.playbtn { flex: none; display: inline-flex; align-items: center; gap: var(--sp-6); font-family: var(--display); font-weight: 700; font-size: var(--fs-base); color: var(--on-accent); background: var(--accent); border-radius: var(--r); padding: var(--sp-4) var(--sp-12) var(--sp-4) var(--sp-10); white-space: nowrap; }
+.playbtn:hover { color: var(--on-accent); text-decoration: none; filter: brightness(1.08); }
+.playbtn[hidden] { display: none; }
 .setrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-4) var(--sp-12); align-items: center; padding: var(--sp-8) 0; border-top: 1px solid var(--line); }
 .bh + .setrow { border-top: 0; }
 .setrow label { font-weight: 600; }
