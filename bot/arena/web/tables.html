@@ -218,7 +218,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     up: false, // the worker said ready
     fetched: new Set(), // URLs downloaded in this tab
     bytes: new Map(), // URL -> bytes downloaded and not yet given to the worker
-    sent: new Set() // what the worker has: 'jepa' (its models), a bundle's sha256, 'python'
+    sent: new Set() // what the worker has: 'jepa' (its models), 'bot:<version>' (one per version, even when two share a bundle), 'python'
   };
   /** A downloaded file's bytes, handed over: a failed hand-over downloads it again. */
   const take = (url) => {
@@ -267,7 +267,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     }
     if (bot.kind === 'arena') {
       add('Bot runner', info.files.botWorker, false);
-      if (!tab.sent.has(bot.bundle.hex)) add(titleOf(bot), bot.bundle, true);
+      if (!tab.sent.has(`bot:${bot.name}`)) add(titleOf(bot), bot.bundle, true);
       const rt = runtimeOf(bot);
       if (rt && !tab.sent.has('python')) {
         add('Python for bots', rt.lib, true);
@@ -592,12 +592,12 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
    * Python, with the first Python bot). Returns the JEPA bot's models for the start message, or null.
    */
   async function readyBot(eng, bot) {
-    if (bot.kind === 'arena' && !tab.sent.has(bot.bundle.hex)) {
+    if (bot.kind === 'arena' && !tab.sent.has(`bot:${bot.name}`)) {
       if (!eng.isolated) throw new Error(unavailable(bot) || 'this browser cannot run arena bots here');
       const rt = runtimeOf(bot);
       const python = rt && !tab.sent.has('python') ? { lib: take(rt.lib.url), wasm: take(rt.wasm.url) } : null;
       await eng.bot(bot.name, bot.bundle.hex, take(bot.bundle.url), bot.capMs, python);
-      tab.sent.add(bot.bundle.hex);
+      tab.sent.add(`bot:${bot.name}`);
       if (python) tab.sent.add('python');
       ping(); // handed over: whoever watches this bot sees it ready again
     }
