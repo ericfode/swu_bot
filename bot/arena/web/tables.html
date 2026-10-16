@@ -117,10 +117,10 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
   }
   let viewer = null;
   let backTo = 'table';
-  function watch(jsonl) {
+  function watch(jsonl, bottomSeat = 'p1') {
     viewer?.destroy?.();
     show('viewer');
-    viewer = SWUViewer.mount($('viewer'), { jsonl, follow: false });
+    viewer = SWUViewer.mount($('viewer'), { jsonl, follow: false, bottomSeat, persist: 'swuarena.tables.replay' });
   }
   $('back').onclick = () => { viewer?.destroy?.(); viewer = null; show(backTo); };
   $('games-back').onclick = () => show('table');
@@ -156,7 +156,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
         const r = await fetch(`/api/tables/games/${encodeURIComponent(g.id)}.jsonl`);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         backTo = 'games';
-        watch(await r.text());
+        watch(await r.text(), !admin && g.seat === 'p2' ? 'p2' : 'p1');
       } catch (e) {
         status(`Could not load that game: ${e.message}`, 'bad');
       } finally {
@@ -1417,7 +1417,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       return () => g.subs.delete(sub);
     },
     replayUrl: (id) => games.get(id)?.url ?? null,
-    watch: (id) => (games.get(id)?.replay ? () => { backTo = 'table'; watch(games.get(id).replay); } : null),
+    watch: (id) => (games.get(id)?.replay ? () => { backTo = 'table'; watch(games.get(id).replay, games.get(id).seat); } : null),
     pair,
     note: 'Play anyone: a friend, whoever is in the lobby, or any arena bot. The real rules engine runs in a player\'s browser and downloads while you choose.',
     missing: 'Reload the page to try again.'
