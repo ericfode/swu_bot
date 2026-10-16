@@ -627,6 +627,11 @@ function createTables({
             }
             const bot = /^\/tables\/bot\/([0-9a-f]{64})\.tar$/.exec(p);
             if (bot && req.method === 'GET') {
+                // a bundle the window does not have yet comes from the machine: wake it (as play.js sendBundle does)
+                if (!swarm.botHere?.(bot[1]) && now() - woke > WAKE_MS) {
+                    woke = now();
+                    wake();
+                }
                 return await swarm.sendBot(req, res, bot[1], { sendJson });
             }
             const file = /^\/tables\/([a-z0-9.-]+)$/.exec(p);

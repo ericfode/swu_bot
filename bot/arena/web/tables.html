@@ -620,7 +620,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
    * The host: plays the game in this tab's worker. The guest's messages are numbered and kept, so a guest who comes
    * back (a new link, a reload) asks for what it missed. Resolves once the game started.
    */
-  async function hostGame(link, peerPid, deckName, setLink) {
+  async function hostGame(link, peerPid, deckName, setLink, wanted = () => true) {
     let joined = null;
     let joinedWait = null;
     const log = []; // every message for the guest, numbered from 1
@@ -673,6 +673,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       toGuest({ t: 'refused', error: `the host's rules engine did not start (${e.message})` });
       throw e;
     }
+    if (!wanted()) throw new Error('cancelled');
     if (!joined) {
       await new Promise((ok, no) => {
         const t = setTimeout(() => {
@@ -682,6 +683,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
         joinedWait = () => { if (joined) { clearTimeout(t); joinedWait = null; ok(); } };
       });
     }
+    if (!wanted()) throw new Error('cancelled');
     eng.handlers.peer = (m) => toGuest({ t: 'msg', msg: m });
     eng.handlers.peerActed = (m) => toGuest({ t: 'acted', a: m.n, error: m.error });
     const early = [];
@@ -692,6 +694,11 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     } catch (e) {
       toGuest({ t: 'refused', error: e.message });
       throw e;
+    }
+    if (!wanted()) {
+      // cancelled while the worker dealt: end it there (the table takes one game at a time), and keep nothing
+      eng.concede();
+      throw new Error('cancelled');
     }
     g = newGame(st.id, st.seat, 'host');
     g.links = () => [cur];
@@ -713,12 +720,14 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       let have = 0;
       let g = null;
       let a = 0;
+      let conceded = false; // sent again on a new link until the end comes
       const acts = new Map(); // actions the host has not answered yet, by number
       let cur = link;
       // what the host may never have had: the join before the start, else where this tab is, then unanswered actions
       const sendAgain = (l) => {
         l.game(g ? { t: 'resume', have } : joinMsg);
         for (const [k, w] of acts) l.game({ t: 'act', a: k, act: w.act });
+        if (conceded && g && !g.over) l.game({ t: 'concede' });
       };
       const attach = (l, again = false) => {
         cur = l;
@@ -739,7 +748,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
               acts.set(k, { ok: ok2, no: no2, act });
               cur.game({ t: 'act', a: k, act });
             });
-            g.concede = () => cur.game({ t: 'concede' });
+            g.concede = () => { conceded = true; cur.game({ t: 'concede' }); };
             playing = true;
             ok({ id: m.id, seat: m.seat, opponent: m.opponent || peerPid });
           } else if (m.t === 'msg' && g) {
@@ -774,7 +783,8 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
   /** Links and starts a game in a lobby room; setCancel gets what Cancel does until the game has started. */
   async function lobbyGame(room, side, deck, onState, setCancel) {
     let stop;
-    const stopped = new Promise((_, no) => { stop = no; });
+    let halted = false;
+    const stopped = new Promise((_, no) => { stop = (e) => { halted = true; no(e); }; });
     stopped.catch(() => undefined);
     let c = null;
     setCancel(() => {
@@ -787,7 +797,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
     onState({ text: side === 'host' ? `Linked ${how} with ${peer}. Dealing…` : `Linked ${how} with ${peer}. Waiting for the host's table…` });
     let move = null;
     let id = null;
-    const starting = side === 'host' ? hostGame(c.link, peer, deck, (fn) => { move = fn; }) : guestGame(c.link, peer, deck, (fn) => { move = fn; });
+    const starting = side === 'host' ? hostGame(c.link, peer, deck, (fn) => { move = fn; }, () => !halted) : guestGame(c.link, peer, deck, (fn) => { move = fn; });
     // the room stays as the way back: a direct link that drops goes on through the lobby, on both sides, from the start
     // (after the end too on the host's side: the end and its replay may still be on their way to the guest)
     if (c.link !== c.room) {
@@ -890,17 +900,18 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
   /** stopped rejects when pairing is cancelled, which also closes pc; started() turns Cancel off once the game started. */
   function stopper(pc, setCancel) {
     let stop;
+    let halted = false;
     const stopped = new Promise((_, no) => { stop = no; });
     stopped.catch(() => undefined);
-    setCancel(() => { try { pc.close(); } catch { /* gone */ } stop(new Error('cancelled')); });
-    return { stopped, started: () => setCancel(() => undefined) };
+    setCancel(() => { halted = true; try { pc.close(); } catch { /* gone */ } stop(new Error('cancelled')); });
+    return { stopped, wanted: () => !halted, started: () => setCancel(() => undefined) };
   }
 
   async function directHost(deck, onState, setAnswer, setCancel) {
     loadEngine().catch(() => undefined);
     const pc = new RTCPeerConnection({ iceServers: STUN });
     const dc = pc.createDataChannel('swu', { ordered: true });
-    const { stopped, started } = stopper(pc, setCancel);
+    const { stopped, started, wanted } = stopper(pc, setCancel);
     await pc.setLocalDescription(await pc.createOffer());
     onState({ text: 'Making your code…' });
     await gathered(pc, 5000);
@@ -918,7 +929,7 @@ button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--gold); outl
       throw new Error('the two browsers could not reach each other directly; use an invite link instead (it can go through the lobby)');
     }
     const link = channelLink(pc, dc);
-    const game = await Promise.race([hostGame(link, ans.pid, deck, null), stopped]);
+    const game = await Promise.race([hostGame(link, ans.pid, deck, null, wanted), stopped]);
     started();
     status(`Playing ${ans.pid}, linked directly.`, 'good');
     return game;

@@ -66,12 +66,13 @@ function makeWindow(name, { mode, deckFetch, swarmOn = true, limits } = {}) {
     const swarm = createSwarmRelay({ token: swarmOn ? 'swarm-secret' : null, machine: 'http://games', cacheDir: path.join(home, 'swarm'), botDir: path.join(home, 'swarm-bots'), fetchImpl: m.fetchImpl });
     const kit = path.join(tmp, `${name}-kit.js`);
     fs.writeFileSync(kit, 'window.SWUViewer = {};');
-    const w = createWindow({ home, auth, swarm, kit, app: path.join(tmp, 'none.html'), minMs: 0, wakeGames: () => undefined, tables: mode, tablesFetch: deckFetch, tablesLimits: limits });
+    const wakes = { n: 0 };
+    const w = createWindow({ home, auth, swarm, kit, app: path.join(tmp, 'none.html'), minMs: 0, wakeGames: () => { wakes.n++; }, tables: mode, tablesFetch: deckFetch, tablesLimits: limits });
     tablesOpen = (n) => w.tables.openTo(n);
     // the arena's documents the bot list reads: who is competing, and each version's submission
     store.putDoc('arena', 'status', JSON.stringify({ competitors: [{ name: 'tinybot', title: 'Tiny Bot', owner: 'github:pal2', latest: 'tinybot-v2', elo: 1234.4 }] }));
     store.putDoc('arena', 'versions-tinybot', JSON.stringify([{ v: 2, name: 'tinybot-v2', note: 'small and quick', files: ['arena.json', 'bot.py'], bot: { kind: 'wasm' } }]));
-    return { w, m, store, home };
+    return { w, m, store, home, wakes };
 }
 
 async function serve(w) {
@@ -234,7 +235,7 @@ test('who may play: invited people by default, anyone with GitHub in github mode
 });
 
 test("the bots come from the arena's latest round, joined with the arena's own documents, and their bundles are kept on the window", async () => {
-    const { w, m, home } = makeWindow('bots');
+    const { w, m, home, wakes } = makeWindow('bots');
     const { go, close } = await serve(w);
     try {
         const pal = session(w, 'pal');
@@ -273,6 +274,12 @@ test("the bots come from the arena's latest round, joined with the arena's own d
         assert.strictEqual(again.status, 200);
         assert.deepStrictEqual(Buffer.from(await again.arrayBuffer()), TAR, 'fetch undoes the gzip');
         assert.deepStrictEqual((await result(await go('/api/tables/info', { cookie: pal }))).bots.map((b) => b.name), ['jepa-tx-gate', 'tinybot-v2']);
+        // a bundle the window does not have yet wakes the sleeping machine, at most once a while (the page's files are
+        // on the window's disk, so nothing else here wakes it)
+        for (const f of [`${HEX}.tar`, `${HEX}.tar.gz`]) fs.rmSync(path.join(home, 'swarm-bots', f));
+        assert.strictEqual((await go(`/tables/bot/${HEX}.tar`, { cookie: pal })).status, 503);
+        assert.strictEqual((await go(`/tables/bot/${HEX}.tar`, { cookie: pal })).status, 503);
+        assert.strictEqual(wakes.n, 1);
     } finally {
         await close();
     }
