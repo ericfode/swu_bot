@@ -117,7 +117,7 @@ function createGameLinks({ store, origin, publicUrl, kitFile, replayFor, peopleR
             const raw = fs.readFileSync(kitFile);
             kit = { mtimeMs: st.mtimeMs, raw, gz: zlib.gzipSync(raw) };
         }
-        const gzip = /gzip/.test(req.headers['accept-encoding'] || '');
+        const gzip = require('./server').acceptsGzip(req.headers['accept-encoding']); // q values, as the window's own answers (required on use: server.js requires the window)
         res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-cache', vary: 'accept-encoding', ...(gzip ? { 'content-encoding': 'gzip' } : {}) });
         res.end(gzip ? kit.gz : kit.raw);
     }

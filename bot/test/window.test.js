@@ -467,6 +467,9 @@ test('game links: one game for anyone holding its link, made by invited people, 
         assert.ok(!html.includes('pal'), 'the page never names who made the link');
         assert.strictEqual(await (await go(`/g/${key}/game.jsonl`)).text(), header('rush', 'c_clock') + end);
         assert.strictEqual((await go('/g/kit.js')).status, 200);
+        const kitAt = `http://127.0.0.1:${srv.srv.address().port}/g/kit.js`;
+        assert.strictEqual((await fetch(kitAt, { headers: { 'accept-encoding': 'gzip;q=0, br' } })).headers.get('content-encoding'), null, 'a client that refuses gzip gets the kit plain');
+        assert.strictEqual((await fetch(kitAt, { headers: { 'accept-encoding': 'gzip' } })).headers.get('content-encoding'), 'gzip');
         assert.strictEqual((await go(`/g/${'b'.repeat(32)}`)).status, 404);
         assert.strictEqual((await go(`/g/${key}`, { method: 'POST', body: '{}' })).status, 405);
         assert.strictEqual((await go('/api/app')).status, 401, 'the link opens no other door');
