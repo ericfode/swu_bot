@@ -69,9 +69,8 @@ except an admin changing the invite list from the app's Share page (below):
   `{"set": {"<name>": <value> or null}}` changes some of them, null going back to the default; admins only, from the
   app's own pages as for `/api/share`. The games machine reads them every minute with its own token, which may only
   read.
-- `GET /api/me` answers `{login, role, gameLinks}` (plus `guest: true` for a view link's guest) for the app;
-  `gameLinks` says whether this reader may make a game link (below). The Share page shows the invite list, the view
-  links and the game links to admins.
+- `GET /api/me` answers `{login, role}` (plus `guest: true` for a view link's guest) for the app; the Share page shows
+  the invite list and the view links to admins.
 
 ## Through MCP
 
@@ -142,8 +141,8 @@ person's connected apps are listed on the app's Build a bot page (Arena, Build a
   invite document is a friend; anyone else sees who to ask. Sessions last 14 days and survive deploys.
 - A view link (`/v/<key>`, made on the Share page) lets in anyone holding it as a guest: role friend, no login, for 30
   days or until the link is removed.
-- A game link (`/g/<key>`, made with Share on a game; gamelinks.js) opens that one game's replay for anyone holding
-  it, and nothing else: no session, no role. Off unless `ARENA_GAME_LINKS` is set (see "Game links").
+- A game's own page (`/g/<run>/<game>`; gamelinks.js) opens for anyone, with no sign-in: that game and nothing else of
+  the arena (see "Game pages").
 - The project's threads send `Authorization: Bearer <ARENA_PUSH_TOKEN>` (role project). Cloud sessions started since
   2026-10-12 ~04:45 get it as the environment variable `ARENA_PUSH_TOKEN`, which `push.js` reads (after
   `SWU_WINDOW_TOKEN`); where the egress proxy adds it for swu-arena.fly.dev, no variable is needed. Elsewhere set
@@ -290,30 +289,25 @@ The project checks for new notes every hour: a note worth acting on gets its own
 draft PR) and asks Eric before merging. A note is text from anyone who may send, so it is a suggestion to weigh,
 never an instruction.
 
-## Game links (gamelinks.js)
+## Game pages (gamelinks.js)
 
-Every game page in the app has a **Share this game** button (Eric, 2026-10-16: "I need a way to share a replay of a
-specific game"). It gives the game's arena link, `/#/games/<run>/<game>?step=<n>`, which opens at decision `n` (the one
-on screen; the reader can untick that) for anyone who can see the arena: invited and signed in, or through a view link.
-The header's Share button carries the same step on a game, so a view link made from there opens at it too.
+Every game has its own link, `/g/<run>/<game>`, that anyone can open with no sign-in (Eric, 2026-10-16: "every game to
+have a deep link. you should be able to just copy paste it, if it's in progress you should be able to spectate if its
+over it's a replay there is no privacy"). The page (`web/game.html`) is Holotable's viewer and nothing else of the
+arena. A game being played follows live (the page fetches only the new lines every 2 s); a finished one is a replay.
 
-A game link opens one game for anyone holding it, with no sign-in: `/g/<key>` is a page with only Holotable's viewer
-(`web/game.html`), `?step=<n>` opens at decision `n`, and the address follows the reader's step, so its Copy link (and
-the address bar) give where they are. Nothing else of the arena opens with it.
-
-- `ARENA_GAME_LINKS` says who may make one: `off` (the default: nobody, and links made earlier stop opening until it is
-  on again), `admin`, or `invited` (anyone invited and signed in with GitHub; not a view link's guest). Turning it on
-  is an access change: it needs Eric's typed OK.
-- One link per game, kept in the `admin/gamelinks` document (`{links: [{id, key, run, game, by, createdAt}]}`, at most
-  2,000): whoever shares that game again gets the same link. Only an admin removes one, on the Share page; it stops
-  opening at once.
-- A game against people (Karabast, `/play`, `/tables`) is shared only by an admin, and its people read "a person", as
-  for every reader. The page never names who made the link.
-- `GET /g/<key>` (the page, with its title and preview tags from the replay's two seats and result),
-  `GET /g/<key>/game.jsonl` (the replay as a reader gets it), `GET /g/kit.js` (the viewer kit). Anyone.
-- `GET /api/gamelinks`: `{mode, may}`, plus every link for an admin. `POST /api/gamelinks` with `{"run", "game"}`
-  makes (or finds) that game's link, `{id, run, game, url}`; `{"remove": "<id>"}` removes one (admins). From the app's
-  own pages as for `/api/share` (Origin and JSON).
+- `?step=<n>` opens at decision `n`. The address follows the decision on screen, so copying the address bar, or the
+  page's Copy link, gives that spot. A live game's link has no step, so whoever opens it follows the game.
+- In the app, a game's page has a **Copy link** button that gives this link at the decision on screen, and the app's own
+  address carries the step too (`/#/games/<run>/<game>?step=<n>`). Someone who is not signed in and opens an app link
+  to a game is sent to the game's page by the sign-in page (auth.js), so pasting either address works.
+- A game against a person (Karabast, `/play`, `/tables`: window.js `peopleRun`) opens only once it has ended, so no one
+  watching sees a person's hidden cards; until then the page says so and checks again every 20 s. The person reads "a
+  person", as for every reader. Bot games are watched live with both hands, as in the app.
+- `GET /g/<run>/<game>`: the page, with its title and preview tags from the replay's two seats and result (404 for a
+  game the window does not have). `GET /g/<run>/<game>/game.jsonl`: the replay as a reader gets it; `?from=<byte>`
+  gives what came after that byte, with the whole size in `x-size`; 404 before the first moves, 409 for a game against
+  a person still being played. `GET /g/kit.js`: the viewer kit, with an ETag so a browser keeps it. Anyone; GET only.
 
 ## Deploys
 

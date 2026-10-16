@@ -692,11 +692,8 @@ function createWindow(opts = {}) {
     });
     // the feedback button and key on every page (feedback.js): who may send follows who may use a page here
     const feedback = createFeedback({ store, origin: auth.origin, mayPlay: () => play.mode === 'github' || tables.mode === 'github', ...(opts.feedbackLimits ?? {}) }); // tests: {now, perDay, allPerDay}
-    // game links (gamelinks.js): one game's replay for anyone holding its link, with no sign-in; off unless ARENA_GAME_LINKS
-    const gameLinks = createGameLinks({
-        store, origin: auth.origin, publicUrl: auth.publicUrl, kitFile, mode: opts.gameLinks ?? process.env.ARENA_GAME_LINKS,
-        replayFor, peopleRun: (run) => peopleRun(run, parseOr(store.getDoc('runs', run), null))
-    });
+    // every game's own page (gamelinks.js): /g/<run>/<game>, live or replay, for anyone with no sign-in
+    const gameLinks = createGameLinks({ store, publicUrl: auth.publicUrl, kitFile, replayFor, peopleRun: (run) => peopleRun(run, parseOr(store.getDoc('runs', run), null)) });
     const arenaMethods = {
         status: () => arenaDoc('status') ?? { tournament: null, round: null, phase: 'idle', competitors: [] },
         standings: () => arenaDoc('standings') ?? { rounds: [], global: {} },
@@ -1116,7 +1113,7 @@ function createWindow(opts = {}) {
         const q = Object.fromEntries(url.searchParams);
         const friend = !atLeast(who.role, 'project');
         if (parts[0] === 'me' && parts.length === 1) {
-            return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role, ...(who.guest ? { guest: true } : {}), gameLinks: gameLinks.may(who) } }, req);
+            return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role, ...(who.guest ? { guest: true } : {}) } }, req);
         }
         if (parts[0] === 'share' && parts.length === 1) {
             return share(req, res, who);
@@ -1275,8 +1272,8 @@ function createWindow(opts = {}) {
             if (await feedback.route(req, res, url, who, { sendJson, sendText, readBody })) {
                 return undefined;
             }
-            // game links (gamelinks.js): /g/<key> opens one game for anyone holding the link, so before the invite check
-            if (await gameLinks.route(req, res, url, who, { sendJson, sendText, readBody })) {
+            // every game's own page (gamelinks.js): /g/<run>/<game> opens for anyone, so before the invite check
+            if (await gameLinks.route(req, res, url, { sendJson, sendText })) {
                 return undefined;
             }
             if (url.pathname.startsWith('/api')) {

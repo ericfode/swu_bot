@@ -415,15 +415,7 @@ const ACTIONS = {
   linkSend: async b => { try { await navigator.share({ title: 'SWU Arena', text: 'Star Wars Unlimited bots: games and replays', url: b.dataset.url }); } catch {} },
   mcpCopy: async b => { const el = $('mcpurl'); try { await navigator.clipboard.writeText(el.value); b.textContent = 'Copied'; } catch { el.select(); b.textContent = 'Selected: copy it'; } },
   appDisconnect: b => { if (confirm(`Disconnect ${b.dataset.app}? It has to sign in again to read anything.`)) appDisconnect(b.dataset.id); },
-  gameShare: b => { S.gshare = S.gshare === b.dataset.key ? null : b.dataset.key; render(true); },
-  gshareAt: i => { S.gshareAt = i.checked; syncGameShare(); },
-  gshareCopy: b => copyField('gsharelink', b),
-  gshareSend: () => sendLink($('gsharelink')?.value),
-  gpubMake: () => { if (S.gshare) makeGameLink(S.gshare); },
-  gpubCopy: b => copyField('gpublink', b),
-  gpubSend: () => sendLink($('gpublink')?.value),
-  glinkCopy: async b => { try { await navigator.clipboard.writeText(b.dataset.url); b.textContent = 'Copied'; } catch { prompt('Copy this link', b.dataset.url); } },
-  glinkRemove: b => { if (confirm('Remove this game link? Anyone holding it can no longer open the game.')) removeGameLink(b.dataset.id); },
+  gameLink: b => copyGameLink(b),
   linkRemove: b => { if (confirm(`Remove the view link "${b.dataset.label}"? Anyone using it is locked out at once.`)) shareChange({ removeLink: b.dataset.id }); },
 };
 
@@ -478,7 +470,7 @@ async function mountViewer(v, host) {
   const step = +(route().qs.get('step') || 0) || undefined;
   try {
     v.v = KIT.mount(host, { jsonl: text, evals: evals || undefined, lens: lens || undefined, layout: host.dataset.layout || 'full', ...(step ? { stepN: step } : {}), persist: 'swuapp.viewer', follow: true,
-      onStep: (i, n) => { v.step = n; v.idx = i; if (S.gshare === v.game) syncGameShare(); } });
+      onStep: (i, n) => { v.step = n; v.idx = i; if (host.dataset.share) followStep(v); } });
     v.offset = new TextEncoder().encode(text).length;
     v.ended = /"t":"end"/.test(text.slice(-4000));
     // a small viewer of a finished game opens on its last move, so the board shows how it ended
@@ -1360,64 +1352,31 @@ function pageGame(r) {
   const both = atl(x.p1) && atl(x.p2);
   const side = s => `${botLink(x[s])}${styleTag(atl(x[s])?.summary?.style)}`;
   const lede = x.res === 3 ? 'Playing now.' : x.res === 4 ? 'Not rated (engine error or step cap).' : x.res === 5 ? 'No result: its run stopped sending before this game ended.' : x.res === 2 ? 'Draw.' : `${esc(winnerName(x))} won${x.forfeit ? ' by forfeit (⏱ a late or broken reply)' : ''} in round ${x.rounds}.`;
-  const shareBtn = HOSTED ? `<button type="button" class="gsharebtn" data-act="gameShare" data-key="${esc(key)}" aria-expanded="${S.gshare === key}">${SHARE_ICON}Share this game</button>` : '';
-  return `<div class="phead"><div><div class="eyebrow"><a href="${href('runs', run.id)}">${esc(run.id)}</a> · game ${at + 1} of ${sib.length}</div><h1 class="row" style="gap:10px">${side('p1')}<span class="faint" style="font-size:var(--fs-base)">vs</span>${side('p2')}</h1></div><p class="lede">${lede} ${x.steps ? `${x.steps} decisions.` : ''} ${ev ? 'Analysed: the timeline shows four win-chance curves.' : ''}</p><span class="row" style="font-size:var(--fs-md)">${nav(at - 1, '← Previous')} · ${nav(at + 1, 'Next →')}${both ? ` · <a href="${href('bots', 'faceoff')}?a=${encodeURIComponent(x.p1)}&b=${encodeURIComponent(x.p2)}">Face-off of these two</a>` : ''}${shareBtn}</span></div>
-  ${HOSTED && S.gshare === key ? gameShareBox(key) : ''}
-  <div class="kithost" data-game="${esc(key)}" data-layout="full" data-live="${x.res === 3 ? 1 : 0}" data-pivotal="1" style="margin-top:8px"></div>
+  const copy = HOSTED ? `<button type="button" class="gamelink" data-act="gameLink" data-key="${esc(key)}" title="A link anyone can open, no sign-in: live while the game is played, a replay after">${SHARE_ICON}<span>Copy link</span></button>` : '';
+  return `<div class="phead"><div><div class="eyebrow"><a href="${href('runs', run.id)}">${esc(run.id)}</a> · game ${at + 1} of ${sib.length}</div><h1 class="row" style="gap:10px">${side('p1')}<span class="faint" style="font-size:var(--fs-base)">vs</span>${side('p2')}</h1></div><p class="lede">${lede} ${x.steps ? `${x.steps} decisions.` : ''} ${ev ? 'Analysed: the timeline shows four win-chance curves.' : ''}</p><span class="row" style="font-size:var(--fs-md)">${nav(at - 1, '← Previous')} · ${nav(at + 1, 'Next →')}${both ? ` · <a href="${href('bots', 'faceoff')}?a=${encodeURIComponent(x.p1)}&b=${encodeURIComponent(x.p2)}">Face-off of these two</a>` : ''}${copy}</span></div>
+  <div class="kithost" data-game="${esc(key)}" data-layout="full" data-live="${x.res === 3 ? 1 : 0}" data-pivotal="1" data-share="1" style="margin-top:8px"></div>
   <section class="box"><div class="bh"><h3>Pivotal plays</h3><span class="sub">the actions that moved the game most; click to jump</span></div><div id="pivotal" class="comps" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px"><p class="muted">Loading…</p></div></section>`;
 }
 
-// ---------- share one game: a link to it at the step being watched; with game links on, one anyone can open ----------
-// The arena link opens for anyone who can see the arena. A game link (bot/arena/gamelinks.js, on when ARENA_GAME_LINKS
-// allows this reader) opens only this game, with no sign-in. Both carry ?step=<n>, the decision on screen, unless the
-// reader unticks it.
-const gameStep = key => (S.gshareAt === false ? 0 : VIEWERS.get(`${key}|full`)?.step || 0);
-const withStep = (url, n) => `${url}${n ? `?step=${n}` : ''}`;
-const gameLink = (key, n) => { const [run, id] = key.split('/'); return withStep(`${location.origin}${location.pathname}${href('games', run, id)}`, n); };
-function gameShareBox(key) {
-  const n = VIEWERS.get(`${key}|full`)?.step || 0, at = S.gshareAt !== false, pub = S.gameLinks?.[key], admin = S.me?.role === 'admin';
-  const row = (id, url, act) => `<div class="sharerow"><input id="${id}" readonly value="${esc(url)}" aria-label="Link"><button type="button" data-act="${act}Copy">Copy</button>${navigator.share ? `<button type="button" data-act="${act}Send">Send</button>` : ''}</div>`;
-  const anyone = !S.me?.gameLinks ? (admin ? `<p class="muted gsnote">For someone without an invite: a <a href="#/share?from=${encodeURIComponent(gameLink(key, at ? n : 0).replace(/^[^#]*/, ''))}">view link</a> opens the arena at this game.</p>` : '')
-    : pub?.url ? `<h4 class="gsh">Anyone with this link</h4>${row('gpublink', withStep(pub.url, at ? n : 0), 'gpub')}<p class="muted gsnote">No sign-in. It opens this game only, nothing else of the arena.${admin ? ' You can remove it on the Share page.' : ''}</p>`
-    : `<h4 class="gsh">Anyone with the link</h4><div class="sharerow"><button type="button" class="gpubmake" data-act="gpubMake" ${pub?.busy ? 'disabled' : ''}>${pub?.busy ? 'Making the link…' : 'Make a link anyone can open'}</button></div><p class="${pub?.err ? 'bad' : 'muted'} gsnote">${pub?.err ? esc(pub.err) : 'No sign-in. It opens this game only, nothing else of the arena.'}</p>`;
-  return `<section class="box gshare"><div class="bh"><h3>Share this game</h3><span class="sub">a link to this replay</span></div>
-    <h4 class="gsh">Anyone who can see the arena</h4>${row('gsharelink', gameLink(key, at ? n : 0), 'gshare')}
-    <label class="gsat"><input type="checkbox" data-input="gshareAt" ${at ? 'checked' : ''}><span>Start at decision <b id="gsharen">${n || 1}</b>, the one on screen</span></label>
-    <p class="muted gsnote">Opens after they sign in with GitHub (when invited) or through a view link.</p>${anyone}</section>`;
+// ---------- every game's own link: /g/<run>/<game> (bot/arena/gamelinks.js), for anyone, live or replay ----------
+// The page's address and Copy link carry ?step=<n>, the decision on screen, except while the game is live, so whoever
+// opens the link follows it live too. A signed-out visitor who opens the app's address of a game lands on its own page.
+const stepOf = v => (v && !(v.live && !v.ended) && v.idx > 0 ? v.step : 0);
+const gameUrl = (key, n) => { const [run, id] = key.split('/'); return `${location.origin}/g/${encodeURIComponent(run)}/${encodeURIComponent(id)}${n ? `?step=${n}` : ''}`; };
+let stepTimer = 0;
+function followStep(v) {
+  clearTimeout(stepTimer);
+  stepTimer = setTimeout(() => {
+    const r = route(), [run, id] = v.game.split('/');
+    if (r.parts[0] !== 'games' || r.parts[1] !== run || r.parts[2] !== id) return; // the reader has moved on
+    const n = stepOf(v), q = new URLSearchParams(r.qs); if (n) q.set('step', n); else q.delete('step');
+    try { history.replaceState(history.state, '', `${location.pathname}${location.search}${href('games', run, id)}${q.size ? `?${q}` : ''}`); } catch {}
+  }, 400);
 }
-/** The viewer moved: the links follow the decision on screen. */
-function syncGameShare() {
-  const key = S.gshare; if (!key) return;
-  const n = gameStep(key), pub = S.gameLinks?.[key];
-  const a = $('gsharelink'); if (a) a.value = gameLink(key, n);
-  const b = $('gpublink'); if (b && pub?.url) b.value = withStep(pub.url, n);
-  const c = $('gsharen'); if (c) c.textContent = VIEWERS.get(`${key}|full`)?.step || 1;
-}
-async function makeGameLink(key) {
-  const [run, game] = key.split('/');
-  S.gameLinks = { ...S.gameLinks, [key]: { busy: true } }; render(true);
-  let out;
-  try {
-    const r = await fetch('/api/gamelinks', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ run, game }) }), j = await r.json().catch(() => ({}));
-    out = r.ok ? { url: j.result.url } : { err: j.error?.message || `HTTP ${r.status}` };
-  } catch (e) { out = { err: e?.message || 'offline' }; }
-  S.gameLinks = { ...S.gameLinks, [key]: out }; render(true);
-}
-async function copyField(id, b) { const el = $(id); if (!el) return; try { await navigator.clipboard.writeText(el.value); b.textContent = 'Copied'; } catch { el.select(); b.textContent = 'Selected: copy it'; } }
-async function sendLink(url) { try { await navigator.share({ title: 'SWU Arena replay', text: 'A Star Wars Unlimited game between bots', url }); } catch {} }
-/** An admin's game links on the Share page (GET /api/gamelinks), loaded with the rest of the page. */
-async function loadGameLinks() {
-  try { const r = await fetch('/api/gamelinks', { credentials: 'same-origin' }), j = await r.json().catch(() => ({})); S.glist = r.ok ? j.result : { err: j.error?.message || `HTTP ${r.status}` }; }
-  catch (e) { S.glist = { err: e?.message || 'offline' }; }
-  if (route().parts[0] === 'share') render(true);
-}
-async function removeGameLink(id) {
-  S.glist = { ...S.glist, busy: true }; render(true);
-  try {
-    const r = await fetch('/api/gamelinks', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ remove: id }) }), j = await r.json().catch(() => ({}));
-    S.glist = r.ok ? { ...S.glist, links: j.result.links, busy: false, msg: 'Removed. That link stops opening at once.' } : { ...S.glist, busy: false, msg: j.error?.message || `HTTP ${r.status}` };
-  } catch (e) { S.glist = { ...S.glist, busy: false, msg: e?.message || 'offline' }; }
-  S.gameLinks = {}; render(true);
+async function copyGameLink(b) {
+  const key = b.dataset.key, url = gameUrl(key, stepOf(VIEWERS.get(`${key}|full`))), label = b.querySelector('span');
+  try { await navigator.clipboard.writeText(url); label.textContent = 'Link copied'; } catch { prompt('Copy this link', url); return; }
+  setTimeout(() => { label.textContent = 'Copy link'; }, 2000);
 }
 
 // ---------- share: a link to any page, and (an admin) who may sign in ----------
@@ -1440,13 +1399,6 @@ async function shareChange(body) {
   } catch (e) { S.share = { ...keep, busy: false, msg: e?.message || 'offline' }; }
   render(true);
 }
-/** An admin's game links (gamelinks.js): each opens one game for anyone holding it; shown while game links are on. */
-function gameLinksBox() {
-  const g = S.glist; if (!g || g.mode === 'off' || (!g.links && !g.err)) return '';
-  const label = l => { const i = gameIdx.get(`${l.run}/${l.game}`), x = i != null ? gameRow(M.games[i]) : null; return x ? `${esc(x.p1)} vs ${esc(x.p2)}` : `<span class="mono">${esc(`${l.run}/${l.game}`)}</span>`; };
-  const list = g.err ? `<p class="bad">${esc(g.err)}</p>` : g.links.length ? `<ul class="invites">${[...g.links].reverse().map(l => `<li class="vlink"><span><span><a href="${href('games', l.run, l.game)}">${label(l)}</a> <span class="muted">by ${esc(l.by ? `@${l.by}` : 'an admin')}, ${ago(l.createdAt) === 'now' ? 'just now' : `${ago(l.createdAt)} ago`}</span></span><span class="mono faint vurl">${esc(l.url)}</span></span><span class="vbtns"><button type="button" data-act="glinkCopy" data-url="${esc(l.url)}">Copy</button><button type="button" data-act="glinkRemove" data-id="${esc(l.id)}" ${g.busy ? 'disabled' : ''}>Remove</button></span></li>`).join('')}</ul>` : '<p class="muted" style="font-size:var(--fs-md)">No game links yet. Make one with Share on any game.</p>';
-  return `<section class="c12 box"><div class="bh"><h3>Game links</h3><span class="sub">each opens one game, no sign-in${g.mode === 'invited' ? '; anyone invited can make one' : ''}</span></div>${g.msg ? `<p style="margin-bottom:8px;font-size:var(--fs-md)">${esc(g.msg)}</p>` : ''}${list}</section>`;
-}
 /** The mental model: two ways in (a GitHub sign-in on the invite list, or a view link), one arena, view only. */
 function shareDiagram(admin) {
   const box = (y, t, s) => `<rect x="4" y="${y}" width="150" height="42" rx="6" style="fill:var(--raised);stroke:var(--line-2)" stroke-width="1.5"/><text x="79" y="${y + 18}" text-anchor="middle" class="pd-t">${t}</text><text x="79" y="${y + 33}" text-anchor="middle" class="pd-s">${s}</text>`;
@@ -1458,7 +1410,6 @@ function pageShare(r) {
   if (!HOSTED) return `${head}<div class="notice">Sharing is part of the hosted arena at swu-arena.fly.dev; this copy is a snapshot.</div>`;
   const admin = S.me?.role === 'admin', sh = S.share || {}, from = r.qs.get('from'), hash = /^#\/(?!share)./.test(from || '') ? from : '';
   if (admin && !S.share) { S.share = { busy: true }; setTimeout(loadShare); }
-  if (admin && !S.glist) { S.glist = { busy: true }; setTimeout(loadGameLinks); }
   const who = (l, how, rm) => `<li><span class="mono">@${esc(l)}</span><span class="muted">${how}</span>${rm ? `<button type="button" data-act="inviteRemove" data-login="${esc(l)}" ${sh.busy ? 'disabled' : ''}>Remove</button>` : ''}</li>`;
   const list = sh.err ? `<p class="bad" style="margin-top:8px">${esc(sh.err)}</p>` : !sh.invites ? '<p class="muted" style="margin-top:8px">Loading…</p>'
     : `<ul class="invites">${[...(sh.admins || []).map(l => who(l, 'admin', false)), ...(sh.fromEnv || []).filter(l => !(sh.admins || []).includes(l)).map(l => who(l, 'set on the server', false)), ...sh.invites.map(l => who(l, 'invited here', true))].join('')}</ul>${sh.invites.length ? '' : '<p class="muted" style="margin-top:6px;font-size:var(--fs-md)">Nobody invited here yet.</p>'}`;
@@ -1469,7 +1420,6 @@ function pageShare(r) {
     <section class="c7 box"><div class="bh"><h3>Link to the page you were on</h3></div><div class="sharerow"><input id="sharelink" readonly value="${esc(shareLink(from))}" aria-label="Link"><button type="button" data-act="shareCopy">Copy</button>${navigator.share ? '<button type="button" data-act="shareSend">Send</button>' : ''}</div><p class="muted" style="font-size:var(--fs-md);margin-top:6px">It opens that same page for anyone invited, right after they sign in.${admin ? ' For someone without GitHub, send a view link (below).' : ''}</p></section>
     <section class="c5 box">${shareDiagram(admin)}</section>
     ${admin ? `<section class="c12 box"><div class="bh"><h3>View links</h3><span class="sub">no account needed${hash ? `; each opens ${esc(hash)}` : ''}</span></div><p class="muted" style="font-size:var(--fs-md);margin-bottom:8px">Anyone holding a view link sees the arena with no sign-in, and a forwarded link works too. Make one per person, so you can remove one without the others.</p><form id="linkform" class="sharerow"><input id="linklabel" placeholder="Who is it for? (only you see this)" maxlength="60" autocomplete="off" aria-label="Who the link is for"><button type="submit" ${sh.busy ? 'disabled' : ''}>Make a link</button></form>${sh.linkMsg ? `<p style="margin-top:8px;font-size:var(--fs-md)">${esc(sh.linkMsg)}</p>` : ''}${links}</section>
-    ${gameLinksBox()}
     <section class="c12 box"><div class="bh"><h3>Who can sign in</h3><span class="sub">changes take effect at once</span></div><form id="inviteform" class="sharerow"><input id="invitelogin" placeholder="GitHub username" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="GitHub username"><button type="submit" ${sh.busy ? 'disabled' : ''}>Invite</button></form>${sh.msg ? `<p style="margin-top:8px;font-size:var(--fs-md)">${esc(sh.msg)}</p>` : ''}${list}</section>`
       : `<section class="c12 box"><p>${notAdmin}</p></section>`}
   </div>${S.me?.login ? `<p class="muted" style="margin-top:10px;font-size:var(--fs-md)">Signed in as @${esc(S.me.login)} · <a href="/auth/logout">Sign out</a></p>` : ''}`;
@@ -1837,10 +1787,5 @@ else if (HOSTED) startApi();
 if (HOSTED) {
   $('playbtn').hidden = false;
   const b = $('sharebtn'); b.hidden = false; b.innerHTML = SHARE_ICON;
-  b.addEventListener('click', () => {
-    const r = route(); if (r.parts[0] === 'share') return;
-    // on a game, the link opens at the decision on screen
-    const n = r.parts[0] === 'games' && r.parts[2] ? VIEWERS.get(`${r.parts[1]}/${r.parts[2]}|full`)?.step : 0;
-    location.hash = `#/share?from=${encodeURIComponent(n ? `${href('games', r.parts[1], r.parts[2])}?step=${n}` : location.hash || '#/')}`;
-  });
+  b.addEventListener('click', () => { const r = route(); if (r.parts[0] !== 'share') location.hash = `#/share?from=${encodeURIComponent(location.hash || '#/')}`; });
 }

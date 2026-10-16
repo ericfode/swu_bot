@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!--META-->
 <style>
-/* A game link's page (bot/arena/gamelinks.js): one game's replay in Holotable's viewer, for anyone holding the link, with
-   no sign-in. ?step=<n> opens at decision n; the address follows the reader, so Copy link always gives where they are. */
+/* One game's own page (bot/arena/gamelinks.js): Holotable's viewer for anyone, with no sign-in. A game being played
+   follows live, a finished one is a replay. ?step=<n> opens at decision n; the address follows the reader, so copying
+   it (or Copy link) gives the decision on screen. */
 :root {
-  --bg: #060a13; --panel: #0f1829; --line: #1d2a44; --ink: #e6ecf8; --dim: #8494b8; --gold: #f6c454; --p1: #56c8ff; --p2: #ff5f6d;
+  --bg: #060a13; --panel: #0f1829; --line: #1d2a44; --ink: #e6ecf8; --dim: #8494b8; --gold: #f6c454; --p1: #56c8ff;
   --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --display: "Oxanium", "Eurostile", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -17,17 +18,18 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); }
+a { color: var(--p1); }
 .bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: color-mix(in oklab, var(--panel) 88%, transparent); backdrop-filter: blur(8px); }
 .brand { font: 600 12px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); text-decoration: none; }
 .title { font: 650 17px/1.2 var(--display); min-width: 0; overflow-wrap: anywhere; }
 .grow { flex: 1; }
+.arena { font-size: 14px; }
 button { font: 600 14px/1 var(--sans); color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; cursor: pointer; }
 button:hover { border-color: color-mix(in oklab, var(--p1) 50%, var(--line)); }
-button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 #viewer-wrap { padding: 12px 16px 24px; }
 #viewer { min-height: calc(100dvh - 120px); }
-.note { padding: 0 16px 24px; color: var(--dim); font-size: 13px; }
-.note a { color: var(--dim); }
+.note { padding: 0 16px 24px; margin: 0; color: var(--dim); font-size: 13px; }
 .msg { max-width: 560px; margin: 12vh auto 0; padding: 0 16px; color: var(--dim); }
 @media (max-width: 560px) {
   .bar { padding: 8px 12px; gap: 4px 10px; }
@@ -41,34 +43,35 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   <a class="brand" href="/">SWU Arena</a>
   <span class="title" id="title"></span>
   <span class="grow"></span>
+  <a class="arena" id="arena" href="/" hidden>Open in the arena</a>
   <button id="copy" type="button">Copy link</button>
   <button id="send" type="button" hidden>Send</button>
 </div>
-<div id="viewer-wrap"><div id="viewer"></div></div>
-<p class="note">A replay shared from the SWU Arena: bots playing Star Wars Unlimited on the real rules engine. The link opens this game only. Press <b>?</b> for the viewer's keys.</p>
+<div id="viewer-wrap"><div id="viewer"><p class="msg" id="msg">Loading the game…</p></div></div>
+<p class="note">A game from the SWU Arena, where bots play Star Wars Unlimited on the real rules engine. Press <b>?</b> for the viewer's keys.</p>
 <script src="/g/kit.js"></script>
 <script>
 (() => {
   'use strict';
-  const G = "__GAME__"; // {key, title}, filled in by the window
+  const G = "__GAME__"; // {run, game, title, people}, filled in by the window
   const $ = (id) => document.getElementById(id);
+  const say = (text) => { $('viewer').innerHTML = ''; const p = document.createElement('p'); p.className = 'msg'; p.textContent = text; $('viewer').append(p); };
   $('title').textContent = G.title || '';
-  const params = new URLSearchParams(location.search);
-  const stepN = Number(params.get('step')) || 0;
-  if (!window.SWUViewer) {
-    $('viewer').innerHTML = '<p class="msg">The viewer did not load. Reload the page to try again.</p>';
-    return;
-  }
-  // the address follows the decision on screen, so the address bar and Copy link both give this spot in the game
-  let at = stepN;
+  const stepN = Number(new URLSearchParams(location.search).get('step')) || 0;
+  const src = `/g/${encodeURIComponent(G.run)}/${encodeURIComponent(G.game)}/game.jsonl`;
+  // the address follows the decision on screen, so the address bar and Copy link both give this spot in the game;
+  // while the game is being played they give no step, so whoever opens the link follows it live too
+  let at = stepN; // the decision on screen
+  let done = false; // the replay has its end line
   let t = 0;
-  const here = () => `${location.origin}${location.pathname}${at ? `?step=${at}` : ''}`;
+  const step = () => (at && done ? `?step=${at}` : '');
+  const here = () => `${location.origin}${location.pathname}${step()}`;
   const follow = (n) => {
     at = n;
     clearTimeout(t);
     t = setTimeout(() => { try { history.replaceState(null, '', here()); } catch {} }, 400);
+    $('arena').href = `/#/games/${encodeURIComponent(G.run)}/${encodeURIComponent(G.game)}${step()}`;
   };
-  SWUViewer.mount($('viewer'), { url: `/g/${G.key}/game.jsonl`, follow: true, keyboard: 'window', persist: 'swuarena.gamelink', ...(stepN ? { stepN } : {}), onStep: (i, n) => follow(n) });
   $('copy').onclick = async () => {
     try { await navigator.clipboard.writeText(here()); $('copy').textContent = 'Copied'; }
     catch { window.prompt('Copy this link', here()); }
@@ -78,6 +81,53 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     $('send').hidden = false;
     $('send').onclick = () => navigator.share({ title: `${G.title} · SWU Arena`, url: here() }).catch(() => undefined);
   }
+  // someone who can read the arena gets a way into it at this game
+  fetch('/api/me', { credentials: 'same-origin' }).then((r) => { if (r.ok) { follow(at); $('arena').hidden = false; } }).catch(() => undefined);
+  if (!window.SWUViewer) {
+    say('The viewer did not load. Reload the page to try again.');
+    return;
+  }
+
+  let viewer = null;
+  let size = 0; // bytes of the replay this page has
+  let partial = ''; // a line still being written
+  async function load() {
+    let r;
+    try { r = await fetch(src, { cache: 'no-store' }); } catch { r = null; }
+    if (!r || !r.ok) {
+      say(r?.status === 409 ? 'This game against a person is still being played. Its replay opens here when it ends.'
+        : r?.status === 404 ? 'This game has not sent its first moves yet. It shows here as soon as it does.'
+        : 'The game did not load. Trying again…');
+      setTimeout(load, r?.status === 409 ? 20000 : 4000);
+      return;
+    }
+    const text = await r.text();
+    size = Number(r.headers.get('x-size')) || new TextEncoder().encode(text).length;
+    done = /"t":"end"/.test(text.slice(-4000));
+    $('viewer').innerHTML = '';
+    viewer = SWUViewer.mount($('viewer'), { jsonl: text, follow: false, keyboard: 'window', persist: 'swuarena.game', ...(stepN ? { stepN } : {}), onStep: (i, n) => follow(n) });
+    if (!done) setTimeout(tail, 2000);
+  }
+  // a game being played: fetch only what came after, every 2 s, until its end line
+  async function tail() {
+    try {
+      const r = await fetch(`${src}?from=${size}`, { cache: 'no-store' });
+      if (r.ok) {
+        const add = await r.text();
+        size = Number(r.headers.get('x-size')) || size + new TextEncoder().encode(add).length;
+        const parts = (partial + add).split('\n');
+        partial = parts.pop();
+        const lines = parts.filter(Boolean);
+        if (lines.length) {
+          viewer.append(lines);
+          done = lines.some((l) => l.includes('"t":"end"'));
+          if (done) follow(at);
+        }
+      }
+    } catch {}
+    if (!done) setTimeout(tail, 2000);
+  }
+  load();
 })();
 </script>
 </body>

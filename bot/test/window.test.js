@@ -27,13 +27,13 @@ async function serve(w) {
     return { srv, go, close: () => new Promise((r) => srv.close(r)) };
 }
 
-function makeWindow(name, { fetchImpl, wakeGames, staleMs, gameLinks } = {}) {
+function makeWindow(name, { fetchImpl, wakeGames, staleMs } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
     const auth = createAuth({ dir: path.join(home, 'auth'), env: ENV, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
     const app = path.join(tmp, `${name}-app.html`);
     fs.writeFileSync(app, '<!doctype html><title>app</title>');
-    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs, gameLinks });
+    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs });
 }
 
 test('store: a replay grows only at its current size, and reads back whole across gzip members', () => {
@@ -368,7 +368,7 @@ test('view links: a guest reads with no sign-in while the link exists, and never
         assert.match(open.headers.getSetCookie().join(), /Max-Age=2592000/);
         assert.strictEqual((await go('/', { cookie: guest })).status, 200);
         assert.match(await (await go('/', { cookie: guest })).text(), /<title>app/);
-        assert.deepStrictEqual((await (await go('/api/me', { cookie: guest })).json()).result, { login: null, role: 'friend', guest: true, gameLinks: false });
+        assert.deepStrictEqual((await (await go('/api/me', { cookie: guest })).json()).result, { login: null, role: 'friend', guest: true });
         assert.strictEqual((await go('/api/app', { cookie: guest })).status, 200);
         assert.strictEqual((await go('/api/share', { cookie: guest })).status, 403, 'a guest never sees the links');
         assert.strictEqual((await go('/api/docs/runs/x', { method: 'PUT', cookie: guest, body: '{}' })).status, 403, 'a guest never writes');
@@ -395,115 +395,71 @@ test('view links: a guest reads with no sign-in while the link exists, and never
     }
 });
 
-test('game links: one game for anyone holding its link, made by invited people, off unless turned on', async () => {
-    const site = 'https://swu-arena.fly.dev';
-    const sessions = (w) => ({
-        eric: `swu_session=${w.auth.sign({ l: 'ericfode', exp: Date.now() + 60000 })}`,
-        pal: `swu_session=${w.auth.sign({ l: 'pal', exp: Date.now() + 60000 })}`,
-        kim: `swu_session=${w.auth.sign({ l: 'kim', exp: Date.now() + 60000 })}`
-    });
+test('game pages: every game opens at /g/<run>/<game> for anyone, live or replay; a game against people once it ends', async () => {
     const header = (p1, p2) => `${JSON.stringify({ t: 'header', players: [{ id: 'p1', bot: p1 }, { id: 'p2', bot: p2 }] })}\n`;
+    const step = (n) => `${JSON.stringify({ t: 'step', n })}\n`;
     const end = `${JSON.stringify({ t: 'end', winner: 'p2', round: 7, steps: 120, outcome: 'won' })}\n`;
-    const seed = (w) => {
-        w.store.putDoc('runs', 'arena-t1-r1', JSON.stringify({ id: 'arena-t1-r1', games: [{ id: 'g1', p1: 'rush', p2: 'c_clock' }] }));
-        w.store.putReplay('arena-t1-r1', 'g1', Buffer.from(header('rush', 'c_clock') + end));
-        w.store.putDoc('runs', 'karabast-p', JSON.stringify({ id: 'karabast-p', bots: ['c-clock'], games: [{ id: 'k1', p1: 'opponent', p2: 'c-clock' }] }));
-        w.store.putReplay('karabast-p', 'k1', Buffer.from(header('bob', 'c-clock') + end));
-    };
-
-    // off by default: nobody makes one, and a link made while it was on stops opening
-    const off = makeWindow('w-gl-off');
-    seed(off);
-    let srv = await serve(off);
+    const w = makeWindow('w-games');
+    w.store.putDoc('runs', 'arena-t1-r1', JSON.stringify({ id: 'arena-t1-r1', games: [{ id: 'g1', p1: 'rush', p2: 'c_clock' }, { id: 'g2' }, { id: 'g3' }] }));
+    w.store.putReplay('arena-t1-r1', 'g1', Buffer.from(header('rush', 'c_clock') + end));
+    w.store.putDoc('runs', 'karabast-p', JSON.stringify({ id: 'karabast-p', bots: ['c-clock'], games: [{ id: 'k1', p1: 'opponent', p2: 'c-clock' }] }));
+    w.store.appendReplay('karabast-p', 'k1', 0, Buffer.from(header('bob', 'c-clock') + step(1)));
+    const { srv, go, close } = await serve(w);
     try {
-        const { eric } = sessions(off);
-        const r = await srv.go('/api/gamelinks', { method: 'POST', cookie: eric, origin: site, body: '{"run":"arena-t1-r1","game":"g1"}' });
-        assert.strictEqual(r.status, 403);
-        assert.match((await r.json()).error.message, /turned off/);
-        assert.strictEqual((await (await srv.go('/api/me', { cookie: eric })).json()).result.gameLinks, false);
-        const page = await srv.go(`/g/${'a'.repeat(32)}`);
-        assert.strictEqual(page.status, 404);
-        assert.match(await page.text(), /turned off/);
-        assert.strictEqual((await srv.go('/g/kit.js')).status, 404);
-    } finally {
-        await srv.close();
-    }
-
-    const w = makeWindow('w-gl', { gameLinks: 'invited' });
-    seed(w);
-    srv = await serve(w);
-    const { go } = srv;
-    try {
-        const { eric, pal, kim } = sessions(w);
-        const post = (body, opts = {}) => go('/api/gamelinks', { method: 'POST', cookie: pal, origin: site, body: JSON.stringify(body), ...opts });
-        assert.strictEqual((await (await go('/api/me', { cookie: pal })).json()).result.gameLinks, true);
-        // who may make one: an invited person from this site's own pages, as JSON; not a stranger, a guest or another site
-        assert.strictEqual((await post({ run: 'arena-t1-r1', game: 'g1' }, { cookie: undefined })).status, 401);
-        assert.strictEqual((await post({ run: 'arena-t1-r1', game: 'g1' }, { cookie: kim })).status, 403, 'signed in, not invited');
-        assert.strictEqual((await post({ run: 'arena-t1-r1', game: 'g1' }, { origin: 'https://evil.fly.dev' })).status, 403);
-        assert.strictEqual((await post({ run: 'arena-t1-r1', game: 'g1' }, { type: 'text/plain' })).status, 400);
-        w.store.putDoc('admin', 'links', JSON.stringify({ links: [{ id: 'a1b2c3d4e5f6', key: 'k'.repeat(32), label: 'Sam' }] }));
-        const guest = (await go(`/v/${'k'.repeat(32)}`)).headers.getSetCookie().find((c) => c.startsWith('swu_session=')).split(';')[0];
-        assert.strictEqual((await post({ run: 'arena-t1-r1', game: 'g1' }, { cookie: guest })).status, 403, "a view link's guest has no login");
-        assert.strictEqual((await (await go('/api/me', { cookie: guest })).json()).result.gameLinks, false);
-        for (const bad of [{}, { run: '../x', game: 'g1' }, { run: 'arena-t1-r1' }, { run: 'arena-t1-r1', game: 7 }]) {
-            assert.strictEqual((await post(bad)).status, 400, JSON.stringify(bad));
-        }
-        assert.strictEqual((await post({ run: 'arena-t1-r1', game: 'nope' })).status, 404);
-        assert.strictEqual((await post({ run: 'karabast-p', game: 'k1' })).status, 403, 'a game against people: only an admin');
-
-        const made = (await (await post({ run: 'arena-t1-r1', game: 'g1' })).json()).result;
-        assert.match(made.url, /^https:\/\/swu-arena\.fly\.dev\/g\/[A-Za-z0-9_-]{32}$/);
-        assert.deepStrictEqual((await (await post({ run: 'arena-t1-r1', game: 'g1' }, { cookie: eric })).json()).result, made, 'one link per game, whoever shares it');
-        const key = made.url.split('/').pop();
-
-        // anyone holding it: the page, that game's replay and the viewer kit; nothing else of the arena
-        const page = await go(`/g/${key}?step=40`);
+        // a finished game: its page with no sign-in, titled from the replay, and the replay itself
+        const page = await go('/g/arena-t1-r1/g1?step=40');
         assert.strictEqual(page.status, 200);
         const html = await page.text();
-        assert.match(html, /<title>rush vs c_clock · SWU Arena replay<\/title>/);
+        assert.match(html, /<title>rush vs c_clock · SWU Arena<\/title>/);
         assert.match(html, /<meta property="og:description" content="c_clock won in round 7\./);
-        assert.match(html, new RegExp(`"key":"${key}"`));
-        assert.ok(!html.includes('pal'), 'the page never names who made the link');
-        assert.strictEqual(await (await go(`/g/${key}/game.jsonl`)).text(), header('rush', 'c_clock') + end);
-        assert.strictEqual((await go('/g/kit.js')).status, 200);
-        const kitAt = `http://127.0.0.1:${srv.srv.address().port}/g/kit.js`;
+        assert.match(html, /<meta property="og:url" content="https:\/\/swu-arena\.fly\.dev\/g\/arena-t1-r1\/g1">/);
+        assert.match(html, /"run":"arena-t1-r1","game":"g1"/);
+        assert.match(html, /<script src="\/g\/kit\.js">/);
+        assert.strictEqual(await (await go('/g/arena-t1-r1/g1/game.jsonl')).text(), header('rush', 'c_clock') + end);
+        assert.strictEqual((await go('/g/arena-t1-r1/g1/')).status, 200);
+        assert.strictEqual((await go('/g/arena-t1-r1/g1', { method: 'HEAD' })).status, 200);
+
+        // a game being played: the page follows it, fetching only the lines after the bytes it has
+        w.store.appendReplay('arena-t1-r1', 'g2', 0, Buffer.from(header('rush', 'heuristic') + step(1)));
+        assert.match(await (await go('/g/arena-t1-r1/g2')).text(), /Playing now: watch it live\./);
+        const first = await go('/g/arena-t1-r1/g2/game.jsonl');
+        const size = Number(first.headers.get('x-size'));
+        assert.strictEqual(size, Buffer.byteLength(await first.text()));
+        w.store.appendReplay('arena-t1-r1', 'g2', size, Buffer.from(step(2)));
+        const more = await go(`/g/arena-t1-r1/g2/game.jsonl?from=${size}`);
+        assert.strictEqual(await more.text(), step(2));
+        assert.strictEqual(Number(more.headers.get('x-size')), size + Buffer.byteLength(step(2)));
+        assert.strictEqual(await (await go('/g/arena-t1-r1/g2/game.jsonl?from=999999')).text(), '');
+        // listed, no moves yet: the page waits; the replay is not there yet
+        assert.match(await (await go('/g/arena-t1-r1/g3')).text(), /A game about to start/);
+        assert.strictEqual((await go('/g/arena-t1-r1/g3/game.jsonl')).status, 404);
+
+        // a game against a person: closed while it is played (a person's hidden cards), then the person reads "a person"
+        assert.match(await (await go('/g/karabast-p/k1')).text(), /<title>a person vs c-clock/);
+        assert.strictEqual((await go('/g/karabast-p/k1/game.jsonl')).status, 409);
+        w.store.appendReplay('karabast-p', 'k1', w.store.replaySize('karabast-p', 'k1'), Buffer.from(end));
+        const masked = await (await go('/g/karabast-p/k1/game.jsonl')).text();
+        assert.ok(!masked.includes('bob') && masked.includes('"bot":"a person"'), masked);
+        assert.ok(!(await (await go('/g/karabast-p/k1')).text()).includes('bob'));
+
+        // the viewer kit: kept by the browser (ETag), gzip only for a client that takes it
+        const kitAt = `http://127.0.0.1:${srv.address().port}/g/kit.js`;
+        const kit = await fetch(kitAt);
+        assert.strictEqual(kit.status, 200);
+        assert.match(kit.headers.get('content-type'), /javascript/);
+        assert.strictEqual((await fetch(kitAt, { headers: { 'if-none-match': kit.headers.get('etag') } })).status, 304);
         assert.strictEqual((await fetch(kitAt, { headers: { 'accept-encoding': 'gzip;q=0, br' } })).headers.get('content-encoding'), null, 'a client that refuses gzip gets the kit plain');
         assert.strictEqual((await fetch(kitAt, { headers: { 'accept-encoding': 'gzip' } })).headers.get('content-encoding'), 'gzip');
-        assert.strictEqual((await go(`/g/${'b'.repeat(32)}`)).status, 404);
-        assert.strictEqual((await go(`/g/${key}`, { method: 'POST', body: '{}' })).status, 405);
-        assert.strictEqual((await go('/api/app')).status, 401, 'the link opens no other door');
 
-        // an admin shares a game against people: the person reads "a person" there too
-        const people = (await (await post({ run: 'karabast-p', game: 'k1' }, { cookie: eric })).json()).result;
-        const masked = await (await go(`/g/${people.url.split('/').pop()}/game.jsonl`)).text();
-        assert.ok(!masked.includes('bob') && masked.includes('"bot":"a person"'), masked);
-        assert.match(await (await go(`/g/${people.url.split('/').pop()}`)).text(), /<title>a person vs c-clock/);
-
-        // an admin sees every link and who made it, and removes one; a friend sees neither
-        const list = (await (await go('/api/gamelinks', { cookie: eric })).json()).result;
-        assert.deepStrictEqual(list.links.map((l) => [l.run, l.game, l.by]), [['arena-t1-r1', 'g1', 'pal'], ['karabast-p', 'k1', 'ericfode']]);
-        assert.deepStrictEqual((await (await go('/api/gamelinks', { cookie: pal })).json()).result, { mode: 'invited', may: true });
-        assert.strictEqual((await post({ remove: made.id })).status, 403);
-        assert.deepStrictEqual((await (await post({ remove: made.id }, { cookie: eric })).json()).result.links.map((l) => l.id), [people.id]);
-        assert.strictEqual((await go(`/g/${key}`)).status, 404);
-        assert.strictEqual((await go(`/g/${key}/game.jsonl`)).status, 404);
+        // nothing else: no game, a bad id, another method, and the rest of the arena still needs sign-in
+        for (const p of ['/g/arena-t1-r1/nope', '/g/nope/g1', '/g/arena-t1-r1/nope/game.jsonl', '/g/..%2Fx/g1', '/g/arena-t1-r1', '/g', '/g/a/b/c']) {
+            assert.strictEqual((await go(p)).status, 404, p);
+        }
+        assert.strictEqual((await go('/g/arena-t1-r1/g1', { method: 'POST', body: '{}' })).status, 405);
+        assert.strictEqual((await go('/api/app')).status, 401, 'a game page opens no other door');
+        assert.strictEqual((await go('/api/replays/arena-t1-r1/g1')).status, 401);
     } finally {
-        await srv.close();
-    }
-
-    // 'admin': only an admin makes one
-    const a = makeWindow('w-gl-admin', { gameLinks: 'admin' });
-    seed(a);
-    srv = await serve(a);
-    try {
-        const { eric, pal } = sessions(a);
-        const body = '{"run":"arena-t1-r1","game":"g1"}';
-        assert.strictEqual((await srv.go('/api/gamelinks', { method: 'POST', cookie: pal, origin: site, body })).status, 403);
-        assert.strictEqual((await srv.go('/api/gamelinks', { method: 'POST', cookie: eric, origin: site, body })).status, 200);
-        assert.strictEqual((await (await srv.go('/api/me', { cookie: pal })).json()).result.gameLinks, false);
-    } finally {
-        await srv.close();
+        await close();
     }
 });
 
@@ -514,6 +470,20 @@ test('sign-in page: a shared link keeps its #/page through sign-in', async () =>
         const html = await (await go('/')).text();
         assert.match(html, /location\.hash/);
         assert.match(html, /searchParams\.set\('next'/);
+        // an app link to one game goes to that game's own page, which needs no sign-in; other pages stay here
+        const vm = require('vm');
+        const toGame = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((js) => js.includes("'/g/'"));
+        const opens = (hash) => {
+            let to = null;
+            vm.runInNewContext(toGame, { URLSearchParams, location: { hash, replace: (u) => { to = u; } } });
+            return to;
+        };
+        assert.strictEqual(opens('#/games/arena-t1-r1/rush-vs-c%23b-7?step=30'), '/g/arena-t1-r1/rush-vs-c%23b-7?step=30');
+        assert.strictEqual(opens('#/games/arena-t1-r1/g1'), '/g/arena-t1-r1/g1');
+        assert.strictEqual(opens('#/games/arena-t1-r1/g1?step=x'), '/g/arena-t1-r1/g1');
+        for (const stay of ['', '#/games', '#/games/runs/arena-t1-r1', '#/bots/rush', '#/games/arena-t1-r1']) {
+            assert.strictEqual(opens(stay), null, stay);
+        }
     } finally {
         await close();
     }
