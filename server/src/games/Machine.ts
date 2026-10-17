@@ -213,7 +213,7 @@ export const startMachine = async (o: MachineOptions): Promise<Machine> => {
     proc = p
     p.reapStale()
     const gamesctl = makeGamesctl(c, p, boot)
-    const px = await startWindowProxy({ window: c.window, token: secrets.windowToken, nonces: secrets.nonces, port: c.proxyPort })
+    const px = await startWindowProxy({ window: c.window, arena: c.arena, token: secrets.windowToken, nonces: secrets.nonces, port: c.proxyPort })
     proxy = px
     pusher = makePusher({
       config: c,
