@@ -25,7 +25,7 @@ import { makeLane } from "./Lane.ts"
 import * as Log from "./Log.ts"
 import type { ProcService } from "./Proc.ts"
 import { deckRule, ladderConfig, ladderId, openRoundFiles, readRegular, resultOfEntry } from "./Results.ts"
-import { buildSchedule, evenGames, keyId, roundSeed, runKey } from "./Schedule.ts"
+import { buildSchedule, choosePlacementSeed, evenGames, keyId, roundSeed, runKey } from "./Schedule.ts"
 import type { GameRow, RoundRow, StoreService } from "./Store.ts"
 import type { GameResult, Host, LeaseBoard, PlanWhy, PlaySeedJob, Played, RoundSpec, ScheduledGame, WindowSettings } from "./Types.ts"
 import { ARENA, limitsFor } from "./Types.ts"
@@ -51,6 +51,7 @@ export interface RoundDeps {
 
 export type RoundOutcome =
   | { readonly kind: "done" }
+  | { readonly kind: "replan" }
   | { readonly kind: "failed"; readonly why: string }
   | { readonly kind: "stopped" }
 
@@ -153,12 +154,15 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
     if (asked._tag === "Failure") {
       deps.board?.reset()
       if (asked.failure.stopped) return STOPPED
+      if (asked.failure.replan && why === "placement" && !row) return { kind: "replan" } as const
       const failed = asked.failure.why ?? String(asked.failure.message)
       Log.warn(`round ${k}: gamesctl round failed (${failed})`)
       return { kind: "failed", why: `gamesctl round: ${failed}` } as const
     }
     const spec: RoundSpec = { ...asked.success, gamesPerPair: evenGames(asked.success.gamesPerPair) }
-    const firstSeed = roundSeed(deps.secret, k)
+    // A retry reads the frozen spec above, so its exclusions and chosen seed stay unchanged after later results.
+    const initialSeed = roundSeed(deps.secret, k)
+    const firstSeed = spec.placement?.adaptive ? choosePlacementSeed(initialSeed, spec.placement.excludedSeeds) : initialSeed
     const key = runKey(deps.secret, k)
     const kid = keyId(key)
     const limits = limitsFor(spec.capMs)

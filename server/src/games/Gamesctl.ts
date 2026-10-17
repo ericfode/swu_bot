@@ -10,6 +10,7 @@ import type { GamesConfig } from "./Config.ts"
 import { scripts } from "./Config.ts"
 import type { Kind, ProcService, Result, RunOptions } from "./Proc.ts"
 import { childEnv, lastLine } from "./Proc.ts"
+import { validPlacementSeeds } from "./Schedule.ts"
 import type { DeckList, Plan, PlanWhy, RoundDecks, RoundSpec } from "./Types.ts"
 import { ARENA } from "./Types.ts"
 
@@ -18,11 +19,14 @@ export class GamesctlFailed extends Error {
   readonly why: string
   /** the machine is stopping (or a stop reached the child): not a failure of the command */
   readonly stopped: boolean
-  constructor(command: string, why: string, stopped = false) {
+  /** a placement selection became unnecessary before reservation: ask for a fresh plan, without an attempt */
+  readonly replan: boolean
+  constructor(command: string, why: string, stopped = false, replan = false) {
     super(`gamesctl ${command} failed (${why})`)
     this.command = command
     this.why = why
     this.stopped = stopped
+    this.replan = replan
   }
 }
 
@@ -77,6 +81,7 @@ export const checkRound = (k: number, doc: unknown): RoundSpec => {
     throw new GamesctlFailed("round", why)
   }
   if (!plain(doc) || doc.round !== k) return no(`it did not answer for round ${k}`)
+  if (doc.placementSkipped === true) throw new GamesctlFailed("round", "placement no longer needs a reserved round", false, true)
   if (!Array.isArray(doc.bots) || doc.bots.length < 2 || !doc.bots.every((b) => typeof b === "string" && VERSION.test(b)) ||
     new Set(doc.bots).size !== doc.bots.length) return no("its lineup is not two or more versions")
   if (!count(doc.gamesPerPair) || doc.gamesPerPair < 1 || doc.gamesPerPair > 100) return no("games per pair out of range")
@@ -91,7 +96,12 @@ export const checkRound = (k: number, doc: unknown): RoundSpec => {
     if (!plain(p) || typeof p.version !== "string" || !doc.bots.includes(p.version) ||
       typeof p.ref !== "string" || !p.ref.startsWith("window:") || p.ref.length <= 7 || p.ref.length > 300 ||
       doc.bots.length > 5 || doc.gamesPerPair > 10 || doc.gamesPerPair % 2 !== 0) return no("invalid bounded placement")
-    placement = { version: p.version, ref: p.ref }
+    if (p.adaptive !== undefined || p.excludedSeeds !== undefined) {
+      if (p.adaptive !== true || doc.bots.length !== 2 || doc.gamesPerPair !== 2 || !validPlacementSeeds(p.excludedSeeds)) {
+        return no("invalid adaptive placement")
+      }
+      placement = { version: p.version, ref: p.ref, adaptive: true, excludedSeeds: [...p.excludedSeeds] }
+    } else placement = { version: p.version, ref: p.ref }
   }
   return {
     round: k,

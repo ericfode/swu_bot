@@ -40,7 +40,7 @@ import type { ArenaJs } from "./Js.ts"
 import { loadArenaJs } from "./Js.ts"
 import * as Log from "./Log.ts"
 import { makeProc } from "./Proc.ts"
-import { buildSchedule, bySeed, jobFor } from "./Schedule.ts"
+import { buildSchedule, bySeed, jobFor, validPlacementSeeds } from "./Schedule.ts"
 import type { DeckList, Limits, Played, PlaySeedJob, RoundDecks, RoundSpec, ScheduledGame } from "./Types.ts"
 
 /** The repo this server sits in: the default checkout to play with (the image's /app, or a local clone). */
@@ -148,9 +148,13 @@ export const readRound = (doc: unknown): RecordedRound => {
     if (!plain(p) || typeof p.version !== "string" || !VERSION.test(p.version) || !c.bots.includes(p.version) ||
       typeof p.ref !== "string" || !p.ref.startsWith("window:") || p.ref.length <= 7 || p.ref.length > 300 ||
       c.bots.length > 5 || c.gamesPerPair > 10) no("invalid bounded placement")
-    placement = { version: p.version, ref: p.ref }
+    if (p.adaptive !== undefined || p.excludedSeeds !== undefined) {
+      if (p.adaptive !== true || c.bots.length !== 2 || c.gamesPerPair !== 2 || !validPlacementSeeds(p.excludedSeeds)) no("invalid adaptive placement")
+      placement = { version: p.version, ref: p.ref, adaptive: true, excludedSeeds: [...p.excludedSeeds] }
+    } else placement = { version: p.version, ref: p.ref }
   }
   if (!count(c.firstSeed)) no("no first seed")
+  if (placement?.adaptive && (c.firstSeed > 0xffffffff || placement.excludedSeeds.includes(c.firstSeed))) no("invalid adaptive first seed")
   if (!count(c.maxSteps) || c.maxSteps < 1) no("no step cap")
   if (!positive(c.capMs)) no("no time cap (every arena round has one)")
   if (!positive(c.hangMs)) no("no watchdog limit")

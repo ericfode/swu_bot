@@ -14,10 +14,11 @@ import { loadArenaJs } from "../../src/games/Js.ts"
 import { makeProc } from "../../src/games/Proc.ts"
 import { playRound } from "../../src/games/Round.ts"
 import type { RoundDeps } from "../../src/games/Round.ts"
-import { buildSchedule, keyId, roundSeed, runKey } from "../../src/games/Schedule.ts"
+import { buildSchedule, choosePlacementSeed, keyId, roundSeed, runKey } from "../../src/games/Schedule.ts"
 import { Store } from "../../src/games/Store.ts"
 import type { StoreService } from "../../src/games/Store.ts"
 import type { PlaySeedJob, Played, RoundSpec } from "../../src/games/Types.ts"
+import { MAX_PLACEMENT_EXCLUDED_SEEDS } from "../../src/games/Types.ts"
 
 const repo = path.resolve(import.meta.dirname, "..", "..", "..")
 const js = loadArenaJs(repo)
@@ -34,6 +35,10 @@ const specOf = (change: Partial<RoundSpec> = {}): RoundSpec => ({
   bundles: Object.fromEntries(bots.map((b) => [b, sha(b)])),
   botInfo: Object.fromEntries(bots.map((b) => [b, { kind: "arena", lang: "wasm" }])),
   ...change
+})
+const adaptiveSpecOf = (excludedSeeds: ReadonlyArray<number> = []): RoundSpec => specOf({
+  bots: [placement.version, "a-v1"], gamesPerPair: 2,
+  placement: { ...placement, adaptive: true, excludedSeeds }
 })
 const newData = (): GamesConfig => readConfig({
   GAMES_DATA: mkdtempSync(path.join(root, "data-")), GAMES_APP: repo, GAMES_PLACEMENT_MODE: "immediate"
@@ -83,6 +88,30 @@ test("placement mode is opt in and rejects unknown mode names", () => {
   assert.deepEqual(checkPlan({ round: 1, resume: false, why: "placement" }), { round: 1, resume: false, why: "placement" })
 })
 
+test("a placement skipped before reservation requests a fresh plan only for its exact round", () => {
+  assert.throws(() => checkRound(12, { round: 12, placementSkipped: true }), (error) => error instanceof GamesctlFailed && error.replan && !error.stopped)
+  for (const doc of [{ round: 11, placementSkipped: true }, { round: 12, placementSkipped: false }, { round: 12, placementSkipped: "true" }]) {
+    assert.throws(() => checkRound(12, doc), (error) => error instanceof GamesctlFailed && !error.replan)
+  }
+  assert.equal(new GamesctlFailed("round", "other failure").replan, false)
+})
+
+test("a stale placement selection replans without creating a row, publishing, or running a game", async () => {
+  const c = newData()
+  const { gamesctl, calls } = fakeGamesctl(() => assert.fail("no placement spec remains"))
+  const skipped: GamesctlService = { ...gamesctl, round: (k) => Effect.try({
+    try: () => checkRound(k, { round: k, placementSkipped: true }), catch: (error) => error as GamesctlFailed
+  }) }
+  const never: NonNullable<RoundDeps["play"]> = () => assert.fail("a skipped selection must never dispatch a game")
+  assert.deepEqual(await withStore(c, (store) => playRound(deps(c, store, skipped, never), 12, "placement", false)), { kind: "replan" })
+  assert.equal(await withStore(c, (store) => store.round(12)), null)
+  assert.equal(existsSync(path.join(c.paths.results, "arena-r12")), false)
+  assert.equal(calls.publish, 0)
+  assert.deepEqual(await withStore(c, (store) => playRound(deps(c, store, skipped, never), 13, "changed", false)), {
+    kind: "failed", why: "gamesctl round: placement no longer needs a reserved round"
+  }, "an ordinary round never treats a malformed skipped answer as a placement replan")
+})
+
 test("placement round validation bounds untrusted schedules to one admitted version and four opponents", () => {
   assert.deepEqual(checkRound(1, specOf()).placement, placement)
   const invalid: Array<Record<string, unknown>> = [
@@ -118,6 +147,92 @@ test("placement filters the existing dealt schedule, with both seats and a maxim
     assert.equal(games.filter((g) => g.p1 === placement.version && g.p2 === opponent).length, 5)
     assert.equal(games.filter((g) => g.p2 === placement.version && g.p1 === opponent).length, 5)
   }
+})
+
+test("adaptive placement validates one pair and bounded canonical uint32 seed exclusions", () => {
+  const spec = adaptiveSpecOf([0, 12, 0xffffffff])
+  assert.deepEqual(checkRound(1, spec).placement, spec.placement)
+  const invalid: Array<Record<string, unknown>> = [
+    { placement: { ...placement, adaptive: false, excludedSeeds: [] } },
+    { placement: { ...placement, excludedSeeds: [] } },
+    { placement: { ...placement, adaptive: true } },
+    { placement: { ...placement, adaptive: true, excludedSeeds: null } },
+    ...[[1, 1], [2, 1], [-1], [0x100000000], [1.5], ["2"]].map((excludedSeeds) => ({ placement: { ...placement, adaptive: true, excludedSeeds } })),
+    { placement: { ...placement, adaptive: true, excludedSeeds: Array.from({ length: MAX_PLACEMENT_EXCLUDED_SEEDS + 1 }, (_, i) => i) } },
+    { bots: [placement.version, "a-v1", "b-v1"] },
+    { gamesPerPair: 4 }
+  ]
+  for (const change of invalid) assert.throws(() => checkRound(1, { ...spec, ...change }), GamesctlFailed)
+})
+
+test("adaptive seed selection skips stale seeds deterministically, including uint32 wraparound", () => {
+  assert.equal(choosePlacementSeed(12, []), 12)
+  assert.equal(choosePlacementSeed(12, [11, 12, 13, 15]), 14)
+  assert.equal(choosePlacementSeed(0xffffffff, [0, 1, 0xfffffffe, 0xffffffff]), 2)
+  const excluded = Array.from({ length: MAX_PLACEMENT_EXCLUDED_SEEDS }, (_, i) => i)
+  assert.equal(choosePlacementSeed(0, excluded), MAX_PLACEMENT_EXCLUDED_SEEDS, "even the largest exclusion prefix has a fresh seed")
+  assert.throws(() => choosePlacementSeed(-1, []), /invalid adaptive/)
+  assert.throws(() => choosePlacementSeed(1, [2, 1]), /invalid adaptive/)
+})
+
+test("adaptive steps use fresh mirrored pairs while exact round retries preserve all finished games", async () => {
+  const c = newData()
+  const first = roundSeed(secret, 8)
+  let spec = adaptiveSpecOf([first])
+  const { gamesctl, calls } = fakeGamesctl(() => spec)
+  const initial: Array<PlaySeedJob> = []
+  const play: NonNullable<RoundDeps["play"]> = (job) => Effect.sync(() => { initial.push(job); return played(job) })
+  assert.deepEqual(await withStore(c, (store) => playRound(deps(c, store, gamesctl, play), 8, "placement", false)), { kind: "done" })
+  const chosen = (first + 1) >>> 0
+  assert.deepEqual(initial.map((job) => job.seed), [chosen])
+  assert.equal(initial[0]!.games.length, 2)
+  assert.deepEqual(initial[0]!.games.map((g) => [g.p1, g.p2]), [[placement.version, "a-v1"], ["a-v1", placement.version]])
+  assert.equal((await withStore(c, (store) => store.round(8)))?.firstSeed, chosen)
+  assert.equal(readLadder(c, 8).config.firstSeed, chosen)
+  assert.deepEqual(readLadder(c, 8).config.placement, spec.placement)
+
+  // A newer selection excludes the finished seed, but retrying round 8 still uses its original durable spec.
+  spec = adaptiveSpecOf([first, chosen].sort((a, b) => a - b))
+  const repeated: Array<PlaySeedJob> = []
+  const noReplay: NonNullable<RoundDeps["play"]> = (job) => Effect.sync(() => { repeated.push(job); return played(job) })
+  assert.deepEqual(await withStore(c, (store) => playRound(deps(c, store, gamesctl, noReplay), 8, "resume", true)), { kind: "done" })
+  assert.equal(repeated.length, 0)
+  assert.equal(calls.round, 1, "retries never fetch a new selection")
+  assert.equal(readLadder(c, 8).config.firstSeed, chosen)
+
+  const nextBase = roundSeed(secret, 9)
+  spec = adaptiveSpecOf([...new Set([first, chosen, nextBase])].sort((a, b) => a - b))
+  assert.deepEqual(await withStore(c, (store) => playRound(deps(c, store, gamesctl, noReplay), 9, "placement", false)), { kind: "done" })
+  assert.equal(repeated.length, 1)
+  assert.notEqual(repeated[0]!.seed, chosen, "a useful repeat of unchanged versions uses a fresh seed")
+  assert.notEqual(repeated[0]!.seed, nextBase, "the new step's starting seed is excluded too")
+  assert.equal(repeated[0]!.games.length, 2)
+  assert.ok(repeated[0]!.games.every((g) => !initial[0]!.games.some((old) => old.id === g.id)))
+})
+
+test("an interrupted adaptive pair keeps its selected seed and never reruns its finished seat", async () => {
+  const c = newData()
+  const first = roundSeed(secret, 10)
+  let spec = adaptiveSpecOf([first])
+  const { gamesctl, calls } = fakeGamesctl(() => spec)
+  const initial: Array<PlaySeedJob> = []
+  const cut: NonNullable<RoundDeps["play"]> = (job) => Effect.suspend(() => {
+    initial.push(job)
+    return initial.length === 2 ? Effect.fail(new PlayFailed(job.seed, "shutdown", true)) : Effect.succeed(played(job))
+  })
+  assert.deepEqual(await withStore(c, (store) => playRound(deps(c, store, gamesctl, cut, 1), 10, "placement", false)), { kind: "stopped" })
+  const finished = readLadder(c, 10).games.filter((g: any) => g.outcome !== "running")
+  assert.equal(finished.length, 1)
+  const chosen = initial[0]!.seed
+  spec = adaptiveSpecOf([...new Set([first, chosen])].sort((a, b) => a - b))
+  const rest: Array<PlaySeedJob> = []
+  const resume: NonNullable<RoundDeps["play"]> = (job) => Effect.sync(() => { rest.push(job); return played(job) })
+  assert.deepEqual(await withStore(c, (store) => playRound(deps(c, store, gamesctl, resume, 1), 10, "resume", true)), { kind: "done" })
+  assert.equal(calls.round, 1)
+  assert.deepEqual(rest.map((job) => job.seed), [chosen])
+  assert.equal(rest[0]!.games.length, 1)
+  assert.notEqual(rest[0]!.games[0]!.id, finished[0].id)
+  assert.deepEqual(readLadder(c, 10).progress, { scheduled: 2, finished: 2, rated: 2, outcomes: { won: 2 } })
 })
 
 test("placement completes through the normal worker limit and publishes its exact progress", async () => {

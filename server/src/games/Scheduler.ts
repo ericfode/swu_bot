@@ -19,7 +19,8 @@
  * Rounds keep Oban's rules: a round is queued once per boot (whatever became of it); a failed round is tried once
  * more 30 s later; two failures, or a round that runs past GAMES_ROUND_HOURS, hold it until the next boot (plan keeps
  * naming it, this warns once, and the machine may idle). A round cut by a stop is not an attempt: the next boot
- * resumes it at once.
+ * resumes it at once. A placement selection cancelled before reservation releases its unused round number and plans
+ * again without recording an attempt.
  */
 import { readFileSync } from "node:fs"
 import path from "node:path"
@@ -461,6 +462,15 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
       // not an attempt: the next boot resumes it
       Log.info(`round ${j.k} ended: stopped (shutdown)`)
       job = null
+      return
+    }
+    if (Exit.isSuccess(exit) && exit.value.kind === "replan") {
+      Log.info(`round ${j.k}: placement selection changed before reservation; planning again`)
+      queued.delete(j.k)
+      warned.delete(j.k)
+      job = null
+      o.pusher.poke()
+      tick()
       return
     }
     let kind: "done" | "cap" | "failed"

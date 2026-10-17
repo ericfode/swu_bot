@@ -76,7 +76,7 @@ too; `gamesctl push` sends only the newest two rounds, which stay plain.
 | `GAMES_REPLAY_HOURS` | 24 | a round with an unchanged lineup plays again after this long (`gamesctl plan`) |
 | `GAMES_ROUND_HOURS` | 6 | a longer round is stopped and held until the next boot (fractions allowed) |
 | `GAMES_GAMES`, `GAMES_WORKERS`, `GAMES_THINK_CAP_SEC` | 2, 2, 60 | games per pair, games at once, each bot's thinking per game; Eric's arena settings win |
-| `GAMES_PLACEMENT_MODE` | `cycle` | `immediate`: queue each accepted version's bounded placement without the settle or round-gap wait |
+| `GAMES_PLACEMENT_MODE` | `cycle` | `immediate`: adaptively select placement games after acceptance without the settle or round-gap wait |
 | `GAMES_REQUIRE_MOUNT` | unset | `1`: refuse to start unless `GAMES_DATA` is its own file system |
 | `GAMES_HELPER_PORT`, `GAMES_HELPER_LISTEN` | unset, `FLY_PRIVATE_IP` | the helper API; on only with a port and a `GAMES_HELPER_TOKENS` entry |
 | `GAMES_HELPER_TOKENS` | unset | secret: `name:sha256-of-token`, comma separated |
@@ -103,27 +103,64 @@ the exact `window:<submission-id>` ref; a retry of acceptance reuses the same re
 queue games. Benched or withdrawn versions are not newly dispatched. Existing checked versions are not backfilled
 when the mode is first enabled.
 
-A placement snapshots at most four eligible opponent versions: one resident rating anchor when available, then a
-strongest/middle/weakest spread of the published all-round Bradley–Terry ratings (1500 for unranked versions, stable
-name tie breaks). The submitted competitor never plays another version of itself. It plays only those pairs, using
-the current even games-per-pair setting (2–10), both seats, the usual tournament deck-by-seat deal and secret seeds.
-This is at most **40 scheduled games per version**. It provides an initial rating from a bounded sample, with the
-ordinary periodic full round robin continuing to supply broader evidence. A new version in this mode does not also
-trigger an immediate full round robin.
+A placement chooses **one opponent and one fresh mirrored seed pair (two games) at a time**, then reassesses after
+the actual results are published. It reuses finished, non-holdout ladder history, with the referee's existing scoring
+and Bradley–Terry point fit. Each immutable version is a separate model node; v1's outcomes are never assigned to v2.
+Only the latest eligible admitted opponents are dispatch candidates, excluding the submitter's other versions.
+Historical versions still supply comparison links. Immediate mode does not automatically run changed-lineup or stale
+full round robins after placements stop; `cycle` retains those triggers.
+
+The selector first connects the target to missing active resident-anchor components, then other active candidate components.
+Within that priority it chooses the largest expected relative variance reduction among the target-versus-anchor-mean
+contrast and the target-versus-each-active-opponent contrasts; exact ties use opponent name. This prevents a target
+well measured against its reference from appearing finished while a sparsely measured peer comparison remains uncertain. Without anchors,
+a deterministic opponent component with the most rated evidence supplies the relative reference, explicitly marked
+unanchored. This scheduling reference uses the existing per-round `anchorsOf` policy on eligible active opponents;
+the published all-round rating retains its existing fixed historical `allRoundAnchors` reference unchanged.
+A regularization prior does not count as a real game link. New versions and disconnected components therefore require
+real comparison evidence.
+
+Uncertainty uses the **full** Bradley–Terry Fisher matrix, including the existing strength-1 prior, rather than treating
+opponents as known. Mirrored games sharing a version pair and seed contribute one effective observation in that matrix
+to allow for correlation; the published point ratings still use the referee's actual scored games unchanged. These
+are model-based, heuristic standard errors and expected gains, **not empirically calibrated confidence intervals**.
+They assume stationary bot versions and a Bradley–Terry comparison model; nontransitive matchups, deck effects and
+residual seed correlation can violate that approximation. A selected game is expected to help, with no guarantee that
+its realized outcome adds information or establishes an exact ordering near a tie.
+
+The documented stopping rule is: all required components are connected by rated results, every required relative standard
+error is at most **100 Elo**, and the best candidate's expected relative variance reduction from another mirrored
+pair is below **5%**. Both thresholds are practical heuristics. Low expected gain while uncertainty remains above
+100 Elo is an inconclusive plateau. This is a practical precision rule, not a guarantee of exact ordinal rank.
+A balanced single-anchor example reaches the rule after 19 fresh mirrored pairs (38 games); sufficient existing
+history can finish a request with **zero new games**. There is no fixed batch to fill.
+The independent **40 scheduled games per accepted version** cap is only a safety limit; reaching it before the rule
+reports `inconclusive`, never successful placement. An entirely unrated step also stops inconclusively.
+
+Known game identities are deduplicated before selection. For unchanged version pairs, every previously attempted seed
+(including unrated outcomes) is excluded from new dispatch. The secret-derived seed advances deterministically to the
+first unused uint32 seed, and that frozen step resumes exactly on retry. Useful repeat opponents remain possible on
+fresh seeds while their expected gain exceeds the stopping threshold. Missing required history, conflicting results
+or a pair with attempts whose seeds are unknown fail closed instead of replaying stale matches.
+Planning also waits if history exceeds 250,000 rows, the model exceeds 256 version nodes, or a selected pair has more
+than 10,000 excluded seeds. These are memory/CPU safety guards and do not imply successful placement.
 
 The request is visible at once; dispatch happens after warm on the next scheduler tick (at most 20 seconds while
 idle, or immediately after its intake pass/previous round ends). It skips the settle and inter-round gap but waits
 for an already-playing round. All work uses the same single round queue, Lane, dynamic worker setting, game/time
-limits, isolated play-seed executor and existing helper leases. No additional workers are created. Versions, opponents,
-bundle digests, rules and completed games are frozen once reserved, so newer concurrent submissions and retries
-cannot reset it. A placement has its own globally numbered round and goes through the existing referee's real-result
-scoring and anchored Bradley–Terry publication. Infrastructure failures never create synthetic game losses.
+limits, isolated play-seed executor and existing helper leases. No additional workers are created. Each adaptive step
+has its own globally numbered round. Versions, opponent, bundle digests, rules, excluded seeds and completed games are
+frozen once reserved, so concurrent submissions and retries cannot reset it. Pending requests rotate between completed
+steps. The ordinary referee publishes only real results; infrastructure failures never create synthetic game losses.
+The current games-per-pair setting still controls cycle rounds; adaptive steps always use two games.
 
 `arena_status` includes `placementMode` and `placements`; accepted submissions include their placement, refreshed
 from the pushed status by `arena_my_submissions`. Records include version/ref, round, opponents, queued/updated times,
-`finished`, `rated`, `scheduled`, `progress` and `error`. States are `queued`, `waiting` (no opponent), `running`,
-`retrying`, `held` (two failed round attempts or the round cap; resumed next boot), `complete`, `unrated` (every game
-finished but none counted for rating), and `cancelled` for an unstarted request no longer eligible. Read-only status
+`finished`, `rated`, `scheduled`, cumulative `progress`, immutable step history, selection reason, uncertainty, expected
+gain and `error`. States include `queued`, `waiting` (no eligible comparison or unavailable history), `running`,
+`retrying`, `held` (two failed round attempts or the round cap; resumed next boot), `complete` (criterion reached),
+`inconclusive` (safety limit, unrated step or low-gain plateau), and `cancelled` for an unstarted request no longer eligible.
+Previously reserved fixed-batch jobs retain their frozen rules and are marked as legacy on completion. Read-only status
 can expose a blocked queued request before root reconciles it. Publication follows the existing 20-second status push
 and live-round push. Completed requests cannot be regressed by late failure callbacks. Round retries keep completed
 games; a stopped machine resumes its reserved placement even if the mode is then disabled. Disabling the mode stops

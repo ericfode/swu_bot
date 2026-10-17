@@ -356,8 +356,9 @@ function planRound({ replayMs, settledSince, placementOnly = false }) {
         return { round: job.round ?? (last?.round ?? -1) + 1, resume: job.round !== null,
             why: 'placement' };
     }
-    // While intake checks the rest of a batch only already-admitted placements may start.
-    if (placementOnly) {
+    // Immediate mode only dispatches an informative placement step. Never fall through to a stale/changed full
+    // round robin after its stopping criterion was reached; cycle keeps the ordinary cadence below.
+    if (placementOnly || placement.enabled()) {
         return { round: null, why: 'same' };
     }
     // A bounded placement does not pretend the whole roster played an ordinary round.
@@ -381,11 +382,6 @@ function planRound({ replayMs, settledSince, placementOnly = false }) {
         ? readOwnJson(path.join(home.RESULTS, require('./referee').ladderIdOf(cycleClock.round), 'ladder.json'), MAX_LADDER_BYTES)
         : null;
     const stale = cycleClock && Date.now() - Date.parse(cycleClock.updatedAt ?? oldLadder?.updatedAt ?? oldLadder?.createdAt ?? st.startedAt ?? st.updatedAt ?? 0) > replayMs;
-    // In immediate mode new versions get their bounded placements; they do not also trigger a full round robin.
-    // Periodic replay rounds still run on the ordinary cadence, and cycle mode keeps its changed-lineup trigger.
-    if (placement.enabled() && last && !stale) {
-        return { round: null, why: 'same' };
-    }
     if (!changed && !stale) {
         return { round: null, why: 'same' };
     }
@@ -640,8 +636,10 @@ const commands = {
         if (saved?.spec) {
             return saved.spec;
         }
-        const spec = o.placement === '1' || saved ? placements.reserve(k, (job) => roundSpec(k, { games: Math.min(games, 10), capMs,
-            bots: [job.version, ...job.opponents], placement: { version: job.version, ref: job.ref } })) : null;
+        const spec = o.placement === '1' || saved ? placements.reserve(k, (job) => roundSpec(k, { games: job.adaptive ? 2 : Math.min(games, 10), capMs,
+            bots: [job.version, ...job.opponents], placement: { version: job.version, ref: job.ref,
+                ...(job.adaptive ? { adaptive: true, excludedSeeds: job.excludedSeeds } : {}) } })) : null;
+        if ((o.placement === '1' || saved) && !spec) return { round: k, placementSkipped: true };
         return spec ?? roundSpec(k, { games, capMs });
     },
 

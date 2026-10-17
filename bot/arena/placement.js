@@ -13,9 +13,13 @@ const home = require('./home');
 const DIR = path.join(home.HOME, 'placements');
 const VERSION = /^([a-z][a-z0-9_]{0,31})-v([1-9]\d*)$/;
 const PENDING = new Set(['queued', 'waiting', 'running', 'retrying', 'held']);
-const TERMINAL = new Set(['complete', 'unrated', 'failed', 'cancelled']);
-const MAX_OPPONENTS = 4;
+const TERMINAL = new Set(['complete', 'unrated', 'failed', 'cancelled', 'inconclusive']);
+const MAX_OPPONENTS = 1;
+const MAX_GAMES = 40;
 const MAX_RECORD_BYTES = 8 << 20;
+const MAX_HISTORY_BYTES = 64 << 20;
+const MAX_HISTORY_ROWS = 250000;
+const MAX_EXCLUDED_SEEDS = 10000;
 const enabled = () => process.env.GAMES_PLACEMENT_MODE === 'immediate';
 const plain = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const versionParts = (v) => typeof v === 'string' && VERSION.exec(v);
@@ -23,12 +27,12 @@ const fileOf = (version) => path.join(DIR, `${version}.json`);
 const isDirectory = (p) => !!fs.lstatSync(p, { throwIfNoEntry: false })?.isDirectory();
 
 /** Plain files only: a placement request never follows a submission's or another process's link. */
-function readJson(file) {
+function readJson(file, maxBytes = MAX_RECORD_BYTES) {
     let fd;
     try {
         fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
         const st = fs.fstatSync(fd);
-        return st.isFile() && st.size <= MAX_RECORD_BYTES ? JSON.parse(fs.readFileSync(fd, 'utf8')) : null;
+        return st.isFile() && st.size <= maxBytes ? JSON.parse(fs.readFileSync(fd, 'utf8')) : null;
     } catch {
         return null;
     } finally {
@@ -54,34 +58,105 @@ function admitted(version, ref = undefined) {
     return d?.kind === 'arena' && d.lang === 'wasm';
 }
 
-/** One anchor, then the strongest/middle/weakest available versions by existing all-round BT, with stable ties. */
-function opponentsOf(version, excludeAgents = new Set()) {
+/** Latest checked versions only. Older versions remain distinct historical fit nodes. */
+function opponentsOf(version) {
     const agent = versionParts(version)?.[1];
     const referee = require('./referee');
     const names = referee.lineup(null, { playable: (n) => admitted(n) })
-        .filter((n) => versionParts(n)?.[1] !== agent && !excludeAgents.has(versionParts(n)?.[1]));
-    const ratings = readJson(path.join(home.HOME, 'standings.json'))?.global ?? {};
-    const rating = (n) => typeof ratings[n] === 'number' && Number.isFinite(ratings[n]) ? ratings[n] : 1500;
-    const ranked = names.sort((a, b) => rating(b) - rating(a) || (a < b ? -1 : a > b ? 1 : 0));
-    const own = new Set(referee.anchorsOf(ranked));
-    const picked = [];
-    const add = (n) => { if (n && !picked.includes(n) && picked.length < MAX_OPPONENTS) picked.push(n); };
-    add(ranked.find((n) => own.has(n)));
-    const rest = ranked.filter((n) => !picked.includes(n));
-    add(rest[0]);
-    add(rest[Math.floor(rest.length / 2)]);
-    add(rest.at(-1));
-    for (const n of ranked) add(n);
-    return picked;
+        .filter((n) => versionParts(n)?.[1] !== agent);
+    return names.sort();
 }
 
-/** Keep every eligible frozen version; only an ineligible slot may take a newly selected opponent before start. */
-function eligibleOpponents(job) {
-    if (job.opponents.length && job.opponents.every((n) => admitted(n))) return [...job.opponents];
-    const kept = job.opponents.filter((n) => admitted(n));
-    const replacements = opponentsOf(job.version, new Set(kept.map((n) => versionParts(n)?.[1])));
-    if (!job.opponents.length) return replacements;
-    return job.opponents.flatMap((n) => admitted(n) ? [n] : replacements.length ? [replacements.shift()] : []);
+/** Read each authoritative ladder once. Aggregate standings results are deliberately not counted a second time. */
+function history() {
+    const file = path.join(home.HOME, 'standings.json');
+    if (!fs.lstatSync(file, { throwIfNoEntry: false })) {
+        // An empty arena is legitimate. Existing ladders without their manifest are not evidence of an empty arena.
+        if (fs.lstatSync(home.RESULTS, { throwIfNoEntry: false }) &&
+            (!isDirectory(home.RESULTS) || fs.readdirSync(home.RESULTS).length > 0)) return null;
+        return { observations: [], attempted: [] };
+    }
+    const st = readJson(file, MAX_HISTORY_BYTES);
+    if (!plain(st) || !Array.isArray(st.rounds)) return null;
+    const observations = [], attempted = [], seen = new Set();
+    let rowCount = 0;
+    const referee = require('./referee');
+    for (const rd of st.rounds) {
+        if (!plain(rd)) return null;
+        if (rd.pool === 'holdout') continue;
+        const id = rd.ladderId;
+        if (typeof id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(id)) return null;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const dir = path.join(home.RESULTS, id);
+        if (!isDirectory(home.RESULTS) || !isDirectory(dir)) return null;
+        const ladder = readJson(path.join(dir, 'ladder.json'), MAX_HISTORY_BYTES);
+        if (!plain(ladder) || !Array.isArray(ladder.games) || !plain(ladder.config) || !Array.isArray(ladder.config.bots)) return null;
+        rowCount += ladder.games.length;
+        if (rowCount > MAX_HISTORY_ROWS) return null;
+        for (const g of ladder.games) {
+            if (!plain(g) || typeof g.p1 !== 'string' || typeof g.p2 !== 'string' || typeof g.outcome !== 'string' || g.p1 === g.p2 ||
+                !ladder.config.bots.includes(g.p1) || !ladder.config.bots.includes(g.p2)) return null;
+            const row = { id: typeof g.id === 'string' && g.id ? `${id}/${g.id}` : undefined, scope: id,
+                a: g.p1, b: g.p2, ...(Number.isSafeInteger(g.seed) && g.seed >= 0 && g.seed <= 0xffffffff ? { seed: g.seed } : {}) };
+            attempted.push(row);
+            if (g.outcome === 'running') continue;
+            const { score } = referee.cappedScore(g);
+            if (score !== null) observations.push({ ...row, score });
+        }
+    }
+    return { observations, attempted };
+}
+
+const episodes = (job) => Array.isArray(job.rounds) ? job.rounds : [];
+const counts = (job) => job.adaptive ? episodes(job).reduce((out, ep) => {
+    for (const key of ['finished', 'rated', 'scheduled']) out[key] += ep[key] ?? 0;
+    return out;
+}, { finished: 0, rated: 0, scheduled: 0 }) : { finished: job.finished ?? 0, rated: job.rated ?? 0, scheduled: job.scheduled ?? null };
+
+/** Explain the choice without publishing or repeatedly storing historical game identities and seed lists. */
+function criterionOf(selected) {
+    const keys = ['state', 'opponent', 'reason', 'uncertainty', 'calibrationUncertainty', 'comparisons', 'expectedGain',
+        'expectedVarianceReduction', 'connected', 'unanchored', 'reference', 'estimate', 'observations', 'effectiveUnits',
+        'duplicates', 'unknownSeedAttempts', 'thresholds'];
+    return { ...Object.fromEntries(keys.filter((k) => selected[k] !== undefined).map((k) => [k, selected[k]])),
+        ...(selected.candidates ? { candidates: selected.candidates.map(({ opponent, expectedGain, expectedVarianceReduction, bridge }) =>
+            ({ opponent, expectedGain, expectedVarianceReduction, bridge })) } : {}) };
+}
+
+/** Selection is read-only, deterministic, and based entirely on existing real results. */
+function decision(job) {
+    // Only an assigned legacy round has frozen execution rules. Never-started requests adopt the adaptive policy.
+    if (!job.adaptive && job.round == null && !job.spec && PENDING.has(job.state)) {
+        job = { ...job, adaptive: true, rounds: [], opponents: [], excludedSeeds: [], finished: 0, rated: 0, scheduled: 0 };
+    }
+    if (!job.adaptive || job.round != null || TERMINAL.has(job.state)) return job;
+    if (!admitted(job.version, job.ref)) return { ...job, state: 'blocked', error: 'version is benched, withdrawn, or no longer admitted' };
+    let data;
+    try { data = history(); } catch { data = null; }
+    if (!data || episodes(job).some((ep) => ep.state === 'complete') && !fs.existsSync(path.join(home.HOME, 'standings.json'))) {
+        return { ...job, state: 'waiting', reason: 'history-unavailable', opponents: [], error: 'authoritative ladder history is missing or invalid' };
+    }
+    const candidates = opponentsOf(job.version);
+    const unknown = new Set(data.attempted.filter((r) => r.seed === undefined && (r.a === job.version || r.b === job.version))
+        .map((r) => r.a === job.version ? r.b : r.a));
+    const opponents = candidates.filter((n) => !unknown.has(n));
+    const anchors = require('./referee').anchorsOf(candidates).filter((n) => n !== job.version);
+    // Keep every candidate in connectivity diagnostics, but never dispatch a pair whose old seed is unknown.
+    const selected = require('./information').select({ target: job.version, opponents: candidates, anchors, ...data });
+    const criterion = criterionOf(selected);
+    if (selected.state !== 'complete' && counts(job).scheduled >= MAX_GAMES) return { ...job, state: 'inconclusive',
+        reason: 'budget', opponents: [], criterion, error: 'placement safety budget reached before the information criterion' };
+    if ((selected.avoidSeeds ?? []).length > MAX_EXCLUDED_SEEDS) return { ...job, state: 'waiting', reason: 'seed-history-limit',
+        opponents: [], criterion, error: 'pair seed history exceeds the bounded placement planner limit' };
+    if (selected.state === 'play' && !opponents.includes(selected.opponent)) {
+        return { ...job, state: 'waiting', reason: 'unknown-seed-history', opponents: [], criterion,
+            error: 'a useful opponent has historical attempts without seeds; refusing a possible duplicate' };
+    }
+    const state = selected.state === 'play' ? 'queued' : selected.state === 'waiting' && selected.reason === 'gain-plateau' ? 'inconclusive' : selected.state;
+    return { ...job, state, opponents: selected.opponent ? [selected.opponent] : [],
+        excludedSeeds: selected.avoidSeeds ?? [], reason: selected.reason, criterion,
+        error: state === 'waiting' || state === 'inconclusive' ? selected.reason : null };
 }
 
 function records() {
@@ -91,13 +166,16 @@ function records() {
         .filter(({ file, record: r }) => plain(r) && versionParts(r.version) && file === `${r.version}.json` &&
             typeof r.ref === 'string' && typeof r.queuedAt === 'string' && Array.isArray(r.opponents))
         .map(({ record }) => record)
-        .sort((a, b) => a.queuedAt.localeCompare(b.queuedAt) || (a.version < b.version ? -1 : a.version > b.version ? 1 : 0));
+        .sort((a, b) => (a.lastDispatchedAt ?? a.queuedAt).localeCompare(b.lastDispatchedAt ?? b.queuedAt) ||
+            a.queuedAt.localeCompare(b.queuedAt) || (a.version < b.version ? -1 : a.version > b.version ? 1 : 0));
 }
 
 const publicRecord = (r) => ({
     version: r.version, ref: r.ref, round: r.round ?? null, state: r.state, queuedAt: r.queuedAt, updatedAt: r.updatedAt,
-    opponents: [...r.opponents], finished: r.finished ?? 0, rated: r.rated ?? 0, scheduled: r.scheduled ?? null,
-    progress: { finished: r.finished ?? 0, rated: r.rated ?? 0, scheduled: r.scheduled ?? null }, error: r.error ?? null
+    opponents: [...r.opponents], ...counts(r), progress: counts(r), error: r.error ?? null,
+    reason: r.reason ?? null,
+    ...(r.adaptive ? { adaptive: true, criterion: r.criterion ?? null,
+        safetyGames: MAX_GAMES, rounds: episodes(r).map(({ round, state, finished = 0, rated = 0, scheduled = 0 }) => ({ round, state, finished, rated, scheduled })) } : { legacy: true })
 });
 
 function ensureDir() {
@@ -170,9 +248,8 @@ function enqueue({ version, ref, benched = false } = {}) {
     if (!enabled() || benched || typeof ref !== 'string' || !ref.startsWith('window:') || ref.length <= 7 || ref.length > 300 || !admitted(version, ref)) return null;
     ensureDir();
     const now = new Date().toISOString();
-    const opponents = opponentsOf(version);
-    const record = { version, ref, round: null, state: opponents.length ? 'queued' : 'waiting', queuedAt: now, updatedAt: now,
-        opponents, finished: 0, rated: 0, scheduled: null, error: null };
+    const record = decision({ version, ref, adaptive: true, rounds: [], round: null, state: 'queued', queuedAt: now, updatedAt: now,
+        opponents: [], finished: 0, rated: 0, scheduled: 0, error: null });
     try {
         storeFile(fileOf(version), record, true);
     } catch (e) {
@@ -184,24 +261,25 @@ function enqueue({ version, ref, benched = false } = {}) {
     return publicRecord(record);
 }
 
-const statuses = () => records().map((r) => {
-    if (!PENDING.has(r.state) || r.round != null) return publicRecord(r);
-    if (!admitted(r.version, r.ref)) return publicRecord({ ...r, state: 'blocked', error: 'version is benched, withdrawn, or no longer admitted' });
-    const opponents = eligibleOpponents(r);
-    return publicRecord({ ...r, opponents, state: opponents.length ? 'queued' : 'waiting',
-        error: opponents.length ? null : 'waiting for an admitted opponent' });
-});
+const statuses = () => records().map((r) => publicRecord(decision(r)));
 
 /** Read-only: gamesctl plan runs as the bots' user and has no right to change the queue. */
 function next() {
-    return records().find((r) => PENDING.has(r.state) &&
-        (r.round !== null && r.round !== undefined || enabled() && admitted(r.version, r.ref) &&
-            eligibleOpponents(r).length > 0)) ?? null;
+    const jobs = records().map(decision).filter((r) => PENDING.has(r.state));
+    const active = jobs.find((r) => r.round != null);
+    return (active ? getRound(active.round) : null) ?? (enabled() ? jobs.find((r) =>
+        r.state === 'queued' && admitted(r.version, r.ref) && r.opponents.length > 0) : null) ?? null;
 }
 
 /** Works with the option off too: a started round must still finish under its frozen rules. */
 function getRound(k) {
-    return records().find((r) => r.round === k) ?? null;
+    for (const job of records()) {
+        if (job.adaptive) {
+            const ep = episodes(job).find((r) => r.round === k);
+            if (ep) return { ...job, ...ep, round: k };
+        } else if (job.round === k) return job;
+    }
+    return null;
 }
 
 /** Root alone reconciles queue eligibility; plan/status remain read-only and assigned rounds keep their snapshot. */
@@ -211,12 +289,8 @@ function reconcile() {
             storeFile(fileOf(job.version), { ...job, state: 'cancelled', error: 'version is benched, withdrawn, or no longer admitted', updatedAt: new Date().toISOString() });
             continue;
         }
-        const opponents = eligibleOpponents(job);
-        const state = opponents.length ? 'queued' : 'waiting';
-        const error = opponents.length ? null : 'waiting for an admitted opponent';
-        if (job.state !== state || job.error !== error || JSON.stringify(job.opponents) !== JSON.stringify(opponents)) {
-            storeFile(fileOf(job.version), { ...job, opponents, state, error, updatedAt: new Date().toISOString() });
-        }
+        const changed = decision(job);
+        if (JSON.stringify(job) !== JSON.stringify(changed)) storeFile(fileOf(job.version), { ...changed, updatedAt: new Date().toISOString() });
     }
 }
 
@@ -225,8 +299,9 @@ function reserve(k, makeSpec) {
     if (!enabled() && !getRound(k)) return null;
     return locked(() => {
         reconcile();
-        let job = getRound(k);
-        if (job?.spec) return job.spec;
+        let assigned = getRound(k);
+        if (assigned?.spec) return assigned.spec;
+        let job = assigned ? records().find((r) => r.version === assigned.version) : null;
         if (!job) {
             if (!enabled()) return null;
             // The hook also runs when an ordinary round resumes. A new placement cannot take its number or files.
@@ -237,9 +312,11 @@ function reserve(k, makeSpec) {
             if (!job) return null;
             // A still-running request belongs to its first round, never another one.
             if (job.round !== null && job.round !== undefined) return null;
-            if (!job.opponents.length) job.opponents = eligibleOpponents(job);
             if (!job.opponents.length) return null;
-            job = { ...job, round: k, state: 'running', error: null, updatedAt: new Date().toISOString() };
+            const now = new Date().toISOString();
+            job = { ...job, round: k, state: 'running', error: null, updatedAt: now, lastDispatchedAt: now,
+                ...(job.adaptive ? { rounds: [...episodes(job), { round: k, state: 'running', finished: 0, rated: 0, scheduled: 0,
+                    opponents: [...job.opponents], excludedSeeds: [...(job.excludedSeeds ?? [])] }] } : {}) };
             // Reserve before a fallible pack/warm: a retry always prepares this version under this same round number.
             storeFile(fileOf(job.version), job);
         }
@@ -247,15 +324,21 @@ function reserve(k, makeSpec) {
             const spec = makeSpec(structuredClone(job));
             const bots = [job.version, ...job.opponents];
             if (!plain(spec) || spec.round !== k || JSON.stringify(spec.bots) !== JSON.stringify(bots) ||
-                !Number.isInteger(spec.gamesPerPair) || spec.gamesPerPair < 2 || spec.gamesPerPair > 10 || spec.gamesPerPair % 2) {
-                throw new Error('placement spec must keep its frozen lineup and 2..10 even games per pair');
+                !Number.isInteger(spec.gamesPerPair) || (job.adaptive ? spec.gamesPerPair !== 2 || job.opponents.length !== 1 :
+                    spec.gamesPerPair < 2 || spec.gamesPerPair > 10 || spec.gamesPerPair % 2)) {
+                throw new Error(job.adaptive ? 'adaptive placement requires one opponent and exactly two mirrored games' :
+                    'placement spec must keep its frozen lineup and 2..10 even games per pair');
             }
-            const frozen = { ...spec, placement: { version: job.version, ref: job.ref } };
-            storeFile(fileOf(job.version), { ...job, spec: frozen, state: 'running', error: null,
-                scheduled: job.opponents.length * frozen.gamesPerPair, updatedAt: new Date().toISOString() });
+            const frozen = { ...spec, placement: { version: job.version, ref: job.ref,
+                ...(job.adaptive ? { adaptive: true, excludedSeeds: [...(job.excludedSeeds ?? [])] } : {}) } };
+            const scheduled = job.opponents.length * frozen.gamesPerPair;
+            storeFile(fileOf(job.version), { ...job, ...(job.adaptive ? { rounds: episodes(job).map((ep) => ep.round === k ?
+                { ...ep, spec: frozen, state: 'running', scheduled } : ep) } : { spec: frozen, scheduled }),
+                state: 'running', error: null, updatedAt: new Date().toISOString() });
             return frozen;
         } catch (e) {
-            storeFile(fileOf(job.version), { ...job, state: 'retrying', error: String(e?.message ?? e).slice(0, 1000), updatedAt: new Date().toISOString() });
+            storeFile(fileOf(job.version), { ...job, ...(job.adaptive ? { rounds: episodes(job).map((ep) => ep.round === k ? { ...ep, state: 'retrying' } : ep) } : {}),
+                state: 'retrying', error: String(e?.message ?? e).slice(0, 1000), updatedAt: new Date().toISOString() });
             throw e;
         }
     });
@@ -264,26 +347,43 @@ function reserve(k, makeSpec) {
 /** Only scheduler/publisher counts go here. This queue never manufactures results or changes ratings. */
 function update(k, patch = {}) {
     return locked(() => {
-        const job = getRound(k);
-        if (!job) return null;
+        const assigned = getRound(k);
+        if (!assigned) return null;
+        const job = records().find((r) => r.version === assigned.version);
         // A delayed publisher/failure callback cannot resurrect a completed placement or erase its progress.
-        if (TERMINAL.has(job.state)) return publicRecord(job);
+        if (TERMINAL.has(job.state) || job.adaptive && (job.round !== k || episodes(job).find((ep) => ep.round === k)?.state === 'complete')) return publicRecord(job);
         const changed = { ...job, updatedAt: new Date().toISOString() };
+        const progress = job.adaptive ? { ...episodes(job).find((ep) => ep.round === k) } : changed;
         for (const key of ['finished', 'rated', 'scheduled']) {
             if (patch[key] !== undefined) {
                 if (!Number.isSafeInteger(patch[key]) || patch[key] < 0) throw new Error(`placement ${key} must be a nonnegative integer`);
-                changed[key] = Math.max(job[key] ?? 0, patch[key]);
+                if (job.adaptive && patch[key] > 2) throw new Error('adaptive placement step counts cannot exceed two games');
+                progress[key] = Math.max(progress[key] ?? 0, patch[key]);
             }
         }
         if (patch.error !== undefined) changed.error = patch.error === null ? null : String(patch.error).slice(0, 1000);
         if (patch.state !== undefined) {
-            const state = patch.state === 'done' || patch.state === 'complete' ? changed.rated > 0 ? 'complete' : 'unrated' : patch.state;
+            const done = patch.state === 'done' || patch.state === 'complete';
+            const state = done ? progress.rated > 0 ? 'complete' : 'unrated' : patch.state;
             if (!PENDING.has(state) && !TERMINAL.has(state)) throw new Error(`unknown placement state ${state}`);
-            changed.state = state;
+            if (job.adaptive) {
+                progress.state = done ? 'complete' : state;
+                changed.state = done ? progress.rated > 0 ? 'queued' : 'inconclusive' : state;
+                if (done) {
+                    changed.round = null;
+                    changed.reason = progress.rated > 0 ? null : 'unrated';
+                    changed.error = progress.rated > 0 ? null : 'the placement step produced no rated evidence';
+                }
+            } else {
+                changed.state = state;
+                if (done) changed.reason = 'legacy-fixed-batch';
+            }
         }
-        storeFile(fileOf(job.version), changed);
-        return publicRecord(changed);
+        if (job.adaptive) changed.rounds = episodes(job).map((ep) => ep.round === k ? progress : ep);
+        const evaluated = decision(changed);
+        storeFile(fileOf(job.version), evaluated);
+        return publicRecord(evaluated);
     });
 }
 
-module.exports = { enabled, enqueue, statuses, next, getRound, reserve, update, MAX_OPPONENTS };
+module.exports = { enabled, enqueue, statuses, next, getRound, reserve, update, MAX_OPPONENTS, MAX_GAMES };

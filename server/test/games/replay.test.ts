@@ -74,23 +74,25 @@ const fakePlay = (bundles: string, seen: Array<{ job: PlaySeedJob; tag: string }
  * and the engine revision of a git checkout in the header), each game as playGame plays it, plus the versions' tars and
  * the names file. Returns the folders.
  */
-const recordRound = (opts: { key?: string | null; decks?: boolean; skip?: ReadonlyArray<string>; placement?: NonNullable<RoundSpec["placement"]> } = {}) => {
+const recordRound = (opts: { key?: string | null; decks?: boolean; skip?: ReadonlyArray<string>; bots?: ReadonlyArray<string>; firstSeed?: number; placement?: NonNullable<RoundSpec["placement"]> } = {}) => {
   const dir = mkdtempSync(path.join(tmpdir(), "games-replay-"))
   const results = path.join(dir, "results", "arena-r7")
   const bundles = path.join(dir, "bundles")
   mkdirSync(path.join(results, "games"), { recursive: true })
   mkdirSync(bundles, { recursive: true })
   const names: Record<string, string> = {}
-  for (const b of BOTS) {
+  const bots = opts.bots ?? BOTS
+  const firstSeed = opts.firstSeed ?? FIRST
+  for (const b of bots) {
     const bytes = Buffer.from(`the canonical tar of ${b}`)
     names[b] = hex(bytes)
     writeFileSync(path.join(bundles, `${names[b]}.tar`), bytes)
   }
   writeFileSync(path.join(dir, "names.json"), JSON.stringify(names))
   const withDecks = opts.decks !== false
-  const spec = { bots: BOTS, gamesPerPair: 2, decks: withDecks ? { file: "x.json", sha256: DECKS_SHA, names: LISTS.map((d) => d.metadata.name), deal: "seat" as const, skipped: ["lando"], lists: LISTS } : null }
-  // Deal the ordinary round first, then record only the admitted version's pairs for placement.
-  const schedule = buildSchedule(js, spec, FIRST).filter((g) => !opts.placement || g.p1 === opts.placement.version || g.p2 === opts.placement.version)
+  const spec = { bots, gamesPerPair: 2, decks: withDecks ? { file: "x.json", sha256: DECKS_SHA, names: LISTS.map((d) => d.metadata.name), deal: "seat" as const, skipped: ["lando"], lists: LISTS } : null,
+    ...(opts.placement ? { placement: opts.placement } : {}) }
+  const schedule = buildSchedule(js, spec, firstSeed)
   const key = opts.key === undefined ? RUN_KEY : opts.key
   const games = schedule.filter((g) => !opts.skip?.includes(g.id)).map((g: ScheduledGame) => {
     const gk = key ? js.gameKey(key, g.seed) : null
@@ -106,7 +108,7 @@ const recordRound = (opts: { key?: string | null; decks?: boolean; skip?: Readon
     }
   })
   const config = {
-    bots: BOTS, gamesPerPair: 2, firstSeed: FIRST, maxSteps: 6000, workers: 2, capMs: 20000, hangMs: 70000, harness: "abc.def", engineDiff: null, programs: null,
+    bots, gamesPerPair: 2, firstSeed, maxSteps: 6000, workers: 2, capMs: 20000, hangMs: 70000, harness: "abc.def", engineDiff: null, programs: null,
     keyId: key ? keyId(key) : null, record: true,
     ...(opts.placement ? { placement: opts.placement } : {}),
     ...(withDecks ? { decks: { file: "x.json", sha256: DECKS_SHA, names: LISTS.map((d) => d.metadata.name), deal: "seat", skipped: ["lando"] } } : {}),
@@ -195,6 +197,39 @@ test("replay: recorded placement metadata preserves the bounded schedule and rej
     { gamesPerPair: 12 }
   ]
   for (const change of invalid) assert.throws(() => readRound({ config: { ...config, ...change } }), /ladder\.json/, JSON.stringify(change))
+})
+
+test("replay: adaptive placement preserves its exclusions and replays the actual fresh seed", async () => {
+  const placement = { version: "b-v2", ref: "window:s1", adaptive: true as const, excludedSeeds: [FIRST, FIRST + 1, FIRST + 2] }
+  const r = recordRound({ bots: ["b-v2", "a-v1"], firstSeed: FIRST + 3, placement })
+  const recorded = readRound(JSON.parse(readFileSync(path.join(r.results, "ladder.json"), "utf8")))
+  assert.deepEqual(recorded.placement, placement)
+  assert.equal(recorded.firstSeed, FIRST + 3)
+  const seen: Array<{ job: PlaySeedJob; tag: string }> = []
+  const { code, doc } = await replay(argsOf(r), { play: fakePlay(r.bundles, seen) })
+  assert.equal(code, 0)
+  assert.deepEqual(doc, { ok: true, games: 2, same: 2, different: [], missing: [] })
+  assert.deepEqual(seen.map(({ job }) => job.seed), [FIRST + 3])
+  assert.deepEqual(seen[0]!.job.games.map((g) => g.id), r.schedule.map((g) => g.id))
+})
+
+test("replay: adaptive placement rejects malformed metadata and impossible fresh seeds", () => {
+  const placement = { version: "b-v2", ref: "window:s1", adaptive: true, excludedSeeds: [FIRST] }
+  const config = { bots: ["b-v2", "a-v1"], gamesPerPair: 2, firstSeed: FIRST + 1, maxSteps: 6000, capMs: 20000, hangMs: 70000, key: RUN_KEY, placement }
+  const invalid: Array<Record<string, unknown>> = [
+    { placement: { ...placement, adaptive: false } },
+    { placement: { version: placement.version, ref: placement.ref, excludedSeeds: [] } },
+    { placement: { version: placement.version, ref: placement.ref, adaptive: true } },
+    { placement: { ...placement, excludedSeeds: [1, 1] } },
+    { placement: { ...placement, excludedSeeds: [2, 1] } },
+    { placement: { ...placement, excludedSeeds: [-1] } },
+    { placement: { ...placement, excludedSeeds: [0x100000000] } },
+    { bots: BOTS },
+    { gamesPerPair: 4 },
+    { firstSeed: FIRST },
+    { firstSeed: 0x100000000 }
+  ]
+  for (const change of invalid) assert.throws(() => readRound({ config: { ...config, ...change } }), /ladder\.json/)
 })
 
 test("replay: a round the games machine gzipped, before the check or while it plays, is read from <id>.jsonl.gz", async () => {

@@ -6,11 +6,30 @@
 import { createHash } from "node:crypto"
 import type { ArenaJs } from "./Js.ts"
 import type { BotRef, Limits, PlaySeedJob, RoundSpec, ScheduledGame } from "./Types.ts"
+import { MAX_PLACEMENT_EXCLUDED_SEEDS } from "./Types.ts"
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex")
 
 /** referee.js roundSeed(secret, 'watch', k): round k's first seed */
 export const roundSeed = (secret: string, k: number): number => parseInt(sha256(`${secret}:watch:${k}`).slice(0, 8), 16)
+
+const uint32 = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= 0xffffffff
+
+/** The attempted seeds of this immutable pair, canonicalized by the root metadata reader. */
+export const validPlacementSeeds = (seeds: unknown): seeds is ReadonlyArray<number> => {
+  if (!Array.isArray(seeds) || seeds.length > MAX_PLACEMENT_EXCLUDED_SEEDS) return false
+  for (let i = 0; i < seeds.length; i++) if (!uint32(seeds[i]) || (i > 0 && seeds[i - 1] >= seeds[i])) return false
+  return true
+}
+
+/** Pick a fresh seed deterministically; the exclusion bound guarantees the uint32 space cannot be exhausted. */
+export const choosePlacementSeed = (firstSeed: number, excludedSeeds: ReadonlyArray<number>): number => {
+  if (!uint32(firstSeed) || !validPlacementSeeds(excludedSeeds)) throw new Error("invalid adaptive placement seeds")
+  const excluded = new Set(excludedSeeds)
+  let seed = firstSeed
+  while (excluded.has(seed)) seed = (seed + 1) >>> 0
+  return seed
+}
 
 /** referee.js roundKey(secret, 'watch', k): round k's run key, the secret every game's deal comes from */
 export const runKey = (secret: string, k: number): string => sha256(`${secret}:key:watch:${k}`).slice(0, 32)

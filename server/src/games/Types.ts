@@ -40,14 +40,23 @@ export interface RoundDecks {
   readonly lists: ReadonlyArray<DeckList>
 }
 
+/** Legacy frozen placements remain replayable; new adaptive placements reserve one fresh mirrored seed pair. */
+export type Placement = { readonly version: string; readonly ref: string } & (
+  | { readonly adaptive?: never; readonly excludedSeeds?: never }
+  | { readonly adaptive: true; readonly excludedSeeds: ReadonlyArray<number> }
+)
+
+/** Bounds the metadata crossing the root child boundary, not the number of informative placement steps. */
+export const MAX_PLACEMENT_EXCLUDED_SEEDS = 100000
+
 /**
  * What `gamesctl round` answers: round K's rules and lineup, as the Node side knows them (roster, versions, decks).
  * Seeds and keys are not in it: they come from the round-seed secret, which only the server reads.
  */
 export interface RoundSpec {
   readonly round: number
-  /** A bounded placement plays only pairs involving this accepted immutable version. */
-  readonly placement?: { readonly version: string; readonly ref: string }
+  /** A placement plays only pairs involving this accepted immutable version. */
+  readonly placement?: Placement
   /** the lineup's versions, in roster order (roundRobin pairs them in this order) */
   readonly bots: ReadonlyArray<string>
   readonly gamesPerPair: number

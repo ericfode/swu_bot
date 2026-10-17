@@ -696,6 +696,43 @@ describe("rounds (Oban's rules)", () => {
 
 
 describe("immediate placement", () => {
+  test("a selection cancelled before reservation replans without consuming the round number or an attempt", async () => {
+    const h = harness({ env: { GAMES_PLACEMENT_MODE: "immediate" }, placementStates: true })
+    h.settings = { ...h.settings, roundGapMin: 240 }
+    const earlierEnd = h.clock.wall - 1000
+    h.kv.set("round_end", String(earlierEnd))
+    h.control.plan = { round: 24, resume: false, why: "placement" }
+    h.control.play = { kind: "replan" }
+    h.control.playMs = 100
+    await ready(h)
+    await eventually(() => h.plays.length === 1)
+    // The read-only plan raced with new evidence. Its locked reservation returned no job; the next plan is empty.
+    h.control.plan = { round: null, why: "same" }
+    await settle(h)
+    assert.equal(h.s.snapshot().lastRan, null)
+    assert.equal(h.s.snapshot().roundEnd, earlierEnd)
+    assert.equal(h.kv.get("round_end"), String(earlierEnd))
+    assert.deepEqual(h.updates, [], "there is no reserved row whose attempts or hold state could be updated")
+    assert.equal(h.s.snapshot().warned.includes(24), false)
+    assert.equal(h.compacts, 1, "the skipped selection did not finish a round")
+    assert.equal(h.events.some((e) => e.startsWith("placement 24 ")), false)
+
+    // A genuinely useful new selection may immediately use the still-unused number, without a boot or backoff.
+    h.control.play = { kind: "done" }
+    h.control.plan = { round: 24, resume: false, why: "placement" }
+    await tickUntil(h, () => h.plays.length === 2)
+    h.control.plan = { round: null, why: "same" }
+    await settle(h)
+    assert.deepEqual(h.plays, ["24 placement false", "24 placement false"])
+    assert.deepEqual(h.updates, [{ k: 24, set: { attempts: 1 } }])
+    assert.equal(h.s.snapshot().lastRan, 24)
+    assert.equal(h.kv.get("round_end"), String(h.clock.wall))
+    assert.equal(h.s.snapshot().warned.includes(24), false)
+    assert.equal(h.compacts, 2)
+    assert.equal(h.events.some((e) => e.startsWith("placement 24 ")), false)
+    await h.s.stop()
+  })
+
   test("queues a placement during a long intake, bypasses the round gap, and shares the single round lane", async () => {
     const h = harness({ env: { GAMES_PLACEMENT_MODE: "immediate" } })
     h.settings = { ...h.settings, roundGapMin: 240 }

@@ -47,9 +47,20 @@ const child = (script) => new Promise((resolve, reject) => {
     c.on('close', (code) => code === 0 ? resolve(JSON.parse(stdout)) : reject(new Error(`child ${code}: ${stderr}`)));
 });
 const modulePath = require.resolve('../arena/placement');
+const pairGames = (a, b, seed, score = 0.5) => [[a, b], [b, a]].map(([p1, p2], i) => ({
+    id: `${seed}-${i}`, p1, p2, seed, outcome: 'won', winnerSeat: score === 0.5 ? 'draw' : (i ? 1 - score : score) === 1 ? 'p1' : 'p2'
+}));
+function publishHistory(round, bots, games, extra = {}) {
+    const ladderId = `arena-r${round}`;
+    write(path.join(home.RESULTS, ladderId, 'ladder.json'), { id: ladderId, config: { bots }, games });
+    const file = path.join(home.HOME, 'standings.json');
+    const prior = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).rounds : [];
+    write(file, { rounds: [...prior.filter((r) => r.round !== round), { round, ladderId, status: 'done', ...extra }] });
+}
 
 test.beforeEach(() => {
     fs.rmSync(home.HOME, { recursive: true, force: true });
+    fs.rmSync(home.RESULTS, { recursive: true, force: true });
     process.env.GAMES_PLACEMENT_MODE = 'immediate';
     write(home.ROSTER, { agents: [], baselines: [], thinkCapMs: 60000 });
 });
@@ -104,7 +115,7 @@ test('placement: admitted versions only; symlinked metadata or bundles are refus
     assert.deepEqual(queueFiles(), []);
 });
 
-test('placement: bounded deterministic anchor and BT spread, frozen at enqueue; old accepted versions are kept', () => {
+test('placement: deterministic useful anchor first, latest opponent at dispatch, exact accepted target retained', () => {
     const target = add('alice');
     const anchor = add('house', 1, { resident: true });
     const high = add('high');
@@ -115,16 +126,16 @@ test('placement: bounded deterministic anchor and BT spread, frozen at enqueue; 
     write(path.join(home.HOME, 'standings.json'), { rounds: [], global: { [high]: 1800, [middle]: 1600, [anchor]: 1500, [low]: 1300, [bottom]: 1200, [tied]: 1600 } });
     const row = enqueue(target);
     assert.equal(row.state, 'queued');
-    assert.deepEqual(row.opponents, [anchor, high, tied, bottom]);
+    assert.deepEqual(row.opponents, [anchor]);
     assert.equal(row.opponents.length, placement.MAX_OPPONENTS);
     version('alice', 2);
-    version('house', 2);
+    const nextAnchor = version('house', 2);
     write(path.join(home.HOME, 'standings.json'), { rounds: [], global: { [bottom]: 2500 } });
     assert.deepEqual(enqueue(target), row, 'retry keeps the original opponent/version snapshot');
-    const spec = placement.reserve(7, (job) => specOf(7, job, 10));
-    assert.deepEqual(spec.bots, [target, anchor, high, tied, bottom]);
-    assert.deepEqual(spec.placement, { version: target, ref: refOf(target) });
-    assert.equal(placement.statuses()[0].scheduled, 40, 'at most four opponents times ten games');
+    const spec = placement.reserve(7, (job) => specOf(7, job));
+    assert.deepEqual(spec.bots, [target, nextAnchor]);
+    assert.deepEqual(spec.placement, { version: target, ref: refOf(target), adaptive: true, excludedSeeds: [] });
+    assert.equal(placement.statuses()[0].scheduled, 2, 'one mirrored seed pair is reserved');
     assert.equal(placement.statuses()[0].spec, undefined);
     assert.equal(placement.statuses()[0].bundles, undefined);
 });
@@ -161,21 +172,26 @@ test('placement: failed preparation keeps its round, version and opponents; retr
     assert.equal(queueFiles().length, 1);
 });
 
-test('placement: completion publishes counts and late failures cannot regress it; no rated results is explicit', () => {
+test('placement: actual completed steps re-evaluate; old callbacks cannot resurrect; unrated evidence stops', () => {
     const target = add('alice');
     add('house', 1, { resident: true });
     enqueue(target);
-    placement.reserve(0, (job) => specOf(0, job));
+    const spec = placement.reserve(0, (job) => specOf(0, job));
     placement.update(0, { state: 'running', finished: 1, rated: 1, scheduled: 2 });
+    publishHistory(0, spec.bots, pairGames(...spec.bots, 42), { placement: spec.placement });
     const done = placement.update(0, { state: 'done', finished: 2, rated: 2 });
-    assert.equal(done.state, 'complete');
+    assert.equal(done.state, 'queued');
     assert.deepEqual(done.progress, { finished: 2, rated: 2, scheduled: 2 });
     assert.deepEqual(placement.update(0, { state: 'held', error: 'late failed callback', finished: 0 }), done);
-    assert.equal(placement.next(), null);
+    assert.equal(placement.next().version, target);
+    assert.deepEqual(placement.getRound(0).spec, spec, 'historical rounds keep their frozen spec');
+    const next = placement.reserve(1, (job) => specOf(1, job));
+    assert.deepEqual(next.placement.excludedSeeds, [42], 'fresh repeats use a new seed');
+    assert.equal(placement.update(1, { state: 'done', finished: 2, rated: 0 }).state, 'inconclusive');
     const v2 = version('alice', 2);
     enqueue(v2);
-    placement.reserve(1, (job) => specOf(1, job));
-    assert.equal(placement.update(1, { state: 'done', finished: 2, rated: 0 }).state, 'unrated');
+    placement.reserve(2, (job) => specOf(2, job));
+    assert.equal(placement.update(2, { state: 'done', finished: 2, rated: 0 }).reason, 'unrated');
     assert.equal(placement.next(), null);
 });
 
@@ -195,11 +211,11 @@ test('placement: withdrawn queued targets are skipped without writing from plan'
     assert.equal(placement.statuses().find((r) => r.version === target).state, 'cancelled', 'root reconciles the blocked target');
 });
 
-test('placement: before start only invalid opponents are replaced, preserving eligible frozen older versions', () => {
+test('placement: before start latest admitted opponents replace old versions; after reserve versions freeze', () => {
     const target = add('alice');
     const house = add('house', 1, { resident: true });
     const high = add('high');
-    assert.deepEqual(enqueue(target).opponents, [house, high]);
+    assert.deepEqual(enqueue(target).opponents, [house]);
     const house2 = version('house', 2);
     const high2 = version('high', 2);
     add('middle');
@@ -209,8 +225,10 @@ test('placement: before start only invalid opponents are replaced, preserving el
     assert.equal(placement.next().version, target, 'readonly plan sees the available replacement');
     assert.equal(fs.readFileSync(file, 'utf8'), before);
     const spec = placement.reserve(7, (job) => specOf(7, job));
-    assert.deepEqual(spec.bots, [target, house2, high]);
-    assert.ok(!spec.bots.includes(high2), 'a still-eligible frozen version is retained');
+    assert.deepEqual(spec.bots, [target, house2]);
+    const house3 = version('house', 3);
+    assert.deepEqual(placement.reserve(7, () => assert.fail('frozen step reused')), spec);
+    assert.ok(!spec.bots.includes(house3));
 });
 
 test('placement: root records waiting when opponents become ineligible, then admits a later replacement', () => {
@@ -221,7 +239,7 @@ test('placement: root records waiting when opponents become ineligible, then adm
     const pendingFile = path.join(home.HOME, 'placements', `${target}.json`);
     const before = fs.readFileSync(pendingFile, 'utf8');
     assert.equal(placement.statuses()[0].state, 'waiting', 'readonly status explains the wait before root reconciliation');
-    assert.match(placement.statuses()[0].error, /opponent/);
+    assert.match(placement.statuses()[0].reason, /no-reference|no-opponent/);
     assert.equal(fs.readFileSync(pendingFile, 'utf8'), before);
     assert.equal(placement.next(), null);
     assert.equal(placement.reserve(0, () => assert.fail('cannot play without an admitted opponent')), null);
@@ -242,7 +260,7 @@ test('placement: an ordinary round keeps its number and files when placements ar
     write(path.join(home.RESULTS, 'arena-r6', 'ladder.json'), { config: { bots: ['older-v1', 'house-v1'] } });
     assert.equal(placement.reserve(6, () => assert.fail('ordinary ladder is not replaced')), null);
     assert.equal(placement.getRound(6), null);
-    assert.equal(placement.next().version, target);
+    assert.equal(placement.next(), null, 'incomplete ordinary history blocks new placement work safely');
 });
 
 test('placement: interrupted enqueue leaves only an ignored temp file and retries atomically', () => {
@@ -329,8 +347,179 @@ test('placement: concurrent intake retries create one job and concurrent reserva
     `)));
     assert.ok(reserved.every((s) => s.placement.version === wanted));
     assert.equal(placement.statuses().filter((r) => r.round === 9).length, 1);
-    placement.update(9, { state: 'done', finished: 4, rated: 4 });
+    publishHistory(9, reserved[0].bots, pairGames(...reserved[0].bots, 42), { placement: reserved[0].placement });
+    placement.update(9, { state: 'done', finished: 2, rated: 2 });
     const another = placement.reserve(10, (job) => specOf(10, job));
     assert.notEqual(another.placement.version, wanted);
-    assert.equal(new Set(placement.statuses().map((r) => r.round)).size, 2);
+    assert.equal(placement.statuses().filter((r) => r.round === 10).length, 1);
+});
+
+test('placement: enough real historical evidence completes with zero new games; a new version starts separately', () => {
+    const target = add('alice');
+    const house = add('house', 1, { resident: true });
+    publishHistory(100, [target, house], Array.from({ length: 30 }, (_, i) => pairGames(target, house, i)).flat());
+    const row = enqueue(target);
+    assert.equal(row.state, 'complete');
+    assert.equal(row.reason, 'information-sufficient');
+    assert.equal(row.criterion.connected, true);
+    assert.equal(row.scheduled, 0);
+    assert.equal(placement.reserve(101, () => assert.fail('existing evidence needs no game')), null);
+    assert.equal(placement.next(), null);
+    const next = version('alice', 2);
+    assert.equal(enqueue(next).state, 'queued');
+    assert.deepEqual(placement.reserve(101, (job) => specOf(101, job)).bots, [next, house]);
+});
+
+test('placement: one fresh pair at a time reaches the information criterion and retains every frozen round', () => {
+    const target = add('alice');
+    add('house', 1, { resident: true });
+    enqueue(target);
+    let row;
+    for (let round = 0; round < placement.MAX_GAMES / 2; round++) {
+        const spec = placement.reserve(round, (job) => specOf(round, job));
+        assert.equal(spec.gamesPerPair, 2);
+        assert.deepEqual(spec.placement.excludedSeeds, Array.from({ length: round }, (_, i) => 1000 + i));
+        publishHistory(round, spec.bots, pairGames(...spec.bots, 1000 + round), { placement: spec.placement });
+        row = placement.update(round, { state: 'done', finished: 2, rated: 2, scheduled: 2 });
+        assert.deepEqual(placement.getRound(round).spec, spec);
+        if (row.state === 'complete') break;
+        assert.equal(row.state, 'queued');
+    }
+    assert.equal(row.state, 'complete');
+    assert.equal(row.reason, 'information-sufficient');
+    assert.ok(row.scheduled <= placement.MAX_GAMES);
+    assert.deepEqual(row.progress, { finished: row.scheduled, rated: row.scheduled, scheduled: row.scheduled });
+    assert.equal(placement.next(), null);
+    assert.equal(placement.update(0, { state: 'retrying', error: 'old callback' }).state, 'complete');
+    assert.equal(JSON.stringify(row.criterion).includes('avoidSeeds'), false);
+    assert.equal(JSON.stringify(row.criterion).includes('avoidIds'), false);
+});
+
+test('placement: stale duplicate rows add no information, while useful repeats exclude attempted seeds', () => {
+    const target = add('alice');
+    const house = add('house', 1, { resident: true });
+    const pair = pairGames(target, house, 7);
+    publishHistory(0, [target, house], [...Array.from({ length: 100 }, () => pair).flat(),
+        { id: 'unfinished-8', p1: target, p2: house, seed: 8, outcome: 'running' }]);
+    const row = enqueue(target);
+    assert.equal(row.state, 'queued');
+    assert.equal(row.criterion.observations, 2);
+    assert.equal(row.criterion.duplicates, 198);
+    const spec = placement.reserve(1, (job) => specOf(1, job));
+    assert.deepEqual(spec.placement.excludedSeeds, [7, 8]);
+    assert.ok(row.criterion.expectedGain >= row.criterion.thresholds.minRelativeGain);
+});
+
+test('placement: disconnected current components are bridged even after a target is well measured against an anchor', () => {
+    const target = add('alice');
+    const house = add('house', 1, { resident: true });
+    const peer = add('peer');
+    const other = add('other');
+    publishHistory(0, [target, house], Array.from({ length: 30 }, (_, i) => pairGames(target, house, i)).flat());
+    publishHistory(1, [peer, other], Array.from({ length: 30 }, (_, i) => pairGames(peer, other, i)).flat());
+    const row = enqueue(target);
+    assert.equal(row.state, 'queued');
+    assert.equal(row.criterion.connected, false);
+    assert.match(row.reason, /connect/);
+    assert.ok([peer, other].includes(row.opponents[0]));
+});
+
+test('placement: incomplete, corrupt, linked and traversing authoritative history waits without dispatch', () => {
+    const target = add('alice');
+    const house = add('house', 1, { resident: true });
+    enqueue(target);
+    const file = path.join(home.HOME, 'standings.json');
+    for (const ladderId of ['missing', '../outside', '.', '/tmp/outside']) {
+        write(file, { rounds: [{ round: 0, ladderId }] });
+        assert.equal(placement.statuses()[0].reason, 'history-unavailable');
+        assert.equal(placement.next(), null);
+        assert.equal(placement.reserve(1, () => assert.fail('unsafe history must not dispatch')), null);
+    }
+    publishHistory(0, [target, house], pairGames(target, house, 1));
+    const ladder = path.join(home.RESULTS, 'arena-r0', 'ladder.json');
+    fs.writeFileSync(ladder, '{broken');
+    assert.equal(placement.statuses()[0].reason, 'history-unavailable');
+    const saved = path.join(tmp, 'saved-history.json');
+    write(saved, { config: { bots: [target, house] }, games: pairGames(target, house, 1) });
+    fs.rmSync(ladder);
+    fs.symlinkSync(saved, ladder);
+    assert.equal(placement.statuses()[0].reason, 'history-unavailable');
+    fs.rmSync(ladder);
+    fs.writeFileSync(ladder, '{}');
+    fs.truncateSync(ladder, (64 << 20) + 1);
+    assert.equal(placement.statuses()[0].reason, 'history-unavailable');
+    fs.rmSync(file);
+    assert.equal(placement.statuses()[0].reason, 'history-unavailable', 'missing manifest cannot turn existing ladders into empty history');
+});
+
+test('placement: unknown old seeds fail closed and held-out results never supply placement evidence', () => {
+    const target = add('alice');
+    const house = add('house', 1, { resident: true });
+    publishHistory(0, [target, house], pairGames(target, house, 1).map(({ seed, ...g }) => g));
+    assert.equal(enqueue(target).state, 'waiting');
+    assert.equal(placement.statuses()[0].reason, 'unknown-seed-history');
+    assert.equal(placement.next(), null);
+    write(path.join(home.HOME, 'standings.json'), { rounds: [{ round: 0, ladderId: 'missing-holdout', pool: 'holdout' }] });
+    assert.equal(placement.next().version, target);
+    assert.deepEqual(placement.reserve(1, (job) => specOf(1, job)).placement.excludedSeeds, []);
+});
+
+test('placement: a safety budget is inconclusive, never a successful ranking criterion', () => {
+    const target = add('alice');
+    add('house', 1, { resident: true });
+    enqueue(target);
+    const file = path.join(home.HOME, 'placements', `${target}.json`);
+    const row = JSON.parse(fs.readFileSync(file, 'utf8'));
+    row.rounds = Array.from({ length: 20 }, (_, round) => ({ round, state: 'complete', scheduled: 2, finished: 2, rated: 2 }));
+    write(file, row);
+    write(path.join(home.HOME, 'standings.json'), { rounds: [] });
+    assert.equal(placement.statuses()[0].state, 'inconclusive');
+    assert.equal(placement.statuses()[0].reason, 'budget');
+    assert.equal(placement.reserve(20, () => assert.fail('budget prevents another job')), null);
+});
+
+test('placement: adaptive specs reject batches; old frozen jobs finish unchanged with the option off', () => {
+    const target = add('alice');
+    add('house', 1, { resident: true });
+    enqueue(target);
+    assert.throws(() => placement.reserve(0, (job) => specOf(0, job, 4)), /exactly two/);
+    const file = path.join(home.HOME, 'placements', `${target}.json`);
+    const spec = specOf(4, { version: target, opponents: ['house-v1'] }, 10);
+    spec.placement = { version: target, ref: refOf(target) };
+    write(file, { version: target, ref: refOf(target), round: 4, state: 'running', queuedAt: '2026-01-01',
+        updatedAt: '2026-01-01', opponents: ['house-v1'], spec, scheduled: 10, finished: 0, rated: 0 });
+    process.env.GAMES_PLACEMENT_MODE = 'cycle';
+    assert.deepEqual(placement.reserve(4, () => assert.fail('legacy frozen job retained')), spec);
+    assert.equal(placement.update(4, { state: 'done', finished: 10, rated: 10 }).state, 'complete');
+    assert.equal(placement.next(), null);
+});
+
+test('placement: a never-started legacy request adopts adaptive selection without executing its old batch', () => {
+    const target = add('alice');
+    const house = add('house', 1, { resident: true });
+    const peer = add('peer');
+    const file = path.join(home.HOME, 'placements', `${target}.json`);
+    write(file, { version: target, ref: refOf(target), round: null, state: 'queued', queuedAt: '2026-01-01',
+        updatedAt: '2026-01-01', opponents: [house, peer], finished: 0, rated: 0 });
+    const before = fs.readFileSync(file, 'utf8');
+    assert.equal(placement.statuses()[0].adaptive, true);
+    assert.equal(fs.readFileSync(file, 'utf8'), before, 'status migration is read-only');
+    const spec = placement.reserve(0, (job) => specOf(0, job));
+    assert.deepEqual(spec.bots, [target, house]);
+    assert.equal(spec.placement.adaptive, true);
+    assert.equal(spec.gamesPerPair, 2);
+});
+
+test('placement: planner row and selected-pair seed limits wait without starting a game', () => {
+    const target = add('alice');
+    const house = add('house', 1, { resident: true });
+    enqueue(target);
+    const attempted = Array.from({ length: 10001 }, (_, seed) => ({ id: `u${seed}`, p1: target, p2: house,
+        seed, outcome: 'step-cap' }));
+    publishHistory(0, [target, house], attempted);
+    assert.equal(placement.statuses()[0].reason, 'seed-history-limit');
+    assert.equal(placement.next(), null);
+    publishHistory(0, [target, house], Array.from({ length: 250001 }, () => ({ p1: target, p2: house, outcome: 'running' })));
+    assert.equal(placement.statuses()[0].reason, 'history-unavailable');
+    assert.equal(placement.reserve(1, () => assert.fail('planner limits never dispatch')), null);
 });
