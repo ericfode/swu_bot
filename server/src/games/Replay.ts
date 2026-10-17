@@ -41,7 +41,7 @@ import { loadArenaJs } from "./Js.ts"
 import * as Log from "./Log.ts"
 import { makeProc } from "./Proc.ts"
 import { buildSchedule, bySeed, jobFor } from "./Schedule.ts"
-import type { DeckList, Limits, Played, PlaySeedJob, RoundDecks, ScheduledGame } from "./Types.ts"
+import type { DeckList, Limits, Played, PlaySeedJob, RoundDecks, RoundSpec, ScheduledGame } from "./Types.ts"
 
 /** The repo this server sits in: the default checkout to play with (the image's /app, or a local clone). */
 const REPO = path.resolve(import.meta.dirname, "..", "..", "..")
@@ -118,6 +118,7 @@ export interface RecordedRound {
   readonly engine: string | null
   readonly bots: ReadonlyArray<string>
   readonly gamesPerPair: number
+  readonly placement?: RoundSpec["placement"]
   readonly firstSeed: number
   readonly maxSteps: number
   readonly capMs: number
@@ -141,6 +142,14 @@ export const readRound = (doc: unknown): RecordedRound => {
   if (c.format !== undefined || c.vs !== undefined) no("a gauntlet, not a round robin")
   if (c.pool !== undefined && c.pool !== null) no("played from a card pool, which the arena never deals")
   if (!count(c.gamesPerPair) || c.gamesPerPair < 2 || c.gamesPerPair % 2 !== 0) no("games per pair is not an even number")
+  let placement: RoundSpec["placement"]
+  if (c.placement !== undefined) {
+    const p = c.placement
+    if (!plain(p) || typeof p.version !== "string" || !VERSION.test(p.version) || !c.bots.includes(p.version) ||
+      typeof p.ref !== "string" || !p.ref.startsWith("window:") || p.ref.length <= 7 || p.ref.length > 300 ||
+      c.bots.length > 5 || c.gamesPerPair > 10) no("invalid bounded placement")
+    placement = { version: p.version, ref: p.ref }
+  }
   if (!count(c.firstSeed)) no("no first seed")
   if (!count(c.maxSteps) || c.maxSteps < 1) no("no step cap")
   if (!positive(c.capMs)) no("no time cap (every arena round has one)")
@@ -170,6 +179,7 @@ export const readRound = (doc: unknown): RecordedRound => {
     engine: typeof doc.engine === "string" ? doc.engine : null,
     bots: c.bots,
     gamesPerPair: c.gamesPerPair,
+    ...(placement ? { placement } : {}),
     firstSeed: c.firstSeed,
     maxSteps: c.maxSteps,
     capMs: c.capMs,
@@ -448,7 +458,8 @@ const prepare = (args: ReplayArgs, js: ArenaJs, app: string, loadDecks: NonNulla
     }
     decks = roundDecks(round.decks, loaded)
   }
-  const schedule = buildSchedule(js, { bots: round.bots, gamesPerPair: round.gamesPerPair, decks }, round.firstSeed)
+  const schedule = buildSchedule(js, { bots: round.bots, gamesPerPair: round.gamesPerPair, decks,
+    ...(round.placement ? { placement: round.placement } : {}) }, round.firstSeed)
   const chosen = selectGames(schedule, round.bots, args.only)
   // only the games the round finished can be compared; the others are named, not played
   const finished = (g: ScheduledGame) => {
