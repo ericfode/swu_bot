@@ -174,6 +174,13 @@ machine sends.
 The window mode is how the project's threads read and push window documents (`WINDOW.md`, "Through MCP"). Builders
 use the window's own `/mcp` instead.
 
+Both MCP transports discover `arena_local_help`: concise structured instructions for the existing local harness,
+protocol v2, verified opponent downloads and seeded testing. The hosted server also has `arena_opponents` and
+`arena_download_opponent` (download descriptor). `BUILD.md` explains the download-only helper; neither discovery nor
+download executes a bundle. A download is restricted to the current round, existing tables permissions and recorded
+v2 compatibility evidence matching the bundle and active comparison context. Roll this out with the v2 admission
+and namespace change; before that evidence is published, the catalog intentionally returns no eligible bundles.
+
 Readers (the app, research threads, friends' browsers) use these calls or the window's documents, never the arena's
 files (Eric, 2026-10-11: every edge goes through the API):
 

@@ -38,6 +38,8 @@ const { createArt } = require('./art');
 const { createStatic, matches } = require('./static');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
+const { localHelp, HELP_DESCRIPTION } = require('./local-help');
+const { createOpponents } = require('./opponents');
 const { builderName, ownsName, notYours } = require('./api');
 const { createFeedback } = require('./feedback');
 const { createGameLinks } = require('./gamelinks');
@@ -715,6 +717,13 @@ function createWindow(opts = {}) {
         ...(opts.tablesFetch ? { fetchImpl: opts.tablesFetch } : {}),
         ...(opts.tablesLimits ?? {}) // tests: {perDay, maxRows}
     });
+    const opponents = createOpponents({ swarm, allowed: (who) => tables.mayDownload(who),
+        context: () => arenaDoc('status')?.context,
+        compatibility: (version) => {
+            const name = version.replace(/-v\d+$/, '');
+            const versions = arenaDoc(`versions-${name}`);
+            return Array.isArray(versions) ? versions.find((v) => v?.name === version)?.compatibility : null;
+        } });
     // the feedback button and key on every page (feedback.js): who may send follows who may use a page here
     const feedback = createFeedback({ store, origin: auth.origin, mayPlay: () => tables.play === 'github' || tables.mode === 'github', ...(opts.feedbackLimits ?? {}) }); // tests: {now, perDay, allPerDay}
     // every game's own page (gamelinks.js): /g/<run>/<game>, live or replay, for anyone with no sign-in
@@ -988,10 +997,21 @@ function createWindow(opts = {}) {
                 const slice = buf.subarray(a, b);
                 return { run, game, size: buf.length, from: a, length: slice.length, text: slice.toString('utf8') };
             } },
+        { name: 'arena_local_help', annotations: RO, description: HELP_DESCRIPTION, inputSchema: schema({}),
+            call: ({ who }) => localHelp({ owner: who.login, competitor: who.agent }) },
+        { name: 'arena_opponents', annotations: RO,
+            description: 'List current-round WASM bundles already downloadable under your tables permissions. Only hash-verified protocol 2 manifests; no private submissions or arbitrary old versions. Downloading never runs a bot.',
+            inputSchema: schema({}), call: ({ who }) => opponents.list(who) },
+        { name: 'arena_download_opponent', annotations: RO,
+            description: 'Get the authenticated download URL, exact canonical tar SHA256, size and provenance for a selected current-round opponent. Returns a descriptor, not a local file; arena_local_help gives the safe download command. No execution.',
+            inputSchema: schema({ name: TYPE.string, sha256: TYPE.string }, ['name', 'sha256']),
+            call: ({ who }, args) => opponents.get(who, args) },
         { name: 'arena_guide', annotations: RO,
-            description: 'How to write a bot for the arena and submit it: the short guide (topic "build", default), or the full bot protocol (topic "protocol").',
-            inputSchema: schema({ topic: { type: 'string', enum: ['build', 'protocol'] } }),
+            description: 'How to write and submit a bot (topic "build", default), full protocol ("protocol"), or structured local setup/testing and opponent downloads ("local", also arena_local_help).',
+            inputSchema: schema({ topic: { type: 'string', enum: ['build', 'protocol', 'local'] } }),
             call: (ctx, { topic = 'build' }) => {
+                need(['build', 'protocol', 'local'].includes(topic), 'bad_request', 'topic: build, protocol or local');
+                if (topic === 'local') return localHelp({ owner: ctx.who.login, competitor: ctx.who.agent });
                 const file = topic === 'protocol' ? path.join(ROOT, 'spec', 'protocol.md') : path.join(__dirname, 'BUILD.md');
                 need(fs.existsSync(file), 'not_found', `${topic}: not in this build of the window`);
                 return { topic, text: fs.readFileSync(file, 'utf8') };
@@ -1016,7 +1036,7 @@ function createWindow(opts = {}) {
     const MCP_CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS', 'access-control-allow-headers': 'authorization, content-type, mcp-protocol-version, mcp-session-id, last-event-id', 'access-control-expose-headers': 'www-authenticate, mcp-session-id' };
     const mcp = createMcpHttp({
         name: 'swu-arena', version: '1.0.0', tools: mcpTools, headers: MCP_CORS, maxBody: 5 << 20,
-        instructions: 'SWU Arena: Star Wars Unlimited bots playing each other and people. Start with whoami and arena_status; window_docs lists the runs, evaluations and research; window_replay reads a game move by move. To build a bot, read arena_guide, then submit it with arena_submit and follow it with arena_my_submissions: the arena runs every game itself, in a sandbox.'
+        instructions: 'SWU Arena: Star Wars Unlimited bots playing each other and people. Start with whoami and arena_status. Read arena_local_help before local testing: it explains the existing runner, v2 protocol, safe opponent downloads and reproducible seeds. arena_opponents lists eligible bundles; arena_download_opponent returns an authenticated download descriptor. arena_guide explains building/submitting; follow arena_submit with arena_my_submissions. The arena runs games in its sandbox.'
     });
     function mcpRoute(req, res) {
         if (req.method === 'OPTIONS') {
@@ -1238,6 +1258,24 @@ function createWindow(opts = {}) {
         });
         const q = Object.fromEntries(url.searchParams);
         const friend = !atLeast(who.role, 'project');
+        if (parts[0] === 'opponents') {
+            try {
+                need(req.method === 'GET', 'bad_request', 'opponent downloads are GET only');
+                if (parts.length === 1) {
+                    return sendJson(res, 200, { result: q.name !== undefined || q.sha256 !== undefined
+                        ? await opponents.get(who, q) : await opponents.list(who) }, req);
+                }
+                const match = parts.length === 2 && /^([0-9a-f]{64})\.tar$/.exec(parts[1]);
+                need(match, 'not_found', 'not an eligible opponent bundle');
+                const bytes = await opponents.bytes(who, match[1]);
+                res.writeHead(200, { 'content-type': 'application/x-tar', 'content-length': bytes.length,
+                    'content-disposition': `attachment; filename="${match[1]}.tar"`, 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' });
+                return res.end(bytes);
+            } catch (e) {
+                if (['bad_request', 'forbidden', 'not_found', 'unavailable'].includes(e.code)) throw new WindowError(e.code, e.message);
+                throw e;
+            }
+        }
         if (parts[0] === 'me' && parts.length === 1) {
             return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role, signin: auth.fixed().signin ?? 'invited', ...(who.guest ? { guest: true } : {}) } }, req);
         }

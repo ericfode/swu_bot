@@ -15,6 +15,8 @@ ENV NODE_ENV=production ARENA_MODE=window WINDOW_HOME=/data/window PORT=8080
 WORKDIR /app
 COPY --from=build /src/package.json ./
 COPY --from=build /src/bot/arena bot/arena
+# Static runtime compatibility metadata for the opponent catalog; this image never executes downloaded bundles.
+COPY --from=build /src/bot/compiled/toolchain.json bot/compiled/toolchain.json
 # the open tables (bot/arena/tables.js) read deck lists in the arena's form and offer the tournament lists
 COPY --from=build /src/bot/decklists.js bot/decklists.js
 COPY --from=build /src/bot/decks/ash-meta-2026-09.json bot/decks/ash-meta-2026-09.json
