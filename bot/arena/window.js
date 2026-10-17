@@ -1008,10 +1008,22 @@ function createWindow(opts = {}) {
             }, ['kind', 'note', 'files']),
             call: ({ who }, a) => submit(who, a) },
         { name: 'arena_my_submissions', annotations: RO,
-            description: 'Your submissions (an agent\'s token: its competitor\'s), newest first: pending, checking, accepted (with the version the arena rates) or rejected (with what to fix).',
+            description: 'Your submissions (an agent\'s token: its competitor\'s), newest first: pending, checking, accepted (with the version the arena rates and any placement progress or failure) or rejected (with what to fix).',
             inputSchema: schema({}),
-            call: ({ who }) => mySubmissions(who.login).filter((x) => !who.agent || x.name === who.agent)
-                .map(({ files, base64, ...rest }) => ({ ...rest, ...(files ? { fileNames: Object.keys(files) } : {}) })) }
+            call: ({ who }) => {
+                const live = arenaMethods.status().placements;
+                const key = (version, ref) => JSON.stringify([version, ref]);
+                const placements = new Map((Array.isArray(live) ? live : [])
+                    .filter((p) => p && typeof p.version === 'string' && typeof p.ref === 'string')
+                    .map((p) => [key(p.version, p.ref), p]));
+                return mySubmissions(who.login).filter((x) => !who.agent || x.name === who.agent)
+                    .map(({ files, base64, ...rest }) => {
+                        // Status is a read-only overlay: only this exact accepted submission may receive its live
+                        // placement. Source records and their ownership/agent filters stay in the intake's collection.
+                        const placement = rest.state === 'accepted' ? placements.get(key(rest.version, `window:${rest.id}`)) : null;
+                        return { ...rest, ...(placement ? { placement } : {}), ...(files ? { fileNames: Object.keys(files) } : {}) };
+                    });
+            } }
     ];
     const MCP_CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS', 'access-control-allow-headers': 'authorization, content-type, mcp-protocol-version, mcp-session-id, last-event-id', 'access-control-expose-headers': 'www-authenticate, mcp-session-id' };
     const mcp = createMcpHttp({

@@ -533,7 +533,8 @@ function toolchainMissing() {
  * the window did not take (it was down), sent again first. Nothing is checked while the toolchain is missing. A check
  * that ends with no result (the arena's fault) leaves the submission pending, tried again later, RETRIES times at most.
  */
-async function intakeOnce({ window = require('./push'), finished = new Set(), unsent = new Map(), missing = toolchainMissing, checker = checkIsolated, stats = {}, current = {} } = {}) {
+async function intakeOnce({ window = require('./push'), finished = new Set(), unsent = new Map(), missing = toolchainMissing, checker = checkIsolated,
+    enqueuePlacement = (job) => require('./placement').enqueue(job), stats = {}, current = {} } = {}) {
     // for the games machine (gamesctl intake): how many submissions are still open after this pass, and how many it accepted
     stats.open = 0;
     stats.accepted = 0;
@@ -609,6 +610,19 @@ async function intakeOnce({ window = require('./push'), finished = new Set(), un
         if (stopping) {
             break; // the check was killed: no result to write
         }
+        let placement = null;
+        if (res.ok) {
+            try {
+                // The checked version is already entered. Queue it before acknowledging acceptance, including when
+                // checkIsolated recovered an entry by its window ref. A queue write is infrastructure work: a failure
+                // must never turn a valid bot into a rejection or cause its code to be checked again on recovery.
+                placement = await enqueuePlacement({ version: res.version, ref: `window:${id}`, benched: res.benched });
+            } catch (e) {
+                const { checkingAt, ...back } = claimed;
+                await window.putDoc('submissions', id, { ...back, state: 'pending' });
+                throw e;
+            }
+        }
         const tries = (claimed.tries ?? 0) + 1;
         if (res.retry && tries < RETRIES) {
             // the arena's fault: the submission waits, files and all, and is tried again later
@@ -620,7 +634,7 @@ async function intakeOnce({ window = require('./push'), finished = new Set(), un
         const { files, base64, checkingAt, ...rest } = claimed;
         const fileNames = Object.keys(files ?? {});
         const out = res.ok
-            ? { ...rest, fileNames, state: 'accepted', version: res.version, benched: res.benched, checkedAt: new Date().toISOString() }
+            ? { ...rest, fileNames, state: 'accepted', version: res.version, benched: res.benched, ...(placement ? { placement } : {}), checkedAt: new Date().toISOString() }
             : { ...rest, fileNames, state: 'rejected', error: `${res.error}${res.retry ? ` (tried ${tries} times; submit it again later)` : ''}`.slice(0, ERROR_CHARS), checkedAt: new Date().toISOString() };
         try {
             await window.putDoc('submissions', id, out);

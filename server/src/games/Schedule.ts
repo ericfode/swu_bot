@@ -28,10 +28,11 @@ export const evenGames = (perPair: number) => perPair + (perPair % 2)
  * The round's games in ladder.js order: roundRobin of the lineup from firstSeed, then the deck lists dealt by seat
  * (`--deal seat`) when the round has them.
  */
-export const buildSchedule = (js: ArenaJs, spec: Pick<RoundSpec, "bots" | "gamesPerPair" | "decks">, firstSeed: number): ReadonlyArray<ScheduledGame> => {
+export const buildSchedule = (js: ArenaJs, spec: Pick<RoundSpec, "bots" | "gamesPerPair" | "decks" | "placement">, firstSeed: number): ReadonlyArray<ScheduledGame> => {
   const plain = js.roundRobin(spec.bots, spec.gamesPerPair, firstSeed)
   const dealt = spec.decks ? js.dealDecks(plain, spec.decks.lists.length, firstSeed, { by: "seat" }) : plain
-  return dealt.map((s: { seed: number; p1: string; p2: string; decks?: [number, number] }) => ({
+  return dealt.filter((g) => !spec.placement || g.p1 === spec.placement.version || g.p2 === spec.placement.version)
+    .map((s: { seed: number; p1: string; p2: string; decks?: [number, number] }) => ({
     id: gameId(s),
     seed: s.seed,
     p1: s.p1,

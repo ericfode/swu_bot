@@ -26,7 +26,7 @@ export class GamesctlFailed extends Error {
   }
 }
 
-const WHYS: ReadonlyArray<PlanWhy> = ["changed", "stale", "resume", "same", "settling", "no-competitor", "no-opponent"]
+const WHYS: ReadonlyArray<PlanWhy> = ["changed", "stale", "resume", "placement", "same", "settling", "no-competitor", "no-opponent"]
 const VERSION = /^[a-z][a-z0-9_]*-v\d+$/
 const HEX64 = /^[0-9a-f]{64}$/
 const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x)
@@ -85,6 +85,14 @@ export const checkRound = (k: number, doc: unknown): RoundSpec => {
     return no("a version has no bundle")
   }
   if (!plain(doc.botInfo)) return no("no botInfo")
+  let placement: RoundSpec["placement"]
+  if (doc.placement !== undefined) {
+    const p = doc.placement
+    if (!plain(p) || typeof p.version !== "string" || !doc.bots.includes(p.version) ||
+      typeof p.ref !== "string" || !p.ref.startsWith("window:") || p.ref.length <= 7 || p.ref.length > 300 ||
+      doc.bots.length > 5 || doc.gamesPerPair > 10 || doc.gamesPerPair % 2 !== 0) return no("invalid bounded placement")
+    placement = { version: p.version, ref: p.ref }
+  }
   return {
     round: k,
     bots: doc.bots as Array<string>,
@@ -92,7 +100,8 @@ export const checkRound = (k: number, doc: unknown): RoundSpec => {
     capMs: doc.capMs,
     decks: checkDecks(doc.decks ?? null),
     bundles: Object.fromEntries((doc.bots as Array<string>).map((b) => [b, String((doc.bundles as any)[b])])),
-    botInfo: doc.botInfo as Record<string, Record<string, unknown>>
+    botInfo: doc.botInfo as Record<string, Record<string, unknown>>,
+    ...(placement ? { placement } : {})
   }
 }
 
@@ -106,9 +115,11 @@ export interface IntakeAnswer {
 export interface GamesctlService {
   readonly setup: Effect.Effect<{ readonly residents: ReadonlyArray<string>; readonly toolchain: string | null }, GamesctlFailed>
   readonly warm: Effect.Effect<{ readonly warmed: number; readonly failed: ReadonlyArray<string> }, GamesctlFailed>
-  readonly plan: (settledSince: number) => Effect.Effect<Plan, GamesctlFailed>
-  readonly round: (k: number, games: number, capMs: number) => Effect.Effect<RoundSpec, GamesctlFailed>
+  readonly plan: (settledSince: number, placementOnly?: boolean) => Effect.Effect<Plan, GamesctlFailed>
+  readonly round: (k: number, games: number, capMs: number, placement?: boolean) => Effect.Effect<RoundSpec, GamesctlFailed>
   readonly publish: (k: number) => Effect.Effect<void, GamesctlFailed>
+  /** Durable placement failures use a root-only metadata command, independent of referee publication. */
+  readonly placementState?: (k: number, state: "running" | "retrying" | "held", error?: string) => Effect.Effect<void, GamesctlFailed>
   readonly decks: (file: string, skip: ReadonlyArray<string>) => Effect.Effect<RoundDecks, GamesctlFailed>
   readonly intake: (proxy: string) => Effect.Effect<IntakeAnswer, GamesctlFailed>
   readonly push: (proxy: string, only: "round" | null) => Effect.Effect<boolean, GamesctlFailed>
@@ -120,6 +131,7 @@ export const makeGamesctl = (c: GamesConfig, proc: ProcService, boot: string): G
   const base = {
     NODE_ENV: "production",
     GAMES_DATA: c.data,
+    GAMES_PLACEMENT_MODE: c.placementMode,
     ARENA_USER: c.arenaUser,
     GAMES_HIDE: c.hide.filter((h) => h !== path.join(c.data, "secret")).join(":")
   }
@@ -166,13 +178,13 @@ export const makeGamesctl = (c: GamesConfig, proc: ProcService, boot: string): G
     }))
   )
 
-  const plan = (settledSince: number) =>
-    run("plan", ["plan", "--arena", ARENA, "--settled-since", String(Math.max(0, Math.floor(settledSince))), "--replay-hours", String(c.replayHours)], {
+  const plan = (settledSince: number, placementOnly = false) =>
+    run("plan", ["plan", "--arena", ARENA, "--settled-since", String(Math.max(0, Math.floor(settledSince))), "--replay-hours", String(c.replayHours), ...(placementOnly ? ["--placement-only", "1"] : [])], {
       as: "arena", isolate: true, home: c.paths.home, timeoutMs: 30_000
     }).pipe(Effect.flatMap((doc) => Effect.try({ try: () => checkPlan(doc), catch: (e) => e as GamesctlFailed })))
 
-  const round = (k: number, games: number, capMs: number) =>
-    run("round", ["round", "--arena", ARENA, "--round", String(k), "--games", String(games), "--cap-ms", String(capMs)], {
+  const round = (k: number, games: number, capMs: number, placement = false) =>
+    run("round", ["round", "--arena", ARENA, "--round", String(k), "--games", String(games), "--cap-ms", String(capMs), ...(placement ? ["--placement", "1"] : [])], {
       as: "root", isolate: true, home: rootHome, timeoutMs: 10 * 60_000, env: { GAMES_BUNDLES: c.paths.bundles }
     }).pipe(Effect.flatMap((doc) => Effect.try({ try: () => checkRound(k, doc), catch: (e) => e as GamesctlFailed })))
 
@@ -180,6 +192,12 @@ export const makeGamesctl = (c: GamesConfig, proc: ProcService, boot: string): G
     run("publish", ["publish", "--arena", ARENA, "--round", String(k)], { as: "root", isolate: true, home: rootHome, timeoutMs: 2 * 60_000 }).pipe(
       Effect.flatMap((doc) => (plain(doc) && doc.ok === true ? Effect.void : Effect.fail(new GamesctlFailed("publish", "no ok"))))
     )
+
+  const placementState: NonNullable<GamesctlService["placementState"]> = (k, state, error) =>
+    run("publish", ["placement-state", "--arena", ARENA, "--round", String(k), "--placement-state", state,
+      ...(error ? ["--placement-error", error.slice(0, 300)] : [])], {
+      as: "root", isolate: true, home: rootHome, timeoutMs: 2 * 60_000
+    }).pipe(Effect.asVoid)
 
   const decks = (file: string, skip: ReadonlyArray<string>) =>
     run("decks", ["decks", "--file", file, ...(skip.length ? ["--skip", skip.join(",")] : [])], {
@@ -207,7 +225,7 @@ export const makeGamesctl = (c: GamesConfig, proc: ProcService, boot: string): G
       as: "arena", isolate: true, home: c.paths.home, timeoutMs: 2 * 60_000, graceMs: 2000, env: { SWU_WINDOW: proxy }
     }).pipe(Effect.map((doc) => plain(doc) && doc.ok === true))
 
-  return { setup, warm, plan, round, publish, decks, intake, push }
+  return { setup, warm, plan, round, publish, placementState, decks, intake, push }
 }
 
 export class Gamesctl extends Context.Service<Gamesctl, GamesctlService>()("games/Gamesctl") {

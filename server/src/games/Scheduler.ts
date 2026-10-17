@@ -88,7 +88,7 @@ export const afterIntake = (open: number | null, accepted: number) => ({
 
 export interface SchedulerOptions {
   readonly config: GamesConfig
-  readonly gamesctl: Pick<GamesctlService, "setup" | "warm" | "plan" | "intake">
+  readonly gamesctl: Pick<GamesctlService, "setup" | "warm" | "plan" | "intake" | "placementState">
   readonly proc: Pick<ProcService, "running">
   readonly store: Pick<StoreService, "get" | "set" | "updateRound">
   /** Eric's settings now (the wait between rounds is read at every plan answer) */
@@ -264,7 +264,10 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
       woken = false
     }
     const inc = incomplete()
-    if (planDue({ phase, incomplete: inc, planning: plan !== null })) startPlan()
+    // The intake can be checking another submission for minutes. Accepted placement intents are already durable,
+    // so look for those while it continues; ordinary cycle plans still wait for the pass to finish.
+    const forPlan = c.placementMode === "immediate" ? inc.filter((kind) => kind !== "intake") : inc
+    if (planDue({ phase, incomplete: forPlan, planning: plan !== null })) startPlan()
     if (plan === null) maybeStop(inc)
     if (!stopped) {
       timer = setTimeout(() => {
@@ -359,6 +362,7 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
           intakeWaiting = false
           startIntake()
         }
+        if (!stopping && c.placementMode === "immediate" && phase === "ready" && job === null && plan === null) startPlan()
       })
     }
   }
@@ -370,7 +374,7 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
     const since = settledWall
     plan = {
       abort,
-      done: run(o.gamesctl.plan(since), abort.signal).then((exit) => {
+      done: run(o.gamesctl.plan(since, intake !== null || intakeWaiting), abort.signal).then((exit) => {
         plan = null
         if (stopping || stopped) return
         if (Exit.isFailure(exit)) {
@@ -390,7 +394,7 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
       return
     }
     const k = p.round
-    const wait = p.resume || k === lastRan ? 0 : roundWait(roundEnd, o.settings().roundGapMin * 60_000, wall())
+    const wait = p.resume || p.why === "placement" || k === lastRan ? 0 : roundWait(roundEnd, o.settings().roundGapMin * 60_000, wall())
     if (wait > 0) {
       // a round that waits keeps the machine awake: nothing else would wake it when the wait is over
       if (waiting !== k) Log.info(`round ${k} waits ${Math.ceil(wait / 60_000)} min (the wait between rounds)`)
@@ -434,6 +438,15 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
   const hold = (j: RoundJob, why: string) => {
     Log.warn(`round ${j.k} waits for the next boot (${why})`)
     void store(`could not mark round ${j.k} held`, o.store.updateRound(j.k, { state: "held", boot: o.boot, attempts: j.attempts }))
+    placementState(j.k, "held", why)
+  }
+
+  const placementState = (k: number, state: "running" | "retrying" | "held", error?: string) => {
+    const effect = o.gamesctl.placementState?.(k, state, error)
+    if (effect) void run(effect).then((exit) => {
+      if (Exit.isFailure(exit)) Log.warn(`could not publish placement state for round ${k} (${failure(exit.cause)})`)
+      o.pusher.poke()
+    })
   }
 
   const ended = (j: RoundJob, exit: ExitT.Exit<RoundOutcome, Cause.TimeoutError>) => {
@@ -477,9 +490,11 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
       job = null
       hold(j, `it ran past ${capHours()} h`)
     } else if (j.attempts < 2) {
+      placementState(j.k, "retrying", what)
       void store(`could not count round ${j.k}'s attempts`, o.store.updateRound(j.k, { attempts: j.attempts }))
       j.retry = setTimeout(() => {
         j.retry = null
+        placementState(j.k, "running")
         attempt(j)
       }, retryMs)
       j.retry.unref()

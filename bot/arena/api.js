@@ -213,6 +213,8 @@ const api = {
         return {
             ...clock(),
             thinkCapMs: r.thinkCapMs,
+            placementMode: require('./placement').enabled() ? 'immediate' : 'cycle',
+            placements: require('./placement').statuses(),
             // the arena's own bots in play: resident entries' versions and the built-in bots none has replaced yet
             baselines: home.ownBots(r),
             // benched competitors too (api.withdraw): still registered, with their versions and ratings, and may rejoin

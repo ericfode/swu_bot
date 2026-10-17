@@ -41,6 +41,8 @@ export interface GamesConfig {
   readonly proxyPort: number
   readonly idleMs: number
   readonly replayHours: number
+  /** Immediate placement shares the ordinary round lane; cycle is the existing default. */
+  readonly placementMode: "cycle" | "immediate"
   readonly roundCapMs: number
   /** defaults that Eric's arena settings override */
   readonly games: number
@@ -129,6 +131,8 @@ const int = (env: NodeJS.ProcessEnv, name: string, dflt: number): number => {
 const nodeBinary = () => process.execPath
 
 export const readConfig = (env: NodeJS.ProcessEnv = process.env, timing: Timing = TIMING): GamesConfig => {
+  const placementMode = env.GAMES_PLACEMENT_MODE || "cycle"
+  if (placementMode !== "cycle" && placementMode !== "immediate") throw new ConfigError("GAMES_PLACEMENT_MODE must be cycle or immediate")
   const role: Role = env.COORD_ROLE === "helper" ? "helper" : "games"
   const data = path.resolve(env.GAMES_DATA || "/data")
   const app = path.resolve(env.GAMES_APP || "/app")
@@ -177,6 +181,7 @@ export const readConfig = (env: NodeJS.ProcessEnv = process.env, timing: Timing 
     proxyPort: int(env, "GAMES_PROXY_PORT", 8081),
     idleMs: int(env, "GAMES_IDLE_MIN", 10) * 60_000,
     replayHours: int(env, "GAMES_REPLAY_HOURS", 24),
+    placementMode,
     roundCapMs: Math.round(roundHours * 3_600_000),
     games: int(env, "GAMES_GAMES", 2),
     workers: int(env, "GAMES_WORKERS", 2),

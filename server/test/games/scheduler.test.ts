@@ -147,7 +147,7 @@ interface Harness {
   compacting: boolean
 }
 
-const harness = (o: { env?: Record<string, string>; timing?: Partial<typeof TIMING>; retryMs?: number; data?: string } = {}): Harness => {
+const harness = (o: { env?: Record<string, string>; timing?: Partial<typeof TIMING>; retryMs?: number; data?: string; placementStates?: boolean } = {}): Harness => {
   const data = o.data ?? mkdtempSync(path.join(tmpdir(), "games-scheduler-"))
   const config = readConfig({ GAMES_DATA: data, ...o.env }, { ...TIMING, tickMs: 60_000, ...o.timing })
   const events: Array<string> = []
@@ -196,7 +196,8 @@ const harness = (o: { env?: Record<string, string>; timing?: Partial<typeof TIMI
     gamesctl: {
       setup: step("setup", () => 0, () => control.setup),
       warm: step("warm", () => 0, () => control.warm),
-      plan: (since) => step<Plan>(`plan --settled-since ${since}`, () => control.planMs, () => control.plan),
+      plan: (since, placementOnly = false) => step<Plan>(`plan --settled-since ${since}${placementOnly ? " --placement-only" : ""}`, () => control.planMs, () => control.plan),
+      ...(o.placementStates ? { placementState: (k: number, state: string, error?: string) => Effect.sync(() => { events.push(`placement ${k} ${state}${error ? ` ${error}` : ""}`) }) } : {}),
       intake: (url) => step<IntakeAnswer>(`intake ${url}`, () => control.intakeMs, () => control.intake)
     },
     proc: { running: () => h.running as any },
@@ -690,5 +691,84 @@ describe("rounds (Oban's rules)", () => {
     await h.s.stop()
     assert.ok(h.events.some((e) => e.startsWith("term intake")))
     assert.ok(!logs.some((l) => l.includes("[warning] intake:")), "a pass a stop cut is not a failure")
+  })
+})
+
+
+describe("immediate placement", () => {
+  test("queues a placement during a long intake, bypasses the round gap, and shares the single round lane", async () => {
+    const h = harness({ env: { GAMES_PLACEMENT_MODE: "immediate" } })
+    h.settings = { ...h.settings, roundGapMin: 240 }
+    h.kv.set("round_end", String(h.clock.wall))
+    h.control.intakeMs = 60_000
+    h.control.plan = { round: 20, resume: false, why: "placement" }
+    h.control.play = "block"
+    await ready(h)
+    assert.ok(h.s.snapshot().incomplete.includes("intake"))
+    h.s.tick()
+    await eventually(() => h.plays.length === 1)
+    assert.deepEqual(h.plays, ["20 placement false"])
+    assert.ok(h.events.includes("start plan --settled-since 0 --placement-only"))
+    assert.equal(h.s.snapshot().waiting, null)
+    assert.deepEqual(h.s.snapshot().incomplete, ["intake", "round"])
+    const plans = plansStarted(h)
+    // Concurrent wakes and ticks cannot start another placement or duplicate the accepted one.
+    h.s.wake()
+    h.s.wake()
+    h.s.tick()
+    h.s.tick()
+    await sleep(20)
+    assert.equal(plansStarted(h), plans)
+    assert.equal(h.plays.length, 1)
+    await h.s.stop()
+  })
+
+  test("cycle mode continues waiting for an unfinished intake", async () => {
+    const h = harness()
+    h.control.intakeMs = 60_000
+    h.control.plan = { round: 21, resume: false, why: "changed" }
+    await ready(h)
+    h.s.tick()
+    await sleep(20)
+    assert.equal(plansStarted(h), 0)
+    assert.equal(h.plays.length, 0)
+    await h.s.stop()
+  })
+
+  test("ordinary rounds still honor the configured gap in immediate mode", async () => {
+    const h = harness({ env: { GAMES_PLACEMENT_MODE: "immediate" } })
+    h.settings = { ...h.settings, roundGapMin: 1 }
+    h.kv.set("round_end", String(h.clock.wall))
+    h.control.plan = { round: 22, resume: false, why: "changed" }
+    await ready(h)
+    await settle(h)
+    await tickUntil(h, () => h.s.snapshot().waiting === 22)
+    assert.equal(h.plays.length, 0)
+    assert.ok(h.events.some((e) => e.startsWith("start plan --settled-since 0")))
+    h.clock.wall += 61_000
+    h.control.play = "block"
+    await tickUntil(h, () => h.plays.length === 1)
+    assert.deepEqual(h.plays, ["22 changed false"])
+    await h.s.stop()
+  })
+
+  test("failed placements publish retry and hold states without duplicate rounds", async () => {
+    const h = harness({ env: { GAMES_PLACEMENT_MODE: "immediate" }, retryMs: 20, placementStates: true })
+    h.control.intakeMs = 60_000
+    h.control.plan = { round: 23, resume: false, why: "placement" }
+    h.control.play = { kind: "failed", why: "fake runner failed" }
+    await ready(h)
+    h.s.tick()
+    await eventually(() => h.plays.length === 2 && h.s.snapshot().round === null)
+    await eventually(() => h.events.some((e) => e.startsWith("placement 23 held ")))
+    assert.equal(h.events.filter((e) => e.startsWith("placement 23 retrying ")).length, 1)
+    assert.equal(h.events.filter((e) => e === "placement 23 running").length, 1)
+    assert.ok(h.events.some((e) => e.includes("held it failed twice: failed (fake runner failed)")))
+    assert.deepEqual(h.updates.at(-1), { k: 23, set: { state: "held", boot: "this-boot", attempts: 2 } })
+    h.s.tick()
+    h.s.tick()
+    await eventually(() => h.s.snapshot().warned.includes(23))
+    assert.equal(h.plays.length, 2)
+    await h.s.stop()
   })
 })

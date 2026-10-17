@@ -63,7 +63,8 @@ const count = (x: unknown) => Number.isSafeInteger(x) && (x as number) >= 0
 /** A stored round plays on with its finished games when it is the same round: same lineup, rules, decks, seeds and key. */
 const sameRound = (row: RoundRow, spec: RoundSpec, firstSeed: number, kid: string) =>
   same(row.spec.bots, spec.bots) && evenGames(row.spec.gamesPerPair) === spec.gamesPerPair && row.spec.capMs === spec.capMs &&
-  same(deckRule(row.spec.decks), deckRule(spec.decks)) && row.firstSeed === firstSeed && row.keyId === kid
+  same(deckRule(row.spec.decks), deckRule(spec.decks)) && row.firstSeed === firstSeed && row.keyId === kid &&
+  same(row.spec.placement, spec.placement) && (!spec.placement || same(row.spec.bundles, spec.bundles))
 
 /** What is wrong with a game entry of an old ladder.json, read as a result, or null (remote-lane.js badResult, in short). */
 const badEntry = (g: ScheduledGame, r: GameResult): string | null => {
@@ -106,7 +107,7 @@ const importLadder = (file: string, k: number, config: Record<string, unknown>, 
   const c = plain(doc?.config) ? doc.config : {}
   if (!same(c.bots, config.bots) || c.gamesPerPair !== config.gamesPerPair || c.firstSeed !== config.firstSeed || c.maxSteps !== config.maxSteps ||
     (c.capMs ?? null) !== (config.capMs ?? null) || c.hangMs !== config.hangMs || c.keyId !== config.keyId || c.record !== true ||
-    !same(c.decks ?? null, config.decks ?? null)) {
+    !same(c.decks ?? null, config.decks ?? null) || !same(c.placement, config.placement)) {
     Log.info(`round ${k}: the ladder.json there is of other bots, seeds, limits, key or deck lists; the round starts over`)
     return null
   }
@@ -144,7 +145,11 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
     const c = deps.config
     const { store } = deps
     const s = deps.settings()
-    const asked = yield* Effect.result(deps.gamesctl.round(k, s.gamesPerPair, Math.round(s.thinkCapSec * 1000)))
+    // Placement retries keep the admitted version, opponents, bundle digests and rules already in the durable row.
+    const row = yield* store.round(k)
+    const asked = yield* Effect.result(row?.spec.placement
+      ? Effect.succeed(row.spec)
+      : deps.gamesctl.round(k, s.gamesPerPair, Math.round(s.thinkCapSec * 1000), why === "placement"))
     if (asked._tag === "Failure") {
       deps.board?.reset()
       if (asked.failure.stopped) return STOPPED
@@ -170,7 +175,6 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
       }))
 
     // the round's row and games: the same round goes on, another starts over, an old coordinator's ladder is taken in
-    const row = yield* store.round(k)
     let createdAt: string
     if (row && sameRound(row, spec, firstSeed, kid)) {
       createdAt = row.createdAt

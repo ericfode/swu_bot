@@ -218,6 +218,7 @@ function scoreRound(round, ladder) {
     }
     const decks = ladder.config.decks;
     return { round, ladderId: ladder.id, ...(ladder.config.pool ? { pool: ladder.config.pool.kind, poolCards: ladder.config.pool.cards } : {}),
+             ...(ladder.config.placement ? { placement: ladder.config.placement } : {}),
              ...(decks ? { decks: { file: decks.file, sha256: decks.sha256, lists: decks.names.length, deal: decks.deal ?? 'bot' } } : {}),
              seed: ladder.config.firstSeed, gamesPerPair: ladder.config.gamesPerPair, games: finished, rated: results.length, scheduled: ladder.progress.scheduled,
              status: ladder.status === 'done' ? 'done' : 'running', leader: elo ? bots.find((b) => b.agent)?.name ?? null : null, anchors, bots, results, hosts,
@@ -325,6 +326,7 @@ function publish(round, id = ladderIdOf(round)) {
     const ladder = JSON.parse(fs.readFileSync(ladderFile, 'utf8'));
     const st = readJson(STANDINGS, { schema: 'swu-arena/1', startedAt: new Date().toISOString(), rounds: [] });
     const rd = scoreRound(round, ladder);
+    rd.updatedAt = new Date().toISOString();
     st.rounds = [...st.rounds.filter((x) => x.round !== round), rd].sort((a, b) => a.round - b.round);
     st.global = globalElo(st.rounds);
     st.updatedAt = new Date().toISOString();

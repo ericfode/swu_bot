@@ -97,7 +97,7 @@ export const deckRule = (decks: RoundSpec["decks"]) =>
  * reads from git, null on the image (no .git) as in every hosted round so far. `key` joins once the round is done.
  */
 export const ladderConfig = (o: {
-  readonly spec: Pick<RoundSpec, "bots" | "gamesPerPair" | "decks">
+  readonly spec: Pick<RoundSpec, "bots" | "gamesPerPair" | "decks" | "placement">
   readonly firstSeed: number
   readonly workers: number
   readonly limits: Limits
@@ -117,6 +117,7 @@ export const ladderConfig = (o: {
     programs: null,
     keyId: o.keyId,
     record: true,
+    ...(o.spec.placement ? { placement: o.spec.placement } : {}),
     ...(decks ? { decks } : {})
   }
 }

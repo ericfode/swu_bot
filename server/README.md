@@ -76,6 +76,7 @@ too; `gamesctl push` sends only the newest two rounds, which stay plain.
 | `GAMES_REPLAY_HOURS` | 24 | a round with an unchanged lineup plays again after this long (`gamesctl plan`) |
 | `GAMES_ROUND_HOURS` | 6 | a longer round is stopped and held until the next boot (fractions allowed) |
 | `GAMES_GAMES`, `GAMES_WORKERS`, `GAMES_THINK_CAP_SEC` | 2, 2, 60 | games per pair, games at once, each bot's thinking per game; Eric's arena settings win |
+| `GAMES_PLACEMENT_MODE` | `cycle` | `immediate`: queue each accepted version's bounded placement without the settle or round-gap wait |
 | `GAMES_REQUIRE_MOUNT` | unset | `1`: refuse to start unless `GAMES_DATA` is its own file system |
 | `GAMES_HELPER_PORT`, `GAMES_HELPER_LISTEN` | unset, `FLY_PRIVATE_IP` | the helper API; on only with a port and a `GAMES_HELPER_TOKENS` entry |
 | `GAMES_HELPER_TOKENS` | unset | secret: `name:sha256-of-token`, comma separated |
@@ -88,6 +89,52 @@ Exit codes: the games role 0 when idle or stopped (SIGTERM; Fly then leaves the 
 run (setup failed, no volume with `GAMES_REQUIRE_MOUNT=1`, no token, a bad setting: Fly restarts it up to 3 times).
 The helper 0 when stopped, 1 when its token is refused or its setup is broken, 3 when the machine runs another build
 (helper.sh then pulls it).
+
+### Immediate placement (optional)
+
+Set `GAMES_PLACEMENT_MODE=immediate` on the games role to opt in; `cycle` preserves the usual changed-lineup,
+90-second settle and periodic-round behavior. Invalid values stop boot. No window secret, helper configuration or
+capacity change is required. The window can show live placement progress in `arena_my_submissions` when it runs
+the matching window code; `arena_status.placements` also exposes it through the existing status push.
+
+Intake queues a version only after its existing ownership, packing, manifest, isolated sandbox start check and root
+promotion succeed. It durably queues before acknowledging acceptance. The request is keyed by immutable version and
+the exact `window:<submission-id>` ref; a retry of acceptance reuses the same request. Rejected submissions never
+queue games. Benched or withdrawn versions are not newly dispatched. Existing checked versions are not backfilled
+when the mode is first enabled.
+
+A placement snapshots at most four eligible opponent versions: one resident rating anchor when available, then a
+strongest/middle/weakest spread of the published all-round Bradley–Terry ratings (1500 for unranked versions, stable
+name tie breaks). The submitted competitor never plays another version of itself. It plays only those pairs, using
+the current even games-per-pair setting (2–10), both seats, the usual tournament deck-by-seat deal and secret seeds.
+This is at most **40 scheduled games per version**. It provides an initial rating from a bounded sample, with the
+ordinary periodic full round robin continuing to supply broader evidence. A new version in this mode does not also
+trigger an immediate full round robin.
+
+The request is visible at once; dispatch happens after warm on the next scheduler tick (at most 20 seconds while
+idle, or immediately after its intake pass/previous round ends). It skips the settle and inter-round gap but waits
+for an already-playing round. All work uses the same single round queue, Lane, dynamic worker setting, game/time
+limits, isolated play-seed executor and existing helper leases. No additional workers are created. Versions, opponents,
+bundle digests, rules and completed games are frozen once reserved, so newer concurrent submissions and retries
+cannot reset it. A placement has its own globally numbered round and goes through the existing referee's real-result
+scoring and anchored Bradley–Terry publication. Infrastructure failures never create synthetic game losses.
+
+`arena_status` includes `placementMode` and `placements`; accepted submissions include their placement, refreshed
+from the pushed status by `arena_my_submissions`. Records include version/ref, round, opponents, queued/updated times,
+`finished`, `rated`, `scheduled`, `progress` and `error`. States are `queued`, `waiting` (no opponent), `running`,
+`retrying`, `held` (two failed round attempts or the round cap; resumed next boot), `complete`, `unrated` (every game
+finished but none counted for rating), and `cancelled` for an unstarted request no longer eligible. Read-only status
+can expose a blocked queued request before root reconciles it. Publication follows the existing 20-second status push
+and live-round push. Completed requests cannot be regressed by late failure callbacks. Round retries keep completed
+games; a stopped machine resumes its reserved placement even if the mode is then disabled. Disabling the mode stops
+new requests and leaves unreserved requests dormant.
+
+Queue metadata lives in root-owned `arena/placements/`; it is hidden from checker/game jobs along with the arena
+folder. Atomic, flushed writes and an OS advisory lock protect reservations across processes. The lock uses the
+already-required Python `fcntl` module with an inherited descriptor and a clean environment; no bot code runs there.
+No new package or service is required. Enabling this feature changes when the existing compute is busy and can keep
+the machine awake more often; review and deploy/enable it through the usual approval path. Tests use temporary
+metadata, fake checkers and fake runners and do not change live rankings.
 
 Locally, against a local window (unset `SWU_WINDOW` in your shell first, since cloud sessions point it at the live
 window; keep the data outside `/tmp`, since isolate.sh gives each child its own `/tmp`; as root for the isolation):

@@ -21,7 +21,7 @@ export interface WindowSettings {
 export const DEFAULT_WINDOW_SETTINGS: WindowSettings = { gamesPerPair: 2, thinkCapSec: 60, workers: 2, roundGapMin: 0 }
 
 /** Why `gamesctl plan` names a round, or none. */
-export type PlanWhy = "changed" | "stale" | "resume" | "same" | "settling" | "no-competitor" | "no-opponent" | "?"
+export type PlanWhy = "changed" | "stale" | "resume" | "placement" | "same" | "settling" | "no-competitor" | "no-opponent" | "?"
 
 export type Plan =
   | { readonly round: number; readonly resume: boolean; readonly why: PlanWhy }
@@ -46,6 +46,8 @@ export interface RoundDecks {
  */
 export interface RoundSpec {
   readonly round: number
+  /** A bounded placement plays only pairs involving this accepted immutable version. */
+  readonly placement?: { readonly version: string; readonly ref: string }
   /** the lineup's versions, in roster order (roundRobin pairs them in this order) */
   readonly bots: ReadonlyArray<string>
   readonly gamesPerPair: number

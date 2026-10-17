@@ -12,6 +12,7 @@ console.log = console.error;
  *   node bot/arena/gamesctl.js plan --arena open --settled-since <ms> [--replay-hours 24]   (as arena)
  *   node bot/arena/gamesctl.js round --arena open --round K [--games 2] [--cap-ms 60000]    (root)
  *   node bot/arena/gamesctl.js publish --arena open --round K                          (root)
+ *   node bot/arena/gamesctl.js placement-state --arena open --round K --placement-state held [--placement-error why] (root)
  *   node bot/arena/gamesctl.js decks --file <deck file in bot/decks> [--skip a,b]      (root)
  *   node bot/arena/gamesctl.js intake --state <file> --boot <id>                       (root)
  *   node bot/arena/gamesctl.js push --arena open --state <file> --boot <id> [--only round]   (as arena)
@@ -342,13 +343,25 @@ function botEnv() {
  * round is older than replayMs, and only once settledSince (when the last version came in) is SETTLE_MS old. A round
  * needs at least one competitor besides the arena's own bots, and two bots in all.
  */
-function planRound({ replayMs, settledSince }) {
+function planRound({ replayMs, settledSince, placementOnly = false }) {
     const { anchorsOf } = require('./referee');
     const st = home.readJson(path.join(home.HOME, 'standings.json'), { rounds: [] });
     const last = st.rounds.at(-1);
     if (last && last.status !== 'done') {
         return { round: last.round, resume: true, why: 'resume' };
     }
+    const placement = require('./placement');
+    const job = placement.next();
+    if (job) {
+        return { round: job.round ?? (last?.round ?? -1) + 1, resume: job.round !== null,
+            why: 'placement' };
+    }
+    // While intake checks the rest of a batch only already-admitted placements may start.
+    if (placementOnly) {
+        return { round: null, why: 'same' };
+    }
+    // A bounded placement does not pretend the whole roster played an ordinary round.
+    const ordinary = st.rounds.filter((r) => !r.placement).at(-1);
     const bots = machineLineup();
     // the arena's own bots (residents, baselines) alone are no reason to play
     const own = anchorsOf(bots);
@@ -359,9 +372,20 @@ function planRound({ replayMs, settledSince }) {
     if (bots.length < 2) {
         return { round: null, why: 'no-opponent' };
     }
-    const before = (last?.bots ?? []).map((b) => b.name);
+    const before = (ordinary?.bots ?? []).map((b) => b.name);
     const changed = bots.some((b) => !before.includes(b)) || before.some((b) => !bots.includes(b));
-    const stale = last && Date.now() - Date.parse(st.updatedAt ?? 0) > replayMs;
+    const cycleClock = ordinary ?? st.rounds[0];
+    // Pre-placement rounds have no per-round timestamp. Their own ladder remains fixed when placements publish,
+    // whereas standings.updatedAt changes on every push and could otherwise postpone periodic rounds indefinitely.
+    const oldLadder = cycleClock && !cycleClock.updatedAt
+        ? readOwnJson(path.join(home.RESULTS, require('./referee').ladderIdOf(cycleClock.round), 'ladder.json'), MAX_LADDER_BYTES)
+        : null;
+    const stale = cycleClock && Date.now() - Date.parse(cycleClock.updatedAt ?? oldLadder?.updatedAt ?? oldLadder?.createdAt ?? st.startedAt ?? st.updatedAt ?? 0) > replayMs;
+    // In immediate mode new versions get their bounded placements; they do not also trigger a full round robin.
+    // Periodic replay rounds still run on the ordinary cadence, and cycle mode keeps its changed-lineup trigger.
+    if (placement.enabled() && last && !stale) {
+        return { round: null, why: 'same' };
+    }
     if (!changed && !stale) {
         return { round: null, why: 'same' };
     }
@@ -506,10 +530,10 @@ function storeBundle(name) {
  * the roster's time limit changes. Only one round plays here at a time and the server takes the round's lock after
  * this answers, so a referee.lock left in the round's folder (a stop, a crash) is stale and goes.
  */
-function roundSpec(k, { games, capMs = null }) {
+function roundSpec(k, { games, capMs = null, bots: chosen, placement }) {
     const { ladderIdOf, ROUND_DECKS, roundDeckLists } = require('./referee');
     const { describeBot } = require('../players');
-    const bots = machineLineup();
+    const bots = chosen ?? machineLineup();
     // machineLineup fields only WebAssembly versions, so this does not happen; if it did, the round stops here (a
     // version left out here alone would make the lineup look changed to plan at every look, and no round would end)
     const other = bots.filter((n) => !wasmVersion(n, describeBot));
@@ -544,7 +568,8 @@ function roundSpec(k, { games, capMs = null }) {
     if (fs.lstatSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
         fs.rmSync(path.join(dir, 'referee.lock'), { force: true });
     }
-    return { round: k, bots, gamesPerPair: rules.games + (rules.games % 2), capMs: rules.capMs, decks, bundles, botInfo };
+    return { round: k, bots, gamesPerPair: rules.games + (rules.games % 2), capMs: rules.capMs, decks, bundles, botInfo,
+        ...(placement ? { placement } : {}) };
 }
 
 const ARENAS = ['open']; // the No-sims arena comes later
@@ -601,7 +626,7 @@ const commands = {
         arena(o);
         const settledSince = Number(need(o, 'settled-since', int));
         const replayMs = Number(o['replay-hours'] ?? 24) * 3600000;
-        const p = planRound({ replayMs, settledSince });
+        const p = planRound({ replayMs, settledSince, placementOnly: o['placement-only'] === '1' });
         return p.round === null ? { round: null, why: p.why } : { round: p.round, resume: p.resume, why: p.why };
     },
 
@@ -610,7 +635,14 @@ const commands = {
         const k = Number(need(o, 'round', int));
         const games = o.games === undefined ? 2 : Number(need(o, 'games', (v) => int(v) && Number(v) >= 1 && Number(v) <= 100));
         const capMs = o['cap-ms'] === undefined ? null : Number(need(o, 'cap-ms', (v) => int(v) && Number.isSafeInteger(Number(v)) && Number(v) >= 1000));
-        return roundSpec(k, { games, capMs });
+        const placements = require('./placement');
+        const saved = placements.getRound(k);
+        if (saved?.spec) {
+            return saved.spec;
+        }
+        const spec = o.placement === '1' || saved ? placements.reserve(k, (job) => roundSpec(k, { games: Math.min(games, 10), capMs,
+            bots: [job.version, ...job.opponents], placement: { version: job.version, ref: job.ref } })) : null;
+        return spec ?? roundSpec(k, { games, capMs });
     },
 
     publish(o) {
@@ -628,7 +660,20 @@ const commands = {
         }
         // null: no ladder.json yet, nothing to publish
         const rd = referee.publish(k);
+        const placements = require('./placement');
+        if (rd?.placement) {
+            placements.update(k, { state: rd.status === 'done' ? 'complete' : 'running',
+                scheduled: rd.scheduled, finished: rd.games, rated: rd.rated });
+        }
         return { ok: true, status: rd?.status ?? null };
+    },
+
+    'placement-state'(o) {
+        arena(o);
+        const k = Number(need(o, 'round', int));
+        const state = need(o, 'placement-state', (v) => ['running', 'retrying', 'held'].includes(v));
+        require('./placement').update(k, { state, error: String(o['placement-error'] ?? '').slice(0, 300) || null });
+        return { ok: true };
     },
 
     decks(o) {
