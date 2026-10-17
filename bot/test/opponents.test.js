@@ -100,7 +100,8 @@ test('opponents: exact-digest observed v2 evidence and matching arena context ar
     const noEvidence = createOpponents({ swarm: defaultGate.swarm, allowed: () => true, context: () => CONTEXT });
     assert.deepEqual((await noEvidence.list('pal')).opponents, []);
     assert.deepEqual(defaultGate.state.reads, []);
-    for (const active of [null, {}, { ...CONTEXT, arenaId: 'open' }, { ...CONTEXT, protocol: 1 }]) {
+    for (const active of [null, {}, { ...CONTEXT, arenaId: 'open' }, { ...CONTEXT, protocol: 1 },
+        { ...CONTEXT, engineRevision: 'not-a-verified-hash' }, { ...CONTEXT, engineRevision: 'E'.repeat(64) }]) {
         const invalidContext = catalog([f], { context: () => active });
         await assert.rejects(invalidContext.opponents.list('pal'), { code: 'unavailable' });
         assert.equal(invalidContext.state.lineupReads, 0);

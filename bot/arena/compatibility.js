@@ -1,6 +1,7 @@
 'use strict';
 // Compatibility is an observed checker handshake bound to the immutable bundle
-// and checker build. A manifest declaration or the old `checked` flag is not proof.
+// and checker build, plus the v2 comparison context. A manifest declaration or
+// the old `checked` flag is not proof.
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');

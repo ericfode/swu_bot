@@ -29,14 +29,15 @@ function contextFor({ arenaId: selected = id, build, cards }) {
 function comparisonContext() {
     const root = path.join(__dirname, '..', '..');
     try {
-        return contextFor({ build: fs.readFileSync(path.join(root, 'BUILD_SHA'), 'utf8').trim(), cards: fs.readFileSync(path.join(root, 'CARDS_SHA'), 'utf8').trim() });
+        return contextFor({ build: process.env.GAMES_BUILD || fs.readFileSync(path.join(root, 'BUILD_SHA'), 'utf8').trim(),
+            cards: process.env.GAMES_CARDS || fs.readFileSync(path.join(root, 'CARDS_SHA'), 'utf8').trim() });
     } catch { return null; }
 }
 /** actual first, trusted expected second. Unknown or mixed context always fails closed. */
 function contextProblem(actual, expected) {
     const fields = ['schema', 'arenaId', 'protocol', 'engineRevision', 'runnerRevision'];
     const valid = (v) => v && v.schema === 1 && v.arenaId === 'v2' && v.protocol === 2
-        && typeof v.engineRevision === 'string' && v.engineRevision.length > 0
+        && /^[0-9a-f]{64}$/.test(v.engineRevision ?? '')
         && typeof v.runnerRevision === 'string' && v.runnerRevision.length > 0;
     if (!valid(expected)) return 'the current arena comparison context is unavailable';
     if (!valid(actual)) return 'no verified v2 arena comparison context';
@@ -44,4 +45,22 @@ function contextProblem(actual, expected) {
     return field ? `the arena comparison context differs at ${field}` : null;
 }
 const contextMatches = (actual, expected) => contextProblem(actual, expected) === null;
-module.exports = { id, arenaId, stateRoot, ladderId, requiredProtocol, contextFor, comparisonContext, contextProblem, contextMatches, RUNNER_REVISION };
+function bundleProblem(actual, expected) {
+    if (!expected || !Object.keys(expected).length || Object.values(expected).some((s) => !/^[0-9a-f]{64}$/.test(s ?? ''))) return 'the expected bundle digests are unavailable';
+    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return 'no verified execution bundle digests';
+    const names = Object.keys(expected).sort();
+    if (JSON.stringify(Object.keys(actual).sort()) !== JSON.stringify(names)) return 'the execution bundle names differ';
+    const name = names.find((n) => actual[n] !== expected[n]);
+    return name ? `the execution bundle differs for ${name}` : null;
+}
+/** A round declaration never substitutes for evidence from the individual executed game. */
+function observationProblem(game, config) {
+    if (config?.requiredProtocol !== 2) return 'the round did not require protocol v2';
+    if (game?.requiredProtocol !== 2 || game.protocols?.p1 !== 2 || game.protocols?.p2 !== 2) return 'both seats did not explicitly negotiate protocol v2';
+    const why = contextProblem(game.context, config.context);
+    if (why) return why;
+    const bundles = Object.fromEntries([...new Set([game.p1, game.p2])].map((n) => [n, config.bundles?.[n]]));
+    return bundleProblem(game.bundles, bundles);
+}
+module.exports = { id, arenaId, stateRoot, ladderId, requiredProtocol, contextFor, comparisonContext, contextProblem, contextMatches,
+    bundleProblem, observationProblem, RUNNER_REVISION };

@@ -5,6 +5,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { localHelp } = require('../arena/local-help');
 const dev = require('../dev');
+const { compatibilityStatus, verification, currentCheckerBuild } = require('../arena/compatibility');
 
 test('local help examples use the existing runner arguments and explicit v2 contract', () => {
     const h = localHelp({ owner: 'ana-b', competitor: 'ana_b_fast' });
@@ -37,4 +38,20 @@ test('documented command entry points print help without setup or workload execu
     const setup = spawnSync('bash', ['tools/setup.sh', '--help'], { cwd: root, encoding: 'utf8' });
     assert.equal(setup.status, 0, setup.stderr);
     assert.match(setup.stdout, /sandbox/);
+});
+
+test('local harness check jobs carry trusted build identity required by v2 intake', () => {
+    const bot = { owner: 'ana', version: 'ana-v1', doc: { name: 'ana', kind: 'wasm', files: {}, owner: 'untrusted',
+        checkerBuild: '0'.repeat(40), context: { arenaId: 'untrusted' } } };
+    const job = JSON.parse(JSON.stringify(dev.localCheckJob(bot)));
+    assert.equal(job.checkerBuild, currentCheckerBuild());
+    assert.equal(job.owner, 'ana');
+    assert.equal(job.checkAs, 'ana-v1');
+    assert.equal(Object.hasOwn(job, 'context'), false);
+    // The final intake's pure evidence contract accepts this trusted parent identity after an observed v2 reply.
+    const digest = 'a'.repeat(64);
+    const observed = verification({ negotiatedProtocol: 2 }, digest, job.checkerBuild);
+    assert.equal(compatibilityStatus(observed, { bundleSha256: digest, checkerBuild: job.checkerBuild }).compatible, true);
+    assert.throws(() => dev.localCheckJob(bot, { checkerBuild: null }), /checker build identity is unavailable/);
+    assert.equal(dev.childEnv('/tmp/local-test').ARENA_ID, undefined, 'local checks do not impersonate the hosted v2 arena');
 });
