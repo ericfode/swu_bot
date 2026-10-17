@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
-const { checkJob, residentsHere, gameDecks, Refused } = require('../arena/play-seed');
+const { checkJob, residentsHere, gameDecks, seedJob, Refused } = require('../arena/play-seed');
 const { gameKey } = require('../rng');
 const { checkDone } = require('../remote-lane');
 const { normalizeDeck } = require('../decklists');
@@ -108,6 +108,30 @@ test('checkJob takes the lane\'s jobs and refuses everything else before anythin
     }
     assert.throws(() => checkJob([job()], bundles), Refused, 'a list');
     assert.throws(() => checkJob(null, bundles), Refused, 'null');
+});
+
+test('v2 seed jobs require explicit protocol 2 and only sandboxed version entries', () => {
+    const bundles = path.join(tmp, 'v2-bundles');
+    fs.mkdirSync(bundles, { recursive: true });
+    const hex = 'a1'.repeat(32);
+    fs.writeFileSync(path.join(bundles, `${hex}.tar`), 'trusted parser fixture only; never executed');
+    const games = pair('a-v1', 'b-v1');
+    const bots = { 'a-v1': { kind: 'wasm', bundle: hex }, 'b-v1': { kind: 'wasm', bundle: hex } };
+    const options = { key: KEY, limits: job(), bots };
+    const strict = seedJob(11, games, { ...options, requiredProtocol: 2 });
+    assert.strictEqual(strict.requiredProtocol, 2);
+    assert.ok(checkJob(strict, bundles));
+    assert.ok(!Object.hasOwn(seedJob(11, games, options), 'requiredProtocol'), 'historical/local jobs keep an absent policy');
+    for (const value of [1, null, '2', false, undefined]) {
+        assert.throws(() => checkJob({ ...strict, requiredProtocol: value }, bundles), /requiredProtocol must be 2 when present/);
+    }
+    assert.throws(() => checkJob(job({ requiredProtocol: 2 }), bundles), /protocol v2 jobs require sandboxed WebAssembly versions/);
+    const context = require('../arena/identity').contextFor({ arenaId: 'v2', build: 'a'.repeat(40), cards: 'b'.repeat(64) });
+    const frozen = seedJob(11, games, { ...options, requiredProtocol: 2, context });
+    assert.deepStrictEqual(checkJob(frozen, bundles).context, context);
+    for (const bad of [null, {}, { ...context, protocol: 1 }, { ...context, engineRevision: 'unknown' }]) {
+        assert.throws(() => checkJob({ ...frozen, context: bad }, bundles), /context must be a v2 comparison descriptor/);
+    }
 });
 
 test('checkJob takes a seed of deck lists only whole: the lists as the lane sends them and two of them per game', () => {

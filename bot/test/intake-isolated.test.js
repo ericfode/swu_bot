@@ -82,7 +82,10 @@ test('intake, isolated as on the games machine: the bots\' user checks a submiss
         for (const argv of spawned) {
             assert.ok(argv[1].endsWith('isolate.sh') && argv.some((a, i) => a === '--user' && argv[i + 1] === 'arena'), JSON.stringify(argv));
         }
-        assert.deepStrictEqual(first, { ok: true, name: 'kim_b', version: 'kim_b-v1', benched: false });
+        assert.deepStrictEqual({ ...first, compatibility: undefined }, { ok: true, name: 'kim_b', version: 'kim_b-v1', benched: false, compatibility: undefined });
+        assert.strictEqual(first.compatibility.negotiatedProtocol, 2);
+        assert.match(first.compatibility.bundleSha256, /^[0-9a-f]{64}$/);
+        assert.match(first.compatibility.checkerBuild, /^[0-9a-f]{40}$/);
         assert.deepStrictEqual(again, first, 'the same submission again is the version it became');
         assert.strictEqual(refused.ok, false);
         assert.match(refused.error, /lee-v1 failed the start check/);

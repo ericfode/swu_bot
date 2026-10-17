@@ -13,12 +13,14 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const identity = require('./identity');
 
-const HOME = path.resolve(process.env.ARENA_HOME ?? (fs.existsSync('/mnt/project-files') ? '/mnt/project-files/arena' : path.join(__dirname, '..', '..', 'arena-home')));
+const localRoot = identity.stateRoot(fs.existsSync('/mnt/project-files') ? '/mnt/project-files' : path.join(__dirname, '..', '..', 'arena-home'));
+const HOME = path.resolve(process.env.ARENA_HOME ?? (identity.id === 'open' ? (fs.existsSync('/mnt/project-files') ? '/mnt/project-files/arena' : localRoot) : path.join(localRoot, 'arena')));
 const AGENTS = path.join(HOME, 'agents');
 const VERSIONS = path.join(HOME, 'versions');
 const ROSTER = path.join(HOME, 'roster.json');
-const RESULTS = path.resolve(process.env.ARENA_RESULTS ?? (fs.existsSync('/mnt/project-files') ? '/mnt/project-files/results' : path.join(__dirname, '..', '..', 'results')));
+const RESULTS = path.resolve(process.env.ARENA_RESULTS ?? (identity.id === 'open' ? (fs.existsSync('/mnt/project-files') ? '/mnt/project-files/results' : path.join(__dirname, '..', '..', 'results')) : path.join(localRoot, 'results')));
 // where competitors read RESULTS: the same folder, or a mirror of it when the referee writes to local disk
 const PUBLIC_RESULTS = path.resolve(process.env.ARENA_PUBLIC_RESULTS ?? RESULTS);
 
@@ -60,12 +62,16 @@ function roster() {
         text = fs.readFileSync(ROSTER, 'utf8');
     } catch (e) {
         if (e.code === 'ENOENT') {
-            return { thinkCapMs: 60000, baselines: [], agents: [] };
+            return { ...(identity.id === 'v2' ? { arenaId: 'v2', requiredProtocol: 2 } : {}), thinkCapMs: 60000, baselines: [], agents: [] };
         }
         throw e;
     }
     try {
-        return JSON.parse(text);
+        const r = JSON.parse(text);
+        if ((r.arenaId && r.arenaId !== identity.id) || (identity.id === 'v2' && (r.arenaId !== 'v2' || r.requiredProtocol !== 2))) {
+            throw new Error(`the roster is not the ${identity.id} arena; provision a fresh namespace instead of reusing historical state`);
+        }
+        return r;
     } catch (e) {
         throw new Error(`${ROSTER} is not valid JSON (${e.message}); fix it by hand`);
     }

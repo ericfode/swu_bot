@@ -11,7 +11,7 @@ import { MAX_PLACEMENT_EXCLUDED_SEEDS } from "./Types.ts"
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex")
 
 /** referee.js roundSeed(secret, 'watch', k): round k's first seed */
-export const roundSeed = (secret: string, k: number): number => parseInt(sha256(`${secret}:watch:${k}`).slice(0, 8), 16)
+export const roundSeed = (secret: string, k: number, arena = "open"): number => parseInt(sha256(`${secret}:${arena === "open" ? "watch" : arena}:${k}`).slice(0, 8), 16)
 
 const uint32 = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= 0xffffffff
 
@@ -32,7 +32,7 @@ export const choosePlacementSeed = (firstSeed: number, excludedSeeds: ReadonlyAr
 }
 
 /** referee.js roundKey(secret, 'watch', k): round k's run key, the secret every game's deal comes from */
-export const runKey = (secret: string, k: number): string => sha256(`${secret}:key:watch:${k}`).slice(0, 32)
+export const runKey = (secret: string, k: number, arena = "open"): string => sha256(`${secret}:key:${arena === "open" ? "watch" : arena}:${k}`).slice(0, 32)
 
 /** ladder.js keyId: names a run key without giving it away */
 export const keyId = (key: string): string => sha256(key).slice(0, 12)
@@ -78,7 +78,7 @@ export const bySeed = (games: ReadonlyArray<ScheduledGame>): Map<number, Array<S
  */
 export const jobFor = (
   js: ArenaJs,
-  spec: Pick<RoundSpec, "bundles" | "decks">,
+  spec: Pick<RoundSpec, "bundles" | "decks" | "requiredProtocol" | "context">,
   key: string | null,
   games: ReadonlyArray<ScheduledGame>,
   limits: Limits
@@ -96,6 +96,8 @@ export const jobFor = (
   }
   const base = {
     v: 1 as const,
+    ...(spec.requiredProtocol === 2 ? { requiredProtocol: 2 as const } : {}),
+    ...(spec.context ? { context: spec.context } : {}),
     seed,
     key: key === null ? null : js.gameKey(key, seed),
     maxSteps: limits.maxSteps,

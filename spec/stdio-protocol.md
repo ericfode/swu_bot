@@ -1,7 +1,8 @@
 # Bot protocol v1
 
-Version 1 is the first form of the [bot protocol](protocol.md). The referee still speaks it, so v1 bots keep working
-unchanged; new bots should use v2. Both versions share one schema,
+Version 1 is the first form of the [bot protocol](protocol.md). Local referee callers can still allow it for older
+bots and historical runs. The hosted arena requires explicit `ready.v: 2` and refuses v1 or a missing version.
+Both versions share one schema,
 [`schemas/protocol.schema.json`](schemas/protocol.schema.json).
 
 A bot plays v1 when its `ready` has no `v` or `"v":1`. Compared with v2:

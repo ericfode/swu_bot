@@ -42,7 +42,7 @@ class PushError extends Error {
 
 async function request(method, p, { body, query, type = 'application/json' } = {}) {
     const url = `${BASE}${p}${query ? `?${new URLSearchParams(query)}` : ''}`;
-    const res = await fetch(url, { method, headers: { authorization: `Bearer ${TOKEN}`, 'content-type': type }, body, signal: AbortSignal.timeout(60000) });
+    const res = await fetch(url, { method, headers: { authorization: `Bearer ${TOKEN}`, 'content-type': type, 'x-swu-arena': require('./identity').id }, body, signal: AbortSignal.timeout(60000) });
     const text = await res.text();
     let j = null;
     try {
@@ -302,7 +302,7 @@ function arenaPusher({ docs = new Map(), runs = new Map() } = {}) {
             // the newest two round ladders (the one playing and the one before), from the arena's results folder:
             // standings name the finished rounds, and the referee plays arena-r<K+1> next. Only the newest with 'round'.
             const done = [...(standings?.rounds ?? [])].sort((a, b) => a.round - b.round);
-            const named = [...done.map((r) => r?.ladderId), `arena-r${(done.at(-1)?.round ?? 0) + 1}`];
+            const named = [...done.map((r) => r?.ladderId), require('./identity').ladderId((done.at(-1)?.round ?? -1) + 1)];
             const ids = [...new Set(named)].filter((x) => typeof x === 'string' && /^arena-[\w-]+$/.test(x) && fs.existsSync(path.join(home.PUBLIC_RESULTS, x))).slice(only === 'round' ? -1 : -2);
             for (const id of ids) {
                 const dir = path.join(home.PUBLIC_RESULTS, id);

@@ -33,7 +33,6 @@ import type { ProcService } from "./Proc.ts"
 import type { RoundOutcome } from "./Round.ts"
 import type { StoreService } from "./Store.ts"
 import type { LeaseBoard, Plan, PlanWhy, WindowSettings } from "./Types.ts"
-import { ARENA } from "./Types.ts"
 
 export type Phase = "setup" | "warming" | "ready"
 export type Job = "intake" | "round"
@@ -415,13 +414,13 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
   const queueRound = (k: number, why: PlanWhy, resume: boolean) => {
     if (queued.has(k)) {
       if (!warned.has(k)) {
-        Log.warn(`round ${k} of ${ARENA} already ran at this boot; it waits for the next boot`)
+        Log.warn(`round ${k} of ${c.arena} already ran at this boot; it waits for the next boot`)
         warned.add(k)
       }
       return
     }
     queued.add(k)
-    Log.info(`round ${k} of ${ARENA} queued (${why})`)
+    Log.info(`round ${k} of ${c.arena} queued (${why})`)
     job = { k, why, resume, attempts: 0, abort: null, retry: null, done: null }
     attempt(job)
   }

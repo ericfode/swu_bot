@@ -11,6 +11,7 @@ primary_region = "dfw"
   dockerfile = "Dockerfile"
 
 [env]
+  ARENA_ID = "v2"
   ARENA_MODE = "window"
   WINDOW_HOME = "/data/window"
   ARENA_PUBLIC_URL = "https://swu-arena.fly.dev"

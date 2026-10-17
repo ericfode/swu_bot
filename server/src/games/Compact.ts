@@ -38,13 +38,13 @@ const gunzipAsync = promisify(gunzip)
 
 /** The largest replay compacted (Replay.ts reads no larger one); a larger file stays as it is. */
 export const MAX_REPLAY_BYTES = 64 << 20
-const ROUND = /^arena-r(\d+)$/
 const SIZES_MS = 30_000
 
 /** The round folders a pass may compact: arena-r<K> by K, without the `keep` newest. */
-export const candidates = (names: ReadonlyArray<string>, keep: number): Array<{ readonly k: number; readonly run: string }> => {
+export const candidates = (names: ReadonlyArray<string>, keep: number, arena = "open"): Array<{ readonly k: number; readonly run: string }> => {
+  const round = arena === "open" ? /^arena-r(\d+)$/ : /^arena-v2-r(\d+)$/
   const rounds = names.flatMap((n) => {
-    const m = ROUND.exec(n)
+    const m = round.exec(n)
     return m && String(Number(m[1])) === m[1] ? [{ k: Number(m[1]), run: n }] : []
   }).sort((a, b) => a.k - b.k)
   return rounds.slice(0, Math.max(0, rounds.length - keep))
@@ -278,7 +278,7 @@ export const makeCompactor = (o: CompactorOptions): Compactor => {
     } catch {
       return { rounds, cut: false }
     }
-    for (const { k, run } of candidates(names, keep)) {
+    for (const { k, run } of candidates(names, keep, c.arena)) {
       if (halt()) return { rounds, cut: true }
       let r: RoundReport
       try {

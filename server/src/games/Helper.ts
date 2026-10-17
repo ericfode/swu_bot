@@ -47,6 +47,9 @@ import https from "node:https"
 import path from "node:path"
 import { Effect, Exit, Fiber } from "effect"
 import type { GamesConfig } from "./Config.ts"
+import { bindComparison, bundlesForSeats, bundlesOfJob, jobContextProblem } from "./Comparison.ts"
+import { protocolReplayError, protocolResultError } from "./Protocol.ts"
+import type { GameResult, PlaySeedJob } from "./Types.ts"
 import { scripts } from "./Config.ts"
 import { notWarmed, removeTree, warmOptions } from "./Executor.ts"
 import * as Log from "./Log.ts"
@@ -511,7 +514,7 @@ const readReplay = (p: unknown, outDir: string, room: number, owner: number | nu
  * its replay files: each a regular file right in `outDir`, at most 32 MB, all together and the whole body at most
  * 40 MB, UTF-8 text. `owner`: the uid the replays must belong to (the bots' user's), or null for anyone.
  */
-export const resultBody = (stdout: string, outDir: string, owner: number | null = null): PlayOutcome => {
+export const resultBody = (stdout: string, outDir: string, owner: number | null = null, job?: PlaySeedJob): PlayOutcome => {
   const other = { ok: false, why: "play-seed printed something other than ok and its results" } as const
   const line = stdout.split("\n").filter((l) => l.trim() !== "").at(-1)
   if (line === undefined) return other
@@ -547,6 +550,18 @@ export const resultBody = (stdout: string, outDir: string, owner: number | null 
       return { ok: false, why: "a replay is not UTF-8 text" }
     }
     total += r.bytes.length
+  }
+  if (job?.requiredProtocol === 2 && job.context) {
+    for (let i = 0; i < results.length; i++) {
+      const e = results[i] as { id: string; result: GameResult }
+      const g = job.games.find((g) => g.id === e.id)
+      if (!g) return { ok: false, why: "a result is not a game of the frozen job" }
+      const why = protocolResultError(e.result, 2) ?? protocolReplayError(texts[e.id], e.result, 2)
+      if (why) return { ok: false, why }
+      const bound = bindComparison(e.result, texts[e.id], job.context, bundlesForSeats(bundlesOfJob(job), g))
+      results[i] = { id: e.id, result: bound.result }
+      if (bound.replay !== null) texts[e.id] = bound.replay
+    }
   }
   const json = JSON.stringify({ results, replays: texts })
   if (Buffer.byteLength(json) > BODY_LIMIT) return { ok: false, why: `the result is over ${BODY_LIMIT} bytes` }
@@ -637,6 +652,10 @@ const startPlay = (h: Ctx, slot: string, lease: Lease, dir: string, timeoutMs: n
   let child: ReturnType<typeof runChild> | null = null
   const done = (async (): Promise<PlayOutcome> => {
     try {
+      if (h.c.arena === "v2" || lease.job.requiredProtocol === 2) {
+        const why = jobContextProblem(lease.job, h.c.context)
+        if (why) return { ok: false, why }
+      }
       // a fresh folder, root's, as on the games machine (Executor.ts prepare): job.json (written once, never through a
       // link) and the two folders play-seed writes, out/ and arena/, the slot's user's (out/ readable by the live view's
       // group); that user can swap nothing else
@@ -684,7 +703,7 @@ const startPlay = (h: Ctx, slot: string, lease: Lease, dir: string, timeoutMs: n
         return { ok: false, why: "what the play left running could not be stopped" }
       }
       if (r === null || r.kind !== "exit" || r.code !== 0) return { ok: false, why: playFailed(r, timeoutMs) }
-      return resultBody(r.stdout, path.join(dir, "out"), user?.uid ?? null)
+      return resultBody(r.stdout, path.join(dir, "out"), user?.uid ?? null, lease.job as unknown as PlaySeedJob)
     } catch (e) {
       Log.error(`slot ${slot}: the play task crashed (${String((e as Error)?.message ?? e).slice(0, 200)})`)
       return { ok: false, why: "the helper crashed while playing" }
@@ -984,7 +1003,7 @@ const prepare = (c: GamesConfig, proc: ProcService): { readonly users: ReadonlyM
     : null
   const viewGid = users ? botUser(c.arenaUser).gid : null
   // the plays of a run that crashed are gone (reaped), and so are their work folders
-  const helperDir = path.join(c.data, "helper")
+  const helperDir = path.join(c.stateRoot, "helper")
   removeTree(helperDir)
   mkdirSync(helperDir, { recursive: true })
   chmodSync(helperDir, users ? 0o711 : 0o700)

@@ -109,6 +109,30 @@ give the harness (below) its folder, `--vs ../holocron/build/arena/c_clock`, or 
 
 ## Test locally
 
+MCP clients can call `arena_local_help {}` (also `arena_guide {"topic":"local"}`) for structured setup, build,
+check, test, seed, result and troubleshooting instructions. It uses the existing harness below.
+
+`arena_opponents {}` lists the latest round's already-authorized bundles with verified v2 handshake evidence for
+the exact canonical tar hash and active arena/engine/runner context. It omits private submissions, unverified
+versions and unavailable/incompatible bundles. Access follows the current tables modes and invites; an OAuth app
+reads as its person. `arena_download_opponent {"name":"<catalog name>","sha256":"<catalog hash>"}` returns a
+descriptor (URL, bytes, SHA256, checker evidence and provenance), without executing or writing a local file.
+
+With your existing authorized OAuth token supplied as `ARENA_TOKEN` in the environment, download one exact entry:
+
+```bash
+node bot/arena/download-opponent.js --arena https://swu-arena.fly.dev --name <catalog-name> --sha256 <catalog-sha256> --out ../opponents
+```
+
+The helper refuses redirects, mismatched hashes/sizes, unsupported/v1 manifests, unsafe archives, symlinks and
+overwrites. It uses `bundle.py unpack` and manifest validation; it never starts a bot. The output gives a new bundle
+`folder` and a separate `provenance.json` recording origin, version, whole canonical tar hash, checker/context evidence
+and manifest build claims. The whole tar SHA256 differs from `arena.json.entry_sha256`. Build claims are not proof
+of authenticity. Save the record with the test results, and deliberately select that folder with `--vs` below.
+Do not run downloaded WASM directly or use downloaded `.cwasm` files. Tokens belong in the existing sign-in flow,
+never in commands, source, URLs, submissions or logs. An empty catalog or 404/503 means refresh later; it is not
+permission to obtain private sources or use helper/project credentials.
+
 The swu_bot repo has a harness that plays your bot the way the arena does, on your own computer. Set it up once:
 
 ```

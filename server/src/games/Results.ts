@@ -20,11 +20,13 @@ import {
 } from "node:fs"
 import { hostname } from "node:os"
 import path from "node:path"
+import { gunzipSync } from "node:zlib"
+import { bundlesForSeats } from "./Comparison.ts"
 import type { ArenaJs } from "./Js.ts"
 import type { GameResult, Host, Limits, RemoteStats, RoundSpec, ScheduledGame } from "./Types.ts"
 
 /** ladder.js ids of the arena's rounds (referee.js ladderIdOf) */
-export const ladderId = (k: number) => `arena-r${k}`
+export const ladderId = (k: number, arena = "open") => `arena-${arena === "open" ? "" : `${arena}-`}r${k}`
 
 /** The largest ladder.json or index.json read back (an old round's, to import it). */
 const MAX_DOC_BYTES = 64 << 20
@@ -66,6 +68,18 @@ export const readRegular = (file: string, max = MAX_DOC_BYTES): string | null =>
   }
 }
 
+/** Resume evidence can have been compacted; both representations retain exactly the same replay text. */
+export const readReplayEvidence = (file: string): string | null => {
+  const text = readRegular(file)
+  if (text !== null) return text
+  let fd: number
+  try { fd = openSync(`${file}.gz`, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK) } catch { return null }
+  try {
+    const st = fstatSync(fd)
+    return st.isFile() && st.size <= MAX_DOC_BYTES ? gunzipSync(readFileSync(fd), { maxOutputLength: MAX_DOC_BYTES }).toString("utf8") : null
+  } catch { return null } finally { closeSync(fd) }
+}
+
 /** A folder made if missing, refused when something else (a link) is there, root's mode 0755. */
 const folder = (dir: string) => {
   mkdirSync(dir, { recursive: true, mode: 0o755 })
@@ -97,7 +111,8 @@ export const deckRule = (decks: RoundSpec["decks"]) =>
  * reads from git, null on the image (no .git) as in every hosted round so far. `key` joins once the round is done.
  */
 export const ladderConfig = (o: {
-  readonly spec: Pick<RoundSpec, "bots" | "gamesPerPair" | "decks" | "placement">
+  readonly spec: Pick<RoundSpec, "bots" | "gamesPerPair" | "decks" | "requiredProtocol" | "context" | "bundles" | "placement">
+  readonly arena?: string
   readonly firstSeed: number
   readonly workers: number
   readonly limits: Limits
@@ -105,6 +120,9 @@ export const ladderConfig = (o: {
 }): Record<string, unknown> => {
   const decks = deckRule(o.spec.decks)
   return {
+    ...(o.arena && o.arena !== "open" ? { arena: o.arena } : {}),
+    ...(o.spec.requiredProtocol === 2 ? { requiredProtocol: 2 as const } : {}),
+    ...(o.spec.context ? { context: o.spec.context, bundles: { ...o.spec.bundles } } : {}),
     bots: [...o.spec.bots],
     gamesPerPair: o.spec.gamesPerPair,
     firstSeed: o.firstSeed,
@@ -123,16 +141,21 @@ export const ladderConfig = (o: {
 }
 
 /** A game's entry when it starts (ladder.js onStart): a game that starts again (a lost lease) starts over. */
-const startEntry = (g: ScheduledGame, deckNames: ReadonlyArray<string> | null): Record<string, unknown> => ({
+const startEntry = (g: ScheduledGame, deckNames: ReadonlyArray<string> | null, config: Record<string, unknown>): Record<string, unknown> => ({
   id: g.id, seed: g.seed, p1: g.p1, p2: g.p2, winner: null, winnerSeat: null, outcome: "running", rounds: 0, steps: 0, ms: 0, error: null,
   by: null, faultKind: null, host: null,
+  // Dispatch provenance counts an attempted deal. Accepted seat protocols only join from an executed result.
+  ...(config.requiredProtocol === 2 ? { requiredProtocol: 2, context: config.context,
+    bundles: bundlesForSeats(config.bundles as Record<string, string>, g) } : {}),
   ...(g.decks && deckNames ? { decks: { p1: deckNames[g.decks[0]], p2: deckNames[g.decks[1]] } } : {})
 })
 
 /** What a result adds to both entries (ladder.js onResult). */
 const doneFields = (r: GameResult, host: Host): Record<string, unknown> => ({
   winner: r.winner ?? null, winnerSeat: r.winnerSeat ?? null, outcome: r.outcome, rounds: r.round, steps: r.steps, ms: r.ms, error: r.error ?? null,
-  by: r.by ?? null, faultKind: r.faultKind ?? null, timing: r.timing ?? null, host, ...(r.versions ? { versions: r.versions } : {})
+  by: r.by ?? null, faultKind: r.faultKind ?? null, timing: r.timing ?? null, host, ...(r.versions ? { versions: r.versions } : {}),
+  ...(r.requiredProtocol === 2 ? { requiredProtocol: 2 as const } : {}), ...(r.protocols ? { protocols: r.protocols } : {}),
+  ...(r.context ? { context: r.context } : {}), ...(r.bundles ? { bundles: r.bundles } : {})
 })
 
 /** The end line of a replay with the game's key on it (ladder.js addReplayKey); null when it has none to take one. */
@@ -149,6 +172,7 @@ export const withReplayKey = (text: string, key: string): string | null => {
 }
 
 export interface RoundFilesOptions {
+  readonly arena?: string
   readonly results: string
   readonly k: number
   readonly createdAt: string
@@ -186,7 +210,7 @@ export interface RoundFiles {
 }
 
 export const openRoundFiles = (o: RoundFilesOptions): RoundFiles => {
-  const id = ladderId(o.k)
+  const id = ladderId(o.k, o.arena)
   const dir = path.join(o.results, id)
   const gamesDir = path.join(dir, "games")
   const lockFile = path.join(dir, "referee.lock")
@@ -207,7 +231,7 @@ export const openRoundFiles = (o: RoundFilesOptions): RoundFiles => {
   }
 
   const start = (g: ScheduledGame) => {
-    const entry = startEntry(g, o.deckNames)
+    const entry = startEntry(g, o.deckNames, config)
     const i = games.findIndex((e) => e.id === g.id)
     if (i < 0) {
       games.push(entry)
@@ -276,7 +300,10 @@ export const openRoundFiles = (o: RoundFilesOptions): RoundFiles => {
     const stats = remote()
     if (stats) doc.remote = stats
     writeAtomic(path.join(dir, "ladder.json"), JSON.stringify(doc))
-    writeAtomic(path.join(dir, "index.json"), JSON.stringify({ id, createdAt: o.createdAt, engine: null, bots: config.bots, gamesPerPairing: config.gamesPerPair, games: index }))
+    writeAtomic(path.join(dir, "index.json"), JSON.stringify({ id, createdAt: o.createdAt, engine: null,
+      ...(o.arena && o.arena !== "open" ? { arena: o.arena } : {}), ...(config.requiredProtocol === 2 ? { requiredProtocol: 2 } : {}),
+      ...(config.context ? { context: config.context, bundles: config.bundles } : {}),
+      bots: config.bots, gamesPerPairing: config.gamesPerPair, games: index }))
     return doc as Record<string, any>
   }
 
@@ -324,5 +351,7 @@ export const openRoundFiles = (o: RoundFilesOptions): RoundFiles => {
 export const resultOfEntry = (e: Record<string, any>): GameResult => ({
   seed: e.seed, outcome: e.outcome, by: e.by ?? null, faultKind: e.faultKind ?? null, winner: e.winner ?? null, winnerSeat: e.winnerSeat ?? null,
   round: e.rounds, steps: e.steps, ms: e.ms, error: e.error ?? null, timing: e.timing ?? null, think: e.think ?? null, botStats: e.botStats ?? null,
-  ...(e.key ? { key: e.key } : {}), ...(e.versions ? { versions: e.versions } : {})
+  ...(e.key ? { key: e.key } : {}), ...(e.versions ? { versions: e.versions } : {}),
+  ...(e.requiredProtocol === 2 ? { requiredProtocol: 2 as const } : {}), ...(e.protocols ? { protocols: e.protocols } : {}),
+  ...(e.context ? { context: e.context } : {}), ...(e.bundles ? { bundles: e.bundles } : {})
 })

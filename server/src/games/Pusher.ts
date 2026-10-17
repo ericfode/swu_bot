@@ -26,11 +26,11 @@ const ALL_BUT_PUSH: ReadonlyArray<Kind> = ["setup", "warm", "plan", "round", "pu
  * The newest round's folder as it stands: a digest of its index and each replay's size and time, or null when there
  * is no round folder. (ladder.json is not in it, as before: the next full push, at most 20 s later, sends it.)
  */
-export const roundMark = (results: string): string | null => {
+export const roundMark = (results: string, arena = "open"): string | null => {
   let newest: { k: number; dir: string } | null = null
   try {
     for (const name of readdirSync(results)) {
-      const m = /^arena-r(\d+)$/.exec(name)
+      const m = (arena === "open" ? /^arena-r(\d+)$/ : /^arena-v2-r(\d+)$/).exec(name)
       if (m && (newest === null || Number(m[1]) > newest.k)) newest = { k: Number(m[1]), dir: path.join(results, name) }
     }
   } catch {
@@ -157,7 +157,7 @@ export const makePusher = (o: PusherOptions): Pusher => {
     const t = now()
     const playing = o.playing()
     const full = poked || fullAt === null || t - fullAt >= c.timing.tickMs || !playing
-    const m = playing ? roundMark(c.paths.results) : null
+    const m = playing ? roundMark(c.paths.results, c.arena) : null
     if (full) {
       fullAt = t
       mark = m

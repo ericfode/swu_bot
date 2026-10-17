@@ -276,7 +276,7 @@ run() {
         # shellcheck disable=SC2086
         # --init: an init as PID 1 reaps what the server kills after a play (a process a bot left behind, reparented)
         $awake docker run --rm --init --name swu-helper $platform $net \
-            --env-file "$ENVFILE" -e COORD_ROLE=helper -e "GAMES_HELPER_SLOTS=$slots" \
+            --env-file "$ENVFILE" -e COORD_ROLE=helper -e "GAMES_HELPER_SLOTS=$slots" -e "ARENA_ID=${ARENA_ID:-v2}" \
             -v swu-helper-data:/data --security-opt no-new-privileges --cap-drop NET_RAW --cap-drop MKNOD \
             "$tag" || code=$?
         [ "$code" = 3 ] || exit "$code"

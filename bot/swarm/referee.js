@@ -8,7 +8,7 @@
  * runs past the lease's gameMs.
  *
  *   const ref = createReferee({ maxSteps, capMs });
- *   const { result, replay } = await ref.play({ id, seed, p1, p2, key, decks });   // replay: the JSON Lines text
+ *   const { result, replay } = await ref.play({ id, seed, p1, p2, key, decks, requiredProtocol? });   // replay: the JSON Lines text
  * decks: the two deck lists ({p1, p2}, play-seed.js gameDecks), or null for random decks.
  */
 const { Env } = require('../env');
@@ -46,6 +46,7 @@ function createReferee({ maxSteps, capMs = Infinity, onStep = null }) {
 
     async function play(job) {
         const t0 = Date.now();
+        const policy = job.requiredProtocol == null ? {} : { requiredProtocol: job.requiredProtocol };
         const names = [job.p1, job.p2];
         const loaded = [];
         for (const [i, n] of names.entries()) {
@@ -57,6 +58,7 @@ function createReferee({ maxSteps, capMs = Infinity, onStep = null }) {
             const bad = [0, 1].filter((i) => loaded[i].error);
             r = {
                 seed: job.seed, steps: 0, outcome: 'ERROR', winner: null, winnerSeat: null, round: 0, ms: Date.now() - t0,
+                ...policy, protocols: {},
                 error: bad.map((i) => `LOAD ${names[i]}: ${loaded[i].error}`).join('; ').slice(0, 300), by: null, faultKind: null,
                 botStats: loaded.map((x) => x.bot?.stats ?? null), timing: { p1: timingSummary([]), p2: timingSummary([]) }, think: { p1: 0, p2: 0 }
             };
@@ -74,7 +76,7 @@ function createReferee({ maxSteps, capMs = Infinity, onStep = null }) {
                 }
             }
         };
-        r = await playGame(env, { seed: job.seed, bots, decks: job.decks ?? null, pool: null, key: job.key ?? null, limits, maxSteps, record: true, snapshot, onEvent });
+        r = await playGame(env, { seed: job.seed, bots, decks: job.decks ?? null, pool: null, key: job.key ?? null, limits, ...policy, maxSteps, record: true, snapshot, onEvent });
         await new Promise((resolve) => setTimeout(resolve, 1));
         delete r.events;
         r.winnerSeat = r.winner;
@@ -83,7 +85,7 @@ function createReferee({ maxSteps, capMs = Infinity, onStep = null }) {
         const culprit = r.by === 'p1' ? 0 : r.by === 'p2' ? 1 : -1;
         r.faultKind = culprit < 0 ? null : bots[culprit].fault?.kind ?? 'error';
         r.think = { p1: r3(bots[0].thinkMs), p2: r3(bots[1].thinkMs) };
-        lines.push(JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, by: r.by, faultKind: r.faultKind }));
+        lines.push(JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, by: r.by, faultKind: r.faultKind, ...policy, protocols: r.protocols }));
         const closing = Promise.all(loaded.map((x, i) => (x.bot && describeBot(names[i])?.kind !== 'external' ? x.bot.close() : null)));
         await Promise.race([closing, new Promise((resolve) => setTimeout(resolve, CLOSE_MS))]);
         return { result: r, replay: `${lines.join('\n')}\n` };

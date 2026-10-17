@@ -63,22 +63,24 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..', '..');
 const DATA = process.env.GAMES_DATA || '/data';
+const identity = require('./identity');
+const STATE = identity.stateRoot(DATA);
 const BOT_USER = process.env.ARENA_USER || 'arena';
 const DIRS = {
-    home: path.join(DATA, 'arena'),
-    results: path.join(DATA, 'results'),
-    intake: path.join(DATA, 'intake'),
+    home: path.join(STATE, 'arena'),
+    results: path.join(STATE, 'results'),
+    intake: path.join(STATE, 'intake'),
     cache: path.join(DATA, 'wasm-cache'),
-    botHome: path.join(DATA, 'home'),
-    dash: path.join(DATA, 'dash'),
-    tmp: path.join(DATA, 'tmp', 'referee'),
+    botHome: path.join(STATE, 'home'),
+    dash: path.join(STATE, 'dash'),
+    tmp: path.join(STATE, 'tmp', 'referee'),
     secret: path.join(DATA, 'secret'),
     // each version's canonical tar as <sha256>.tar: round writes them, play-seed.js and the helper API read them
     bundles: process.env.GAMES_BUNDLES || path.join(DATA, 'bundles'),
     // one folder per game job the server plays on this machine, removed once its results are read
-    work: path.join(DATA, 'work'),
+    work: path.join(STATE, 'work'),
     // the server's own (its database, settings, pidfiles): no child sees it
-    server: path.join(DATA, 'server')
+    server: path.join(STATE, 'server')
 };
 const SECRET = path.join(DIRS.secret, 'arena-secret');
 // what nothing started here may see (isolate.sh --hide): Fly's API socket and config, the server's folder, the old
@@ -118,7 +120,7 @@ Object.assign(process.env, {
     // what the intake's checker must not see (intake.js hidden()): the same, the round-seed secret, and every folder of
     // the volume but its own job folder in intake/ (it packs and start-checks there, and nothing else)
     ARENA_HIDE: [...HIDE, DIRS.secret, DIRS.home, DIRS.dash, DIRS.results, DIRS.bundles, DIRS.work, DIRS.cache, DIRS.botHome,
-        path.join(DATA, 'tmp')].join(':')
+        path.join(STATE, 'tmp'), ...(identity.id === 'v2' ? [path.join(DATA, 'arena'), path.join(DATA, 'results'), path.join(DATA, 'server'), path.join(DATA, 'intake')] : [])].join(':')
 });
 // no window token here: intake and push reach the window through the server's proxy, and nothing started from here
 // may inherit one
@@ -202,6 +204,9 @@ function setupData() {
     }
     // no baselines: the image has no bots of its own, and the arena's own bots are resident entries; the competitors stay
     home.updateRoster((r) => ({ ...r, thinkCapMs: r.thinkCapMs ?? THINK_CAP_MS, baselines: [], agents: r.agents ?? [] }));
+    if (identity.id === 'v2') {
+        require('./provision').initialize({ data: DATA });
+    }
     return { residents: home.roster().agents.filter((a) => a.resident).map((a) => a.name) };
 }
 
@@ -458,8 +463,11 @@ function wasmVersion(name, describeBot) {
     const d = VERSION.test(name) ? describeBot(name) : null;
     const dir = path.join(home.VERSIONS, name, 'bundle');
     // describeBot as play-seed.js checkResolved reads it: a version named like a built-in bot plays as that bot
-    return d?.kind === 'arena' && d.lang === 'wasm' && !!fs.lstatSync(dir, { throwIfNoEntry: false })?.isDirectory()
+    const wasm = d?.kind === 'arena' && d.lang === 'wasm' && !!fs.lstatSync(dir, { throwIfNoEntry: false })?.isDirectory()
         && !!fs.lstatSync(path.join(dir, 'arena.json'), { throwIfNoEntry: false })?.isFile();
+    if (!wasm || identity.id !== 'v2') return wasm;
+    const meta = home.readJson(path.join(home.VERSIONS, name, 'SUBMISSION.json'), {});
+    return require('./compatibility').compatibilityStatus(meta.compatibility, { bundleSha256: meta.bundleSha256, context: identity.comparisonContext() }).compatible;
 }
 
 /** True when `file` is a plain file holding exactly the tar `hex` names (and readable by everyone). */
@@ -498,6 +506,11 @@ function storeBundle(name) {
         throw new Error(`${name}: its bundle cannot be packed (${String(e.stderr ?? '').trim().split('\n').pop() || e.message})`);
     }
     const hex = sha256(tar);
+    if (identity.id === 'v2') {
+        const meta = home.readJson(path.join(home.VERSIONS, name, 'SUBMISSION.json'), {});
+        const status = require('./compatibility').compatibilityStatus(meta.compatibility, { bundleSha256: hex, context: identity.comparisonContext() });
+        if (!status.compatible) throw new Error(`${name}: protocol v2 compatibility rejected: ${status.reason}`);
+    }
     const file = path.join(DIRS.bundles, `${hex}.tar`);
     if (!holdsTar(file, hex, tar.length)) {
         // whole or not at all: play-seed.js and the helper API may read it as soon as it has this name
@@ -530,6 +543,9 @@ function roundSpec(k, { games, capMs = null, bots: chosen, placement }) {
     const { ladderIdOf, ROUND_DECKS, roundDeckLists } = require('./referee');
     const { describeBot } = require('../players');
     const bots = chosen ?? machineLineup();
+    if (identity.requiredProtocol === 2 && identity.contextProblem(identity.comparisonContext(), identity.comparisonContext())) {
+        throw new Error(`round ${k}: current v2 comparison context unavailable`);
+    }
     // machineLineup fields only WebAssembly versions, so this does not happen; if it did, the round stops here (a
     // version left out here alone would make the lineup look changed to plan at every look, and no round would end)
     const other = bots.filter((n) => !wasmVersion(n, describeBot));
@@ -565,10 +581,11 @@ function roundSpec(k, { games, capMs = null, bots: chosen, placement }) {
         fs.rmSync(path.join(dir, 'referee.lock'), { force: true });
     }
     return { round: k, bots, gamesPerPair: rules.games + (rules.games % 2), capMs: rules.capMs, decks, bundles, botInfo,
+        ...(identity.id === 'v2' ? { arena: 'v2', requiredProtocol: 2, context: identity.comparisonContext() } : {}),
         ...(placement ? { placement } : {}) };
 }
 
-const ARENAS = ['open']; // the No-sims arena comes later
+const ARENAS = [identity.id];
 
 class Usage extends Error {}
 
@@ -634,6 +651,13 @@ const commands = {
         const placements = require('./placement');
         const saved = placements.getRound(k);
         if (saved?.spec) {
+            if (identity.requiredProtocol === 2) {
+                const current = commands['verify-round']({ arena: identity.id, round: String(k), bots: saved.spec.bots?.join(',') });
+                const why = saved.spec.arena !== identity.id || saved.spec.requiredProtocol !== 2
+                    ? 'the stored round does not require this v2 arena'
+                    : identity.contextProblem(saved.spec.context, current.context) || identity.bundleProblem(saved.spec.bundles, current.bundles);
+                if (why) throw new Error(`round ${k}: stored placement refused: ${why}`);
+            }
             return saved.spec;
         }
         const spec = o.placement === '1' || saved ? placements.reserve(k, (job) => roundSpec(k, { games: job.adaptive ? 2 : Math.min(games, 10), capMs,
@@ -641,6 +665,27 @@ const commands = {
                 ...(job.adaptive ? { adaptive: true, excludedSeeds: job.excludedSeeds } : {}) } })) : null;
         if ((o.placement === '1' || saved) && !spec) return { round: k, placementSkipped: true };
         return spec ?? roundSpec(k, { games, capMs });
+    },
+
+    // Revalidate frozen names against the trusted current admissions and actual canonical bytes.
+    // This does not reserve a placement, reselect opponents, warm bots or touch round metadata.
+    'verify-round'(o) {
+        arena(o);
+        const k = Number(need(o, 'round', int));
+        const bots = need(o, 'bots', (v) => typeof v === 'string' && v.length > 0).split(',');
+        if (new Set(bots).size !== bots.length || bots.some((name) => !VERSION.test(name))) {
+            throw new Error(`round ${k}: invalid frozen bot names`);
+        }
+        const context = identity.comparisonContext();
+        if (identity.requiredProtocol !== 2 || identity.contextProblem(context, context)) {
+            throw new Error(`round ${k}: current v2 comparison context unavailable`);
+        }
+        const { describeBot } = require('../players');
+        for (const name of bots) {
+            if (!wasmVersion(name, describeBot)) throw new Error(`round ${k}: ${name} has no current verified admission`);
+        }
+        const bundles = Object.fromEntries(bots.map((name) => [name, storeBundle(name)]));
+        return { round: k, bots, arena: identity.id, requiredProtocol: 2, context, bundles };
     },
 
     publish(o) {

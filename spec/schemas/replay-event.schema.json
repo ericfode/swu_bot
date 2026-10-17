@@ -386,6 +386,25 @@
         }
       }
     },
+    "ComparisonContext": {
+      "type": "object",
+      "required": ["schema", "arenaId", "protocol", "engineRevision", "runnerRevision"],
+      "properties": {
+        "schema": { "const": 1 },
+        "arenaId": { "const": "v2" },
+        "protocol": { "const": 2 },
+        "engineRevision": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "runnerRevision": { "type": "string", "minLength": 1 }
+      }
+    },
+    "Protocols": {
+      "type": "object",
+      "description": "Accepted numeric bot protocol by seat; absent seat means no successful negotiation (native local bot or failed hello). Distinct from bot build strings.",
+      "properties": {
+        "p1": { "enum": [1, 2] },
+        "p2": { "enum": [1, 2] }
+      }
+    },
     "Header": {
       "type": "object",
       "required": [
@@ -402,6 +421,10 @@
         "v": {
           "type": "integer",
           "description": "Format version; 1."
+        },
+        "requiredProtocol": {
+          "enum": [1, 2],
+          "description": "Explicit bot protocol required for this game; 2 in the hosted arena (optional, added)."
         },
         "seed": {
           "type": "number"
@@ -568,6 +591,21 @@
         "error"
       ],
       "properties": {
+        "context": {
+          "$ref": "#/$defs/ComparisonContext"
+        },
+        "bundles": {
+          "type": "object",
+          "description": "Trusted executor's exact bot name to canonical bundle SHA-256 map for this game (optional, added).",
+          "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        },
+        "protocols": {
+          "$ref": "#/$defs/Protocols"
+        },
+        "requiredProtocol": {
+          "enum": [1, 2],
+          "description": "The game's explicit protocol requirement, including when hello failed (optional, added)."
+        },
         "t": {
           "const": "end"
         },

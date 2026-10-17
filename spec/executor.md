@@ -20,6 +20,7 @@ A lease carries a job, version 1:
 ```json
 {
   "v": 1,
+  "requiredProtocol": 2,
   "seed": 3250146062,
   "key": "64 hex digits: the seed's game key (deals and hidden cards), never the round's run key",
   "maxSteps": 3000,
@@ -27,11 +28,11 @@ A lease carries a job, version 1:
   "hangMs": 120000,
   "gameMs": 1800000,
   "games": [
-    { "id": "rust-greedy2-wasm-vs-node-search-wasm-3250146062", "p1": "rust-greedy2-wasm", "p2": "node-search-wasm" },
-    { "id": "node-search-wasm-vs-rust-greedy2-wasm-3250146062", "p1": "node-search-wasm", "p2": "rust-greedy2-wasm" }
+    { "id": "res_heuristic-v1-vs-ericfode_opus-v7-3250146062", "p1": "res_heuristic-v1", "p2": "ericfode_opus-v7" },
+    { "id": "ericfode_opus-v7-vs-res_heuristic-v1-3250146062", "p1": "ericfode_opus-v7", "p2": "res_heuristic-v1" }
   ],
   "bots": {
-    "rust-greedy2-wasm": { "kind": "resident" },
+    "res_heuristic-v1": { "kind": "wasm", "bundle": "64 hex digits: this version's canonical tar sha256" },
     "ericfode_opus-v7": { "kind": "wasm", "bundle": "64 hex digits: the bundle's id, the sha256 of its canonical tar" }
   }
 }
@@ -39,14 +40,20 @@ A lease carries a job, version 1:
 
 - `capMs` is each bot's thinking time for a whole game, `hangMs` how long one call may take, `gameMs` the whole game.
   They are the round's own limits (the window's arena settings), never constants in an executor.
-- A bot is `resident` (heuristic, rush, and the WebAssembly bots built into the games image) or `wasm` (a submitted
-  version, whose bundle the executor fetches by id and must check against that id before it runs it).
+- The new hosted arena sets `requiredProtocol: 2`. Only `wasm` version entries may play; each bot must explicitly
+  answer `ready.v: 2`. `hello.v` stays `1`, with `versions: [2]`. The executor fetches every bundle by id and checks
+  its canonical tar against that id before running it.
+- Historical jobs omit `requiredProtocol` and may name `resident` bots (heuristic, rush, or a WebAssembly bot built
+  into their image). The job schema version `v: 1` and lease API `/v1/` are independent of the bot protocol.
+- New-arena jobs also freeze `context`: `{ schema: 1, arenaId: "v2", protocol: 2, engineRevision, runnerRevision }`.
+  Each executor derives its expected context from its own trusted build and card-data hashes and rejects a job from
+  any other context before loading bots. In the swarm these hashes come from the loaded engine pack's manifest.
 
 ## The result
 
 ```json
 {
-  "results": [{ "id": "<game id>", "result": { "outcome": "won", "winner": "<bot>", "winnerSeat": "p1", "by": null, "faultKind": null, "round": 7, "steps": 220, "ms": 31183, "think": { "p1": 1200.5, "p2": 980.25 } } }],
+  "results": [{ "id": "<game id>", "result": { "outcome": "won", "winner": "<bot>", "winnerSeat": "p1", "by": null, "faultKind": null, "round": 7, "steps": 220, "ms": 31183, "think": { "p1": 1200.5, "p2": 980.25 }, "requiredProtocol": 2, "protocols": { "p1": 2, "p2": 2 } } }],
   "replays": { "<game id>": "<the replay, JSON Lines: header, steps, end (spec/replay-format.md)>" }
 }
 ```
@@ -54,6 +61,15 @@ A lease carries a job, version 1:
 or `{"failed": "<why>"}`, and the machine plays the seed itself. The machine checks every result before it records
 it (`bot/remote-lane.js` `checkDone`): one result per game, outcomes, winners and seats that agree, a replay whose
 header names this game and whose end line says what the result says. Anything off, and it plays the seed itself.
+
+`protocols` records only accepted numeric versions by seat, separately from bot build strings. A failed hello retains
+earlier accepted seats; a load failure or interrupted worker records `{}`. `requiredProtocol` and `protocols` are also
+in the replay end, so a completed new-arena game carries evidence that both seats accepted v2. An error with missing
+negotiations remains an auditable failure and does not prove a completed v2 match.
+
+The trusted executor also binds `context` and the exact per-game bot name → bundle SHA-256 map (`bundles`) to the
+result and replay end after independently verifying the frozen context and bundle contents. Missing or mixed
+comparison evidence cannot enter the new arena's ratings.
 
 An executor sends `failed` rather than a result when the result would say more about the executor than about the bots:
 a bot that ran out of time or hung while the tab was hidden, or after the computer slept.

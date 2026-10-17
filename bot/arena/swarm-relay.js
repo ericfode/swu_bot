@@ -45,6 +45,7 @@ const HEX = /^[0-9a-f]{64}$/;
 const LEASE = /^[A-Za-z0-9_-]{1,64}$/;
 const LEASE_TTL_MS = 6 * 3600 * 1000;
 const RESULT_MAX = 48 << 20;
+const BOT_MAX = (64 << 20) + (4 << 20); // bundle.py's files, tar headers and padding
 // a file whose URL names its content (?b=<build>, a bundle's sha256) never changes: browsers keep it a year
 const KEEP = 'private, max-age=31536000, immutable';
 
@@ -62,7 +63,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         }
     };
 
-    async function toMachine(method, p, { body = null, build = null, timeoutMs = 60000, raw = false } = {}) {
+    async function toMachine(method, p, { body = null, build = null, timeoutMs = 60000, raw = false, maxBytes = null } = {}) {
         const headers = { authorization: `Bearer ${token}` };
         if (build) {
             headers['x-helper-build'] = build;
@@ -70,8 +71,35 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         if (body !== null) {
             headers['content-type'] = 'application/json';
         }
-        const r = await fetchImpl(`${machine}${p}`, { method, headers, body, signal: AbortSignal.timeout(timeoutMs) });
-        const bytes = Buffer.from(await r.arrayBuffer());
+        const r = await fetchImpl(`${machine}${p}`, { method, headers, body, signal: AbortSignal.timeout(timeoutMs), ...(maxBytes !== null ? { redirect: 'error' } : {}) });
+        let bytes;
+        if (maxBytes !== null && Number(r.headers.get('content-length')) > maxBytes) {
+            await r.body?.cancel?.();
+            throw new Error('the games machine sent too many bytes');
+        }
+        if (maxBytes !== null && r.body?.getReader) {
+            const reader = r.body.getReader();
+            const chunks = [];
+            let size = 0;
+            try {
+                for (;;) {
+                    const next = await reader.read();
+                    if (next.done) break;
+                    size += next.value.byteLength;
+                    if (size > maxBytes) throw new Error('the games machine sent too many bytes');
+                    chunks.push(Buffer.from(next.value));
+                }
+                bytes = Buffer.concat(chunks, size);
+            } catch (e) {
+                await reader.cancel().catch(() => undefined);
+                throw e;
+            } finally {
+                reader.releaseLock();
+            }
+        } else {
+            bytes = Buffer.from(await r.arrayBuffer());
+            if (maxBytes !== null && bytes.length > maxBytes) throw new Error('the games machine sent too many bytes');
+        }
         return { status: r.status, type: r.headers.get('content-type') || 'application/json', bytes, json: raw ? null : (() => {
             try {
                 return bytes.length ? JSON.parse(bytes.toString('utf8')) : null;
@@ -322,6 +350,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
 
     /** Bundle `hex` and its gzip ({raw, gz}: paths, or buffers with no bot folder), fetched from the machine once; null when it has none. */
     function botFile(hex) {
+        if (!HEX.test(hex)) return Promise.resolve(null);
         const here = botHere(hex);
         if (here) {
             return Promise.resolve(here);
@@ -332,7 +361,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         }
         if (!botPending.has(hex)) {
             botPending.set(hex, (async () => {
-                const r = await toMachine('GET', `/v1/swarm/bot/${hex}`, { timeoutMs: 120000, raw: true });
+                const r = await toMachine('GET', `/v1/swarm/bot/${hex}`, { timeoutMs: 120000, raw: true, maxBytes: BOT_MAX });
                 if (r.status !== 200 || crypto.createHash('sha256').update(r.bytes).digest('hex') !== hex) {
                     return null;
                 }
@@ -351,6 +380,49 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
             })().catch(() => null).finally(() => botPending.delete(hex)));
         }
         return botPending.get(hex);
+    }
+
+    /**
+     * Read a latest-lineup bundle without running it. The canonical tar transport stays botFile(); unlike a cached
+     * download, this read also checks the size and sha256 of bytes already on disk. No other hash is fetched or read.
+     * Returns a Buffer or null; access to the lineup belongs to the caller (tables and the opponent catalog).
+     */
+    async function readBot(hex) {
+        if (typeof hex !== 'string' || !HEX.test(hex)) return null;
+        const current = await lineup().catch(() => null);
+        const entry = Array.isArray(current?.bots) ? current.bots.find((b) => b?.bundle === hex) : null;
+        if (!entry || (entry.bytes !== null && entry.bytes !== undefined
+            && (!Number.isSafeInteger(entry.bytes) || entry.bytes < 1 || entry.bytes > BOT_MAX))) return null;
+        const f = await botFile(hex);
+        if (!f) return null;
+        let bytes;
+        try {
+            if (typeof f.raw === 'string') {
+                const file = await fs.promises.open(f.raw, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+                try {
+                    const st = await file.stat();
+                    if (!st.isFile() || st.size < 1 || st.size > BOT_MAX) return null;
+                    bytes = Buffer.alloc(st.size);
+                    let off = 0;
+                    while (off < bytes.length) {
+                        const { bytesRead } = await file.read(bytes, off, bytes.length - off, off);
+                        if (!bytesRead) return null;
+                        off += bytesRead;
+                    }
+                    if ((await file.stat()).size !== bytes.length) return null;
+                } finally {
+                    await file.close();
+                }
+            } else if (Buffer.isBuffer(f.raw) && f.raw.length > 0 && f.raw.length <= BOT_MAX) {
+                bytes = f.raw;
+            } else {
+                return null;
+            }
+            if (Number.isSafeInteger(entry.bytes) && entry.bytes !== bytes.length) return null;
+            return crypto.createHash('sha256').update(bytes).digest('hex') === hex ? bytes : null;
+        } catch {
+            return null;
+        }
     }
 
     /** Fetches every bundle of `data` (a lineup) to the window's disk and drops the bundles no lineup names now. */
@@ -511,7 +583,7 @@ function createSwarmRelay({ token = process.env.SWARM_HELPER_TOKEN || null, mach
         }
     }
 
-    return { route, leases, on: () => !!token, sendFile, currentManifest, cachedBuild, keep, fileSize, lineup, sendBot, botHere };
+    return { route, leases, on: () => !!token, sendFile, currentManifest, cachedBuild, keep, fileSize, lineup, sendBot, botHere, readBot };
 }
 
 function safeJson(text) {

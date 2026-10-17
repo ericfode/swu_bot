@@ -72,15 +72,20 @@ function budget(ms) {
 }
 
 class NativeSeat {
-    constructor(bot, seat) {
+    constructor(bot, seat, setup = {}) {
         this.bot = bot;
         this.seat = seat;
+        this.requiredProtocol = setup.requiredProtocol;
         this.needsUndo = !!bot.needsUndo;
         this.shadow = null;
         this.times = [];
     }
 
-    async hello() {}
+    async hello() {
+        if (this.requiredProtocol != null) {
+            throw new BotError(this.seat, this.bot.name, `requires protocol v${this.requiredProtocol}; a native choose() bot does not negotiate a protocol`);
+        }
+    }
 
     /**
      * A bot that searches by rollback gets the copy, never the real game. choose may return a promise. A throw, an
@@ -121,7 +126,7 @@ class NativeSeat {
 
 class ClientSeat {
     /**
-     * setup: { players, decks: { p1, p2 }, cards, botSeed, deals(label) -> rng, limits }, cards being the game's card data
+     * setup: { players, decks: { p1, p2 }, cards, botSeed, deals(label) -> rng, limits, requiredProtocol? }, cards being the game's card data
      * (game-cards.js), set before hello; match.js sets `shadow` after hello.
      * Time limits: the referee's LIMITS, then the bot's own timeoutMs/startTimeoutMs, then the game's `limits`.
      */
@@ -181,15 +186,19 @@ class ClientSeat {
     }
 
     async hello() {
-        const { players, decks, cards, botSeed } = this.setup;
+        const { players, decks, cards, botSeed, requiredProtocol } = this.setup;
+        const versions = requiredProtocol == null ? VERSIONS : [requiredProtocol];
         // the same in every version (v: 1), so any bot can read it; the bot picks the version in ready. A copy, so an
         // in-process client cannot change the deck lists the game is built from, nor the card data the engine plays.
         const r = await this.call(JSON.parse(JSON.stringify({
-            t: 'hello', protocol: PROTOCOL, v: 1, versions: VERSIONS, bot: this.client.name, you: this.seat, seed: botSeed,
+            t: 'hello', protocol: PROTOCOL, v: 1, versions, bot: this.client.name, you: this.seat, seed: botSeed,
             players, deck: decks[this.seat], opponent: decks[this.seat === 'p1' ? 'p2' : 'p1'], ms: this.limits.hello, cards
         })));
         if (r?.t !== 'ready') {
             this.fail(`expected ready, got ${short(r)}`);
+        }
+        if (requiredProtocol != null && r.v !== requiredProtocol) {
+            this.fail(`requires protocol v${requiredProtocol}; ready.v must be ${requiredProtocol}, got ${r.v === undefined ? 'omitted' : short(r.v)}`);
         }
         const v = r.v ?? 1;
         if (!VERSIONS.includes(v)) {
@@ -489,7 +498,7 @@ function simulator(shadow, pid, deals, deadline) {
 
 function seatFor(bot, seat, game) {
     if (typeof bot?.choose === 'function') {
-        return new NativeSeat(bot, seat);
+        return new NativeSeat(bot, seat, game);
     }
     if (typeof bot?.decide === 'function') {
         return new ClientSeat(bot, seat, game);

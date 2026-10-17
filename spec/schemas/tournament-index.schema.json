@@ -149,6 +149,26 @@
             "type": "string",
             "description": "The game's own secret key, written when the game ends (bot/ladder.js: once every game on its seed has ended, since the seat-swapped games share it); absent in runs seeded from the seed alone (added)."
           },
+          "context": {
+            "$ref": "#/$defs/ComparisonContext"
+          },
+          "bundles": {
+            "type": "object",
+            "description": "Trusted executor's exact bot name to canonical bundle SHA-256 map for this game (optional, added).",
+            "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          },
+          "protocols": {
+            "type": "object",
+            "description": "Accepted numeric bot protocol by seat; no entry for a failed hello or native local bot. Distinct from bot build strings (added).",
+            "properties": {
+              "p1": { "enum": [1, 2] },
+              "p2": { "enum": [1, 2] }
+            }
+          },
+          "requiredProtocol": {
+            "enum": [1, 2],
+            "description": "Explicit bot protocol required for this game; 2 in the hosted arena (optional, added)."
+          },
           "versions": {
             "type": "object",
             "description": "The version string each seat's bot sent in ready, by seat; absent when neither sent one (added).",
@@ -173,6 +193,17 @@
     }
   },
   "$defs": {
+    "ComparisonContext": {
+      "type": "object",
+      "required": ["schema", "arenaId", "protocol", "engineRevision", "runnerRevision"],
+      "properties": {
+        "schema": { "const": 1 },
+        "arenaId": { "const": "v2" },
+        "protocol": { "const": 2 },
+        "engineRevision": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "runnerRevision": { "type": "string", "minLength": 1 }
+      }
+    },
     "Timing": {
       "type": "object",
       "required": [

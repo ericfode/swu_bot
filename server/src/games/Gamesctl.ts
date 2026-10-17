@@ -8,11 +8,12 @@ import path from "node:path"
 import { Context, Effect, Layer } from "effect"
 import type { GamesConfig } from "./Config.ts"
 import { scripts } from "./Config.ts"
+import type { ComparisonContext } from "./Comparison.ts"
+import { bundleMapProblem, contextProblem } from "./Comparison.ts"
 import type { Kind, ProcService, Result, RunOptions } from "./Proc.ts"
 import { childEnv, lastLine } from "./Proc.ts"
 import { validPlacementSeeds } from "./Schedule.ts"
 import type { DeckList, Plan, PlanWhy, RoundDecks, RoundSpec } from "./Types.ts"
-import { ARENA } from "./Types.ts"
 
 export class GamesctlFailed extends Error {
   readonly command: string
@@ -76,12 +77,18 @@ const checkDecks = (d: unknown): RoundDecks | null => {
 }
 
 /** round's answer, checked (it runs as root, but its parts become a schedule and jobs). */
-export const checkRound = (k: number, doc: unknown): RoundSpec => {
+export const checkRound = (k: number, doc: unknown, requiredProtocol?: 2, context?: ComparisonContext | null): RoundSpec => {
   const no = (why: string): never => {
     throw new GamesctlFailed("round", why)
   }
   if (!plain(doc) || doc.round !== k) return no(`it did not answer for round ${k}`)
   if (doc.placementSkipped === true) throw new GamesctlFailed("round", "placement no longer needs a reserved round", false, true)
+  if (doc.requiredProtocol !== undefined && doc.requiredProtocol !== 2) return no("requiredProtocol must be 2")
+  if (requiredProtocol === 2 && doc.requiredProtocol !== 2) return no("the v2 arena requires explicit protocol 2")
+  if (requiredProtocol === 2) {
+    const why = contextProblem(doc.context, context)
+    if (why) return no(why)
+  }
   if (!Array.isArray(doc.bots) || doc.bots.length < 2 || !doc.bots.every((b) => typeof b === "string" && VERSION.test(b)) ||
     new Set(doc.bots).size !== doc.bots.length) return no("its lineup is not two or more versions")
   if (!count(doc.gamesPerPair) || doc.gamesPerPair < 1 || doc.gamesPerPair > 100) return no("games per pair out of range")
@@ -104,6 +111,8 @@ export const checkRound = (k: number, doc: unknown): RoundSpec => {
     } else placement = { version: p.version, ref: p.ref }
   }
   return {
+    ...(doc.requiredProtocol === 2 ? { requiredProtocol: 2 as const } : {}),
+    ...(doc.context ? { context: doc.context as unknown as ComparisonContext } : {}),
     round: k,
     bots: doc.bots as Array<string>,
     gamesPerPair: doc.gamesPerPair,
@@ -127,6 +136,8 @@ export interface GamesctlService {
   readonly warm: Effect.Effect<{ readonly warmed: number; readonly failed: ReadonlyArray<string> }, GamesctlFailed>
   readonly plan: (settledSince: number, placementOnly?: boolean) => Effect.Effect<Plan, GamesctlFailed>
   readonly round: (k: number, games: number, capMs: number, placement?: boolean) => Effect.Effect<RoundSpec, GamesctlFailed>
+  /** Rehash frozen versions through the trusted Node controller, without selecting or reserving a new placement. */
+  readonly verifyRound?: (spec: RoundSpec) => Effect.Effect<void, GamesctlFailed>
   readonly publish: (k: number) => Effect.Effect<void, GamesctlFailed>
   /** Durable placement failures use a root-only metadata command, independent of referee publication. */
   readonly placementState?: (k: number, state: "running" | "retrying" | "held", error?: string) => Effect.Effect<void, GamesctlFailed>
@@ -141,6 +152,9 @@ export const makeGamesctl = (c: GamesConfig, proc: ProcService, boot: string): G
   const base = {
     NODE_ENV: "production",
     GAMES_DATA: c.data,
+    ARENA_ID: c.arena,
+    GAMES_BUILD: c.build,
+    GAMES_CARDS: c.cards,
     GAMES_PLACEMENT_MODE: c.placementMode,
     ARENA_USER: c.arenaUser,
     GAMES_HIDE: c.hide.filter((h) => h !== path.join(c.data, "secret")).join(":")
@@ -160,7 +174,7 @@ export const makeGamesctl = (c: GamesConfig, proc: ProcService, boot: string): G
       as: o.as,
       isolate: o.isolate,
       // the intake's job folders: only the intake (and its checker, in its own) works there
-      ...(o.isolate ? { hide: [path.join(c.data, "intake")] } : {}),
+      ...(o.isolate ? { hide: [c.paths.intake] } : {}),
       timeoutMs: o.timeoutMs,
       graceMs: o.graceMs ?? 5000,
       stdout: "capture"
@@ -189,22 +203,37 @@ export const makeGamesctl = (c: GamesConfig, proc: ProcService, boot: string): G
   )
 
   const plan = (settledSince: number, placementOnly = false) =>
-    run("plan", ["plan", "--arena", ARENA, "--settled-since", String(Math.max(0, Math.floor(settledSince))), "--replay-hours", String(c.replayHours), ...(placementOnly ? ["--placement-only", "1"] : [])], {
+    run("plan", ["plan", "--arena", c.arena, "--settled-since", String(Math.max(0, Math.floor(settledSince))), "--replay-hours", String(c.replayHours), ...(placementOnly ? ["--placement-only", "1"] : [])], {
       as: "arena", isolate: true, home: c.paths.home, timeoutMs: 30_000
     }).pipe(Effect.flatMap((doc) => Effect.try({ try: () => checkPlan(doc), catch: (e) => e as GamesctlFailed })))
 
   const round = (k: number, games: number, capMs: number, placement = false) =>
-    run("round", ["round", "--arena", ARENA, "--round", String(k), "--games", String(games), "--cap-ms", String(capMs), ...(placement ? ["--placement", "1"] : [])], {
+    run("round", ["round", "--arena", c.arena, "--round", String(k), "--games", String(games), "--cap-ms", String(capMs), ...(placement ? ["--placement", "1"] : [])], {
       as: "root", isolate: true, home: rootHome, timeoutMs: 10 * 60_000, env: { GAMES_BUNDLES: c.paths.bundles }
-    }).pipe(Effect.flatMap((doc) => Effect.try({ try: () => checkRound(k, doc), catch: (e) => e as GamesctlFailed })))
+    }).pipe(Effect.flatMap((doc) => Effect.try({ try: () => checkRound(k, doc, c.arena === "v2" ? 2 : undefined, c.context), catch: (e) => e as GamesctlFailed })))
 
   const publish = (k: number) =>
-    run("publish", ["publish", "--arena", ARENA, "--round", String(k)], { as: "root", isolate: true, home: rootHome, timeoutMs: 2 * 60_000 }).pipe(
+    run("publish", ["publish", "--arena", c.arena, "--round", String(k)], { as: "root", isolate: true, home: rootHome, timeoutMs: 2 * 60_000 }).pipe(
       Effect.flatMap((doc) => (plain(doc) && doc.ok === true ? Effect.void : Effect.fail(new GamesctlFailed("publish", "no ok"))))
     )
 
+  const verifyRound: NonNullable<GamesctlService["verifyRound"]> = (spec) =>
+    run("round", ["verify-round", "--arena", c.arena, "--round", String(spec.round), "--bots", spec.bots.join(",")], {
+      as: "root", isolate: true, home: rootHome, timeoutMs: 10 * 60_000, env: { GAMES_BUNDLES: c.paths.bundles }
+    }).pipe(Effect.flatMap((doc) => Effect.try({
+      try: () => {
+        if (!plain(doc) || doc.round !== spec.round || JSON.stringify(doc.bots) !== JSON.stringify(spec.bots)) {
+          throw new GamesctlFailed("verify-round", "the verified lineup differs from the frozen round")
+        }
+        if (c.arena === "v2" && doc.requiredProtocol !== 2) throw new GamesctlFailed("verify-round", "the v2 arena requires explicit protocol 2")
+        const why = (c.arena === "v2" ? contextProblem(doc.context, c.context) : null) ?? bundleMapProblem(doc.bundles, spec.bundles)
+        if (why) throw new GamesctlFailed("verify-round", why)
+      },
+      catch: (e) => e as GamesctlFailed
+    })))
+
   const placementState: NonNullable<GamesctlService["placementState"]> = (k, state, error) =>
-    run("publish", ["placement-state", "--arena", ARENA, "--round", String(k), "--placement-state", state,
+    run("publish", ["placement-state", "--arena", c.arena, "--round", String(k), "--placement-state", state,
       ...(error ? ["--placement-error", error.slice(0, 300)] : [])], {
       as: "root", isolate: true, home: rootHome, timeoutMs: 2 * 60_000
     }).pipe(Effect.asVoid)
@@ -231,11 +260,11 @@ export const makeGamesctl = (c: GamesConfig, proc: ProcService, boot: string): G
     })))
 
   const push = (proxy: string, only: "round" | null) =>
-    run("push", ["push", "--arena", ARENA, "--state", path.join(c.paths.tmp, "push", "state.json"), "--boot", boot, ...(only ? ["--only", only] : [])], {
+    run("push", ["push", "--arena", c.arena, "--state", path.join(c.paths.tmp, "push", "state.json"), "--boot", boot, ...(only ? ["--only", only] : [])], {
       as: "arena", isolate: true, home: c.paths.home, timeoutMs: 2 * 60_000, graceMs: 2000, env: { SWU_WINDOW: proxy }
     }).pipe(Effect.map((doc) => plain(doc) && doc.ok === true))
 
-  return { setup, warm, plan, round, publish, placementState, decks, intake, push }
+  return { setup, warm, plan, round, verifyRound, publish, placementState, decks, intake, push }
 }
 
 export class Gamesctl extends Context.Service<Gamesctl, GamesctlService>()("games/Gamesctl") {

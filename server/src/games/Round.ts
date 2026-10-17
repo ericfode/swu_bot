@@ -14,8 +14,11 @@
  *   stay whole and the lock goes. The scheduler owns attempts, retries and holds.
  */
 import path from "node:path"
+import { createHash } from "node:crypto"
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs"
 import { Cause, Effect, Fiber } from "effect"
 import type { GamesConfig } from "./Config.ts"
+import { bundlesForSeats, comparisonReplayProblem, comparisonResultProblem, roundContextProblem } from "./Comparison.ts"
 import type { PlayFailed, PlayOptions } from "./Executor.ts"
 import { clearWork, playLocal } from "./Executor.ts"
 import type { GamesctlService } from "./Gamesctl.ts"
@@ -24,11 +27,12 @@ import type { LaneResult } from "./Lane.ts"
 import { makeLane } from "./Lane.ts"
 import * as Log from "./Log.ts"
 import type { ProcService } from "./Proc.ts"
-import { deckRule, ladderConfig, ladderId, openRoundFiles, readRegular, resultOfEntry } from "./Results.ts"
+import { deckRule, ladderConfig, ladderId, openRoundFiles, readRegular, readReplayEvidence, resultOfEntry } from "./Results.ts"
 import { buildSchedule, choosePlacementSeed, evenGames, keyId, roundSeed, runKey } from "./Schedule.ts"
 import type { GameRow, RoundRow, StoreService } from "./Store.ts"
 import type { GameResult, Host, LeaseBoard, PlanWhy, PlaySeedJob, Played, RoundSpec, ScheduledGame, WindowSettings } from "./Types.ts"
-import { ARENA, limitsFor } from "./Types.ts"
+import { limitsFor } from "./Types.ts"
+import { protocolReplayError, protocolResultError } from "./Protocol.ts"
 
 export interface RoundDeps {
   readonly config: GamesConfig
@@ -61,8 +65,35 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const plain = (x: unknown): x is Record<string, any> => !!x && typeof x === "object" && !Array.isArray(x)
 const count = (x: unknown) => Number.isSafeInteger(x) && (x as number) >= 0
 
+/** Read-only backstop before a saved placement asks Node to verify its immutable source versions. */
+const storedComparisonProblem = (c: GamesConfig, row: RoundRow): string | null => {
+  const file = path.join(c.paths.results, ladderId(row.k, c.arena), "ladder.json")
+  const text = readRegular(file)
+  if (text === null && lstatSync(file, { throwIfNoEntry: false })) return "stored ladder comparison evidence is unreadable"
+  if (text !== null) {
+    let doc: any
+    try { doc = JSON.parse(text) } catch { return "stored ladder comparison evidence is invalid" }
+    if (!plain(doc?.config) || doc.config.arena !== c.arena) return "the stored ladder arena differs"
+    const why = roundContextProblem(doc.config, c.context, row.spec.bundles)
+    if (why) return `stored ladder: ${why}`
+    if (!same(doc.config.placement, row.spec.placement)) return "the stored ladder placement scope differs"
+  }
+  for (const [name, digest] of Object.entries(row.spec.bundles)) {
+    let fd: number | undefined
+    try {
+      fd = openSync(path.join(c.paths.bundles, `${digest}.tar`), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+      const st = fstatSync(fd)
+      if (!st.isFile() || st.nlink !== 1 || st.size > (80 << 20)) return `${name}: frozen bundle archive is not a bounded plain file`
+      if (createHash("sha256").update(readFileSync(fd)).digest("hex") !== digest) return `${name}: frozen bundle archive digest differs`
+    } catch { return `${name}: frozen bundle archive is unavailable` } finally { if (fd !== undefined) closeSync(fd) }
+  }
+  return null
+}
+
 /** A stored round plays on with its finished games when it is the same round: same lineup, rules, decks, seeds and key. */
-const sameRound = (row: RoundRow, spec: RoundSpec, firstSeed: number, kid: string) =>
+const sameRound = (row: RoundRow, spec: RoundSpec, firstSeed: number, kid: string, arena: string) =>
+  row.arena === arena && row.spec.requiredProtocol === spec.requiredProtocol &&
+  (arena !== "v2" || same(row.spec.bundles, spec.bundles)) &&
   same(row.spec.bots, spec.bots) && evenGames(row.spec.gamesPerPair) === spec.gamesPerPair && row.spec.capMs === spec.capMs &&
   same(deckRule(row.spec.decks), deckRule(spec.decks)) && row.firstSeed === firstSeed && row.keyId === kid &&
   same(row.spec.placement, spec.placement) && (!spec.placement || same(row.spec.bundles, spec.bundles))
@@ -145,9 +176,25 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
   Effect.gen(function*() {
     const c = deps.config
     const { store } = deps
+    // A reservation is immutable evidence. An image/context change must not silently turn it into another round.
+    const row = yield* store.round(k)
+    if (c.arena === "v2") {
+      const why = row ? roundContextProblem(row.spec, c.context) : (c.context ? null : "the current arena comparison context is unavailable")
+      if (why) return { kind: "failed", why: `round ${k}: ${why}` } as const
+      if (row && row.arena !== c.arena) return { kind: "failed", why: `round ${k}: the stored arena differs` } as const
+    }
     const s = deps.settings()
     // Placement retries keep the admitted version, opponents, bundle digests and rules already in the durable row.
-    const row = yield* store.round(k)
+    if (c.arena === "v2" && row?.spec.placement) {
+      const why = storedComparisonProblem(c, row)
+      if (why) return { kind: "failed", why: `round ${k}: ${why}` } as const
+      if (!deps.gamesctl.verifyRound) return { kind: "failed", why: `round ${k}: frozen bundle verification is unavailable` } as const
+      const verified = yield* Effect.result(deps.gamesctl.verifyRound(row.spec))
+      if (verified._tag === "Failure") {
+        if (verified.failure.stopped) return STOPPED
+        return { kind: "failed", why: `round ${k}: ${verified.failure.why}` } as const
+      }
+    }
     const asked = yield* Effect.result(row?.spec.placement
       ? Effect.succeed(row.spec)
       : deps.gamesctl.round(k, s.gamesPerPair, Math.round(s.thinkCapSec * 1000), why === "placement"))
@@ -159,19 +206,24 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
       Log.warn(`round ${k}: gamesctl round failed (${failed})`)
       return { kind: "failed", why: `gamesctl round: ${failed}` } as const
     }
+    if (c.arena === "v2" && asked.success.requiredProtocol !== 2) return { kind: "failed", why: "the v2 arena requires explicit protocol 2" } as const
     const spec: RoundSpec = { ...asked.success, gamesPerPair: evenGames(asked.success.gamesPerPair) }
+    if (c.arena === "v2") {
+      const why = roundContextProblem(spec, c.context, row?.spec.bundles)
+      if (why) return { kind: "failed", why: `round ${k}: ${why}` } as const
+    }
     // A retry reads the frozen spec above, so its exclusions and chosen seed stay unchanged after later results.
-    const initialSeed = roundSeed(deps.secret, k)
+    const initialSeed = roundSeed(deps.secret, k, c.arena)
     const firstSeed = spec.placement?.adaptive ? choosePlacementSeed(initialSeed, spec.placement.excludedSeeds) : initialSeed
-    const key = runKey(deps.secret, k)
+    const key = runKey(deps.secret, k, c.arena)
     const kid = keyId(key)
     const limits = limitsFor(spec.capMs)
     const workers = Math.max(1, Math.floor(s.workers) || 1)
     const schedule = buildSchedule(deps.js, spec, firstSeed)
-    const config = ladderConfig({ spec, firstSeed, workers, limits, keyId: kid })
-    const id = ladderId(k)
+    const config = ladderConfig({ spec, arena: c.arena, firstSeed, workers, limits, keyId: kid })
+    const id = ladderId(k, c.arena)
     const fresh = (createdAt: string): RoundRow => ({
-      k, arena: ARENA, spec, firstSeed, keyId: kid, workers, state: "playing", boot: deps.boot, attempts: 0, why, createdAt, endedAt: null
+      k, arena: c.arena, spec, firstSeed, keyId: kid, workers, state: "playing", boot: deps.boot, attempts: 0, why, createdAt, endedAt: null
     })
     const todoRows = (): Array<GameRow> =>
       schedule.map((g, ord) => ({
@@ -180,15 +232,26 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
 
     // the round's row and games: the same round goes on, another starts over, an old coordinator's ladder is taken in
     let createdAt: string
-    if (row && sameRound(row, spec, firstSeed, kid)) {
+    const priorGames = row ? yield* store.games(k) : []
+    const verifiedGames = priorGames.every((g) => g.state !== "done" || (
+      protocolResultError(g.result, spec.requiredProtocol) === null &&
+      (spec.requiredProtocol !== 2 || (
+        protocolReplayError(readReplayEvidence(path.join(c.paths.results, id, "games", `${g.id}.jsonl`)), g.result, 2) === null &&
+        comparisonResultProblem(g.result, c.context, bundlesForSeats(spec.bundles, g)) === null &&
+        comparisonReplayProblem(readReplayEvidence(path.join(c.paths.results, id, "games", `${g.id}.jsonl`)), g.result, c.context, bundlesForSeats(spec.bundles, g)) === null
+      ))
+    ))
+    if (c.arena === "v2" && row && !verifiedGames) return { kind: "failed", why: `round ${k}: stored result or replay protocol/context/bundle comparison evidence is missing or stale` } as const
+    if (row && sameRound(row, spec, firstSeed, kid, c.arena) && verifiedGames) {
       createdAt = row.createdAt
       yield* store.updateRound(k, { state: "playing", boot: deps.boot, workers })
     } else if (row) {
+      if (row.spec.placement) return { kind: "failed", why: `round ${k}: the frozen placement rules or seed identity differ` } as const
       Log.info(`round ${k}: its bots, games per pair, time limit, deck lists or seeds changed since it started; it starts over`)
       createdAt = new Date().toISOString()
       yield* store.replaceRound(fresh(createdAt), todoRows())
     } else {
-      const old = importLadder(path.join(c.paths.results, id, "ladder.json"), k, config, key, schedule, deps.js)
+      const old = c.arena === "open" ? importLadder(path.join(c.paths.results, id, "ladder.json"), k, config, key, schedule, deps.js) : null
       createdAt = old?.createdAt ?? new Date().toISOString()
       const kept = new Map((old?.games ?? []).map((x) => [x.game.id, x]))
       yield* store.createRound(fresh(createdAt), todoRows().map((g) => {
@@ -199,7 +262,7 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
     }
 
     const files = openRoundFiles({
-      results: c.paths.results, k, createdAt, config, botInfo: spec.botInfo, scheduled: schedule.length,
+      results: c.paths.results, arena: c.arena, k, createdAt, config, botInfo: spec.botInfo, scheduled: schedule.length,
       deckNames: spec.decks?.names ?? null, summarize: deps.js.summarize
     })
     let filesTold = 0

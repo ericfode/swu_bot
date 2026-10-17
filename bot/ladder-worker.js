@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Worker thread for ladder.js (through game-pool.js): loads the engine once, then plays the games it is sent.
- * workerData: { maxSteps, engineRev, capMs, key, control, base, decks, pool }. A game is dealt from gameKey(key, seed),
+ * workerData: { maxSteps, engineRev, capMs, key, control, base, decks, pool, requiredProtocol? }. A game is dealt from gameKey(key, seed),
  * or from the job's own `key` when it has one (null = the seed alone; arena/play-seed.js sends the game key itself).
  *
  * Both bots are built here and guarded (players/guard.js) with the same capMs. While a bot loads or runs (its calls,
@@ -42,6 +42,7 @@ env.engineRev = workerData.engineRev ?? null;
 // games machine or a helper, which build their children's environment from scratch
 const BOT_LOG = process.env.SWU_BOT_LOG || null;
 const capMs = workerData.capMs ?? Infinity;
+const policy = workerData.requiredProtocol == null ? {} : { requiredProtocol: workerData.requiredProtocol };
 // with a cap, the guard's per-game budget decides a slow bot program, so protocol.js's per-message limits only back it up
 const limits = Number.isFinite(capMs) ? { hello: capMs + 5000, decide: capMs + 5000, over: 10000 } : {};
 const ctl = workerControl(workerData.control, workerData.base);
@@ -189,6 +190,7 @@ parentPort.on('message', async (job) => {
         const bad = [0, 1].filter((i) => loaded[i].error);
         r = {
             seed: job.seed, steps: 0, outcome: 'ERROR', winner: null, winnerSeat: null, round: 0, ms: Date.now() - t0,
+            ...policy, protocols: {},
             error: bad.map((i) => `LOAD ${names[i]}: ${loaded[i].error}`).join('; ').slice(0, 300), by: null, faultKind: null,
             botStats: loaded.map((x) => x.bot?.stats ?? null), timing: { p1: timingSummary([]), p2: timingSummary([]) }, think: { p1: 0, p2: 0 }
         };
@@ -213,7 +215,7 @@ parentPort.on('message', async (job) => {
         const key = job.key !== undefined ? job.key : workerData.key ? gameKey(workerData.key, job.seed) : null;
         // a fresh copy per game: the deck objects go into the engine and the replay header
         const decks = job.decks && { p1: structuredClone(workerData.decks[job.decks[0]]), p2: structuredClone(workerData.decks[job.decks[1]]) };
-        r = await playGame(env, { seed: job.seed, bots, decks, pool: decks ? null : workerData.pool ?? null, key, limits, maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
+        r = await playGame(env, { seed: job.seed, bots, decks, pool: decks ? null : workerData.pool ?? null, key, limits, ...policy, maxSteps: workerData.maxSteps, record: !!job.replayFile, snapshot, onEvent });
         // let the timers and promise callbacks a bot left that are due now run while this game is still the current one
         // (a throw there is that bot's loss, see origin)
         await new Promise((resolve) => later(resolve, 1));
@@ -225,7 +227,7 @@ parentPort.on('message', async (job) => {
         r.faultKind = culprit < 0 ? null : bots[culprit].fault?.kind ?? 'error';
         r.think = { p1: r3(bots[0].thinkMs), p2: r3(bots[1].thinkMs) };
         if (job.replayFile) {
-            fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, by: r.by, faultKind: r.faultKind })}\n`);
+            fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error: r.error ?? null, by: r.by, faultKind: r.faultKind, ...policy, protocols: r.protocols })}\n`);
         }
     }
     // bots built for this game end here (a program sees the end of its input); programs kept between games stay up.

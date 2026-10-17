@@ -496,6 +496,15 @@ function claimRun(planned, given) {
     usage(`${rel(planned)} and the next 98 names are taken: give --out`);
 }
 
+// Local checks use this checkout's identity, never a submitted declaration or a hosted arena context. childEnv
+// omits ARENA_ID, so the local checker retains its own scratch arena while still requiring an explicit v2 hello.
+function localCheckJob(bot, { checkerBuild = require('./arena/compatibility').currentCheckerBuild() } = {}) {
+    if (!/^[0-9a-f]{40}$/.test(checkerBuild ?? '')) {
+        usage('the checker build identity is unavailable: use a Git checkout or provide its BUILD_SHA file');
+    }
+    return { ...bot.doc, owner: bot.owner ?? bot.doc.owner, checkAs: bot.version, checkerBuild, context: undefined };
+}
+
 /**
  * Packs and start-checks one bot with the arena's checker (intake.js --check, in <run>/check/<name>/) and stores its
  * canonical tar in <run>/bundles/<sha256>.tar. Resolves to {ok, sha256, script, ms} (script: the sha256 of the script
@@ -507,7 +516,7 @@ async function packAndCheck(bot, run) {
     fs.mkdirSync(work, { recursive: true });
     const job = path.join(work, 'job.json');
     // as intake.js checkIsolated writes it: the submission, its owner, and the version its hello names
-    fs.writeFileSync(job, JSON.stringify({ ...bot.doc, owner: bot.owner ?? bot.doc.owner, checkAs: bot.version }), { flag: 'wx' });
+    fs.writeFileSync(job, JSON.stringify(localCheckJob(bot)), { flag: 'wx' });
     const { CHECK_MS, lastResult } = require('./arena/intake');
     const r = await runChild([process.execPath, INTAKE, '--check', job, '-'], { env: childEnv(run), timeoutMs: CHECK_MS });
     fs.writeFileSync(path.join(work, 'check.log'), r.err);
@@ -1397,7 +1406,7 @@ nav small { display: block; color: var(--dim); }
 </html>
 `;
 
-module.exports = { parseArgs, nameOf, botAt, withDefaultEntry, childEnv, schedule, jobsFor, lastExchanges, sentLine, tailOf, faultKey, cardsSha, javyUnpinned, sh, claimRun, SAME_FAULT };
+module.exports = { parseArgs, nameOf, botAt, withDefaultEntry, localCheckJob, childEnv, schedule, jobsFor, lastExchanges, sentLine, tailOf, faultKey, cardsSha, javyUnpinned, sh, claimRun, SAME_FAULT };
 if (require.main === module) {
     main(process.argv.slice(2)).then((code) => {
         if (code !== undefined && code !== null && typeof code === 'number') {

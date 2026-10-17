@@ -103,9 +103,11 @@ function forfeit(job, i, kind) {
 }
 
 /** The result of a game the worker could not finish: seat 1|2 forfeits with `kind`, or 0 = nobody's fault (ERROR). */
-function stoppedResult(job, st, { seat, kind, error, ms, key = null }) {
+function stoppedResult(job, st, { seat, kind, error, ms, key = null, requiredProtocol = job.requiredProtocol }) {
+    const policy = requiredProtocol == null ? {} : { requiredProtocol };
     const r = {
         seed: job.seed, steps: st.steps, outcome: 'ERROR', winner: null, winnerSeat: null, round: st.round, ms, error,
+        ...policy, protocols: {}, // a stopped worker did not report which hellos it accepted
         by: null, faultKind: null, timing: null, think: { p1: st.think[0], p2: st.think[1] }, botStats: [null, null], ...(key ? { key } : {})
     };
     if (seat) {
@@ -113,7 +115,7 @@ function stoppedResult(job, st, { seat, kind, error, ms, key = null }) {
     }
     if (job.replayFile && fs.existsSync(job.replayFile)) {
         // no key: the runner adds it once every game dealt from it has ended (ladder.js)
-        fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error, by: r.by, faultKind: r.faultKind })}\n`);
+        fs.appendFileSync(job.replayFile, `${JSON.stringify({ t: 'end', winner: r.winnerSeat, round: r.round, steps: r.steps, outcome: r.outcome, error, by: r.by, faultKind: r.faultKind, ...policy, protocols: r.protocols })}\n`);
     }
     return r;
 }
@@ -164,6 +166,7 @@ function killChildren(worker = null, { spare = [] } = {}) {
 }
 
 function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs = DEFAULT_GAME_MS(workerData.capMs), onStart = () => {}, onResult = () => {} } = {}) {
+    const stopped = (job, st, why) => stoppedResult(job, st, { requiredProtocol: workerData.requiredProtocol ?? job.requiredProtocol, ...why });
     let grow = () => {};
     const pool = new Promise((resolve, reject) => {
         const base = Date.now();
@@ -261,7 +264,7 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
                     } else if (s.job) {
                         const seat = st.phase === PHASE.choose || st.phase === PHASE.load ? st.seat : 0;
                         const error = seat ? `CRASH ${nameOf(s.job, seat)}: worker died (${why})` : `worker died (${why})`;
-                        stop(s, stoppedResult(s.job, st, { seat, kind: st.phase === PHASE.load ? 'load' : 'error', error, ms: Date.now() - s.jobStart, key: keyOf(s.job) }));
+                        stop(s, stopped(s.job, st, { seat, kind: st.phase === PHASE.load ? 'load' : 'error', error, ms: Date.now() - s.jobStart, key: keyOf(s.job) }));
                     } else if (!s.ready) {
                         finish(s.error ?? new Error(`game worker exited with code ${code} before it was ready`));
                         return;
@@ -286,7 +289,7 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
                     // async work a bot left from an earlier game does not end: play this worker's job again elsewhere
                     const why = `work left from an earlier game ran ${Math.round(ms / 1000)} s`;
                     const job = s.job;
-                    stop(s, retry(s, why) || !job ? null : stoppedResult(job, st, { seat: 0, error: `STALE ${why}`, ms: Date.now() - s.jobStart, key: keyOf(job) }));
+                    stop(s, retry(s, why) || !job ? null : stopped(job, st, { seat: 0, error: `STALE ${why}`, ms: Date.now() - s.jobStart, key: keyOf(job) }));
                     s.w.terminate();
                     setTimeout(() => killChildren(s.id), KILL_AFTER_MS).unref();
                     continue;
@@ -308,13 +311,13 @@ function runPool(queue, { workers = 1, workerData = {}, hangMs = 600000, gameMs 
                 let result;
                 if (!seat) {
                     const error = hung ? `ENGINE_HANG no decision asked for ${sec} s` : `GAME_TIMEOUT ${late} (no bot was thinking)`;
-                    result = stoppedResult(job, st, { seat: 0, error, ms: gameTime, key: keyOf(job) });
+                    result = stopped(job, st, { seat: 0, error, ms: gameTime, key: keyOf(job) });
                 } else {
                     const loading = st.phase === PHASE.load;
                     // the hung call's own time counts too (its worker is about to be stopped, so it never reports it)
                     st.think[seat - 1] += Math.max(0, ms);
                     const doing = loading ? 'still loading' : 'its code still running';
-                    result = stoppedResult(job, st, {
+                    result = stopped(job, st, {
                         seat, kind: loading ? 'load' : 'hang', ms: gameTime, key: keyOf(job),
                         error: hung ? `HANG ${nameOf(job, seat)} ${doing} after ${sec} s (limit ${Math.round(hangMs / 1000)} s)` : `GAME_TIMEOUT ${nameOf(job, seat)} ${doing} when ${late}`
                     });

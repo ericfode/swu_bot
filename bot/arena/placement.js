@@ -9,6 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const home = require('./home');
+const identity = require('./identity');
 
 const DIR = path.join(home.HOME, 'placements');
 const VERSION = /^([a-z][a-z0-9_]{0,31})-v([1-9]\d*)$/;
@@ -40,6 +41,34 @@ function readJson(file, maxBytes = MAX_RECORD_BYTES) {
     }
 }
 
+/** Read and hash trusted admission files only; historical versions need not remain on the active roster. */
+function checkedDigest(version, context = identity.comparisonContext()) {
+    const parts = versionParts(version);
+    if (!parts || !Number.isSafeInteger(Number(parts[2])) || !identity.contextMatches(context, context)) return null;
+    const dir = path.join(home.VERSIONS, version), bundle = path.join(dir, 'bundle');
+    if (!isDirectory(home.VERSIONS) || !isDirectory(dir) || !isDirectory(bundle)) return null;
+    const sub = readJson(path.join(dir, 'SUBMISSION.json'));
+    if (sub?.name !== version || sub.arenaId !== 'v2' || sub.checked !== true || sub.bot?.kind !== 'wasm' ||
+        (sub.agent !== undefined && sub.agent !== parts[1]) || (sub.version !== undefined && sub.version !== Number(parts[2]))) return null;
+    try {
+        const compatibility = require('./compatibility');
+        const digest = compatibility.bundleDigest(bundle);
+        if (sub.bundleSha256 !== digest || !compatibility.compatibilityStatus(sub.compatibility,
+            { bundleSha256: digest, context }).compatible) return null;
+        return digest;
+    } catch { return null; }
+}
+
+/** A frozen execution policy cannot adopt another image identity or rebind an immutable version's bytes. */
+function specProblem(spec, context = identity.comparisonContext()) {
+    if (spec?.arena !== 'v2' || spec.requiredProtocol !== 2) return 'placement spec must require the v2 arena and protocol';
+    const why = identity.contextProblem(spec.context, context);
+    if (why) return why;
+    if (!Array.isArray(spec.bots) || !spec.bots.length) return 'placement spec has no immutable bot versions';
+    const bundles = Object.fromEntries(spec.bots.map((v) => [v, checkedDigest(v, context)]));
+    return identity.bundleProblem(spec.bundles, bundles);
+}
+
 /** Admission backstop, not another validator: only a frozen, checked wasm version in the active roster qualifies. */
 function admitted(version, ref = undefined) {
     const parts = versionParts(version);
@@ -53,6 +82,7 @@ function admitted(version, ref = undefined) {
     if (sub?.name !== version || sub.checked !== true || sub.bot?.kind !== 'wasm' ||
         (sub.agent !== undefined && sub.agent !== agent) || (sub.version !== undefined && sub.version !== Number(n)) ||
         (ref !== undefined && sub.ref !== ref) || !plain(readJson(path.join(dir, 'bundle', 'arena.json')))) return false;
+    if (identity.id === 'v2' && !checkedDigest(version)) return false;
     // A name shadowed by an external or built-in bot must not become an arbitrary program in a placement job.
     const d = require('../players').describeBot(version);
     return d?.kind === 'arena' && d.lang === 'wasm';
@@ -69,6 +99,8 @@ function opponentsOf(version) {
 
 /** Read each authoritative ladder once. Aggregate standings results are deliberately not counted a second time. */
 function history() {
+    const context = identity.id === 'v2' ? identity.comparisonContext() : null;
+    if (identity.id === 'v2' && !identity.contextMatches(context, context)) return null;
     const file = path.join(home.HOME, 'standings.json');
     if (!fs.lstatSync(file, { throwIfNoEntry: false })) {
         // An empty arena is legitimate. Existing ladders without their manifest are not evidence of an empty arena.
@@ -78,7 +110,7 @@ function history() {
     }
     const st = readJson(file, MAX_HISTORY_BYTES);
     if (!plain(st) || !Array.isArray(st.rounds)) return null;
-    const observations = [], attempted = [], seen = new Set();
+    const observations = [], attempted = [], seen = new Set(), revisions = new Map(), digests = new Map();
     let rowCount = 0;
     const referee = require('./referee');
     for (const rd of st.rounds) {
@@ -94,6 +126,22 @@ function history() {
         if (!plain(ladder) || !Array.isArray(ladder.games) || !plain(ladder.config) || !Array.isArray(ladder.config.bots)) return null;
         rowCount += ladder.games.length;
         if (rowCount > MAX_HISTORY_ROWS) return null;
+        if (identity.id === 'v2') {
+            // Keep foreign/unknown rounds on disk for inspection, without borrowing their outcomes or seeds.
+            if (ladder.config.arena !== 'v2' || ladder.config.requiredProtocol !== 2 ||
+                !identity.contextMatches(ladder.config.context, context)) continue;
+            const declared = Object.fromEntries(ladder.config.bots.map((v) => [v, ladder.config.bundles?.[v]]));
+            if (identity.bundleProblem(ladder.config.bundles, declared)) continue;
+            for (const [v, digest] of Object.entries(declared)) {
+                if (revisions.has(v) && revisions.get(v) !== digest) return null;
+                revisions.set(v, digest);
+            }
+            const expected = Object.fromEntries(ladder.config.bots.map((v) => {
+                if (!digests.has(v)) digests.set(v, checkedDigest(v, context));
+                return [v, digests.get(v)];
+            }));
+            if (identity.bundleProblem(ladder.config.bundles, expected)) continue;
+        }
         for (const g of ladder.games) {
             if (!plain(g) || typeof g.p1 !== 'string' || typeof g.p2 !== 'string' || typeof g.outcome !== 'string' || g.p1 === g.p2 ||
                 !ladder.config.bots.includes(g.p1) || !ladder.config.bots.includes(g.p2)) return null;
@@ -101,6 +149,9 @@ function history() {
                 a: g.p1, b: g.p2, ...(Number.isSafeInteger(g.seed) && g.seed >= 0 && g.seed <= 0xffffffff ? { seed: g.seed } : {}) };
             attempted.push(row);
             if (g.outcome === 'running') continue;
+            // Frozen config/bundles establish an attempted pair, including starts lost before a worker responds.
+            // Only the individual game's complete runtime evidence can establish fit or connectivity.
+            if (identity.id === 'v2' && identity.observationProblem(g, ladder.config)) continue;
             const { score } = referee.cappedScore(g);
             if (score !== null) observations.push({ ...row, score });
         }
@@ -131,6 +182,10 @@ function decision(job) {
         job = { ...job, adaptive: true, rounds: [], opponents: [], excludedSeeds: [], finished: 0, rated: 0, scheduled: 0 };
     }
     if (!job.adaptive || job.round != null || TERMINAL.has(job.state)) return job;
+    if (identity.id === 'v2' && (!identity.contextMatches(job.context, identity.comparisonContext()) ||
+        identity.bundleProblem(job.bundles, { [job.version]: checkedDigest(job.version) }))) {
+        return { ...job, state: 'blocked', opponents: [], error: 'placement context or immutable bundle identity changed' };
+    }
     if (!admitted(job.version, job.ref)) return { ...job, state: 'blocked', error: 'version is benched, withdrawn, or no longer admitted' };
     let data;
     try { data = history(); } catch { data = null; }
@@ -248,7 +303,8 @@ function enqueue({ version, ref, benched = false } = {}) {
     if (!enabled() || benched || typeof ref !== 'string' || !ref.startsWith('window:') || ref.length <= 7 || ref.length > 300 || !admitted(version, ref)) return null;
     ensureDir();
     const now = new Date().toISOString();
-    const record = decision({ version, ref, adaptive: true, rounds: [], round: null, state: 'queued', queuedAt: now, updatedAt: now,
+    const record = decision({ version, ref, ...(identity.id === 'v2' ? { context: identity.comparisonContext(),
+        bundles: { [version]: checkedDigest(version) } } : {}), adaptive: true, rounds: [], round: null, state: 'queued', queuedAt: now, updatedAt: now,
         opponents: [], finished: 0, rated: 0, scheduled: 0, error: null });
     try {
         storeFile(fileOf(version), record, true);
@@ -300,13 +356,17 @@ function reserve(k, makeSpec) {
     return locked(() => {
         reconcile();
         let assigned = getRound(k);
-        if (assigned?.spec) return assigned.spec;
+        if (assigned?.spec) {
+            const why = identity.id === 'v2' ? specProblem(assigned.spec) : null;
+            if (why) throw new Error(`frozen placement identity is incompatible: ${why}`);
+            return assigned.spec;
+        }
         let job = assigned ? records().find((r) => r.version === assigned.version) : null;
         if (!job) {
             if (!enabled()) return null;
             // The hook also runs when an ordinary round resumes. A new placement cannot take its number or files.
             const before = readJson(path.join(home.HOME, 'standings.json'))?.rounds ?? [];
-            const ladder = readJson(path.join(home.RESULTS, `arena-r${k}`, 'ladder.json'));
+            const ladder = readJson(path.join(home.RESULTS, identity.ladderId(k), 'ladder.json'));
             if (before.some((r) => r.round === k && !r.placement) || ladder?.config && !ladder.config.placement) return null;
             job = next();
             if (!job) return null;
@@ -314,13 +374,26 @@ function reserve(k, makeSpec) {
             if (job.round !== null && job.round !== undefined) return null;
             if (!job.opponents.length) return null;
             const now = new Date().toISOString();
+            const executionIdentity = identity.id === 'v2' ? { context: identity.comparisonContext(),
+                bundles: Object.fromEntries([job.version, ...job.opponents].map((v) => [v, checkedDigest(v)])) } : {};
             job = { ...job, round: k, state: 'running', error: null, updatedAt: now, lastDispatchedAt: now,
                 ...(job.adaptive ? { rounds: [...episodes(job), { round: k, state: 'running', finished: 0, rated: 0, scheduled: 0,
-                    opponents: [...job.opponents], excludedSeeds: [...(job.excludedSeeds ?? [])] }] } : {}) };
+                    ...executionIdentity, opponents: [...job.opponents], excludedSeeds: [...(job.excludedSeeds ?? [])] }] } : executionIdentity) };
             // Reserve before a fallible pack/warm: a retry always prepares this version under this same round number.
             storeFile(fileOf(job.version), job);
         }
         try {
+            if (identity.id === 'v2') {
+                const why = identity.contextProblem(job.context, identity.comparisonContext());
+                if (why || ![job.version, ...job.opponents].every((v) => admitted(v, v === job.version ? job.ref : undefined))) {
+                    throw new Error(`placement admission or context changed: ${why ?? 'immutable version is no longer admitted'}`);
+                }
+                const frozenBundles = assigned?.bundles ?? (job.adaptive ? episodes(job).find((ep) => ep.round === k)?.bundles : job.bundles);
+                const expected = Object.fromEntries([job.version, ...job.opponents].map((v) => [v, checkedDigest(v)]));
+                if (identity.bundleProblem(frozenBundles, expected)) {
+                    throw new Error('placement immutable version bundle changed');
+                }
+            }
             const spec = makeSpec(structuredClone(job));
             const bots = [job.version, ...job.opponents];
             if (!plain(spec) || spec.round !== k || JSON.stringify(spec.bots) !== JSON.stringify(bots) ||
@@ -328,6 +401,10 @@ function reserve(k, makeSpec) {
                     spec.gamesPerPair < 2 || spec.gamesPerPair > 10 || spec.gamesPerPair % 2)) {
                 throw new Error(job.adaptive ? 'adaptive placement requires one opponent and exactly two mirrored games' :
                     'placement spec must keep its frozen lineup and 2..10 even games per pair');
+            }
+            if (identity.id === 'v2') {
+                const why = specProblem(spec);
+                if (why) throw new Error(`placement spec identity is incompatible: ${why}`);
             }
             const frozen = { ...spec, placement: { version: job.version, ref: job.ref,
                 ...(job.adaptive ? { adaptive: true, excludedSeeds: [...(job.excludedSeeds ?? [])] } : {}) } };

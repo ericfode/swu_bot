@@ -35,6 +35,8 @@ const { spawnSync } = require('child_process');
 const home = require('./home');
 const dash = require('./dash');
 const { botSource, STARTS } = require('./starters');
+const { currentCheckerBuild, bundleDigest, compatibilityStatus, verification } = require('./compatibility');
+const { id: arenaId, requiredProtocol, ladderId, comparisonContext } = require('./identity');
 
 const NAME = /^[a-z][a-z0-9_]{0,31}$/;
 // Hosted arenas set ARENA_AUTH=1: then changing a competitor (submit, withdraw, rejoin) needs the token register
@@ -132,7 +134,7 @@ function clock(now = Date.now()) {
 function hostedClock(now) {
     const last = home.readJson(path.join(home.HOME, 'standings.json'), { rounds: [] }).rounds?.at(-1) ?? null;
     // the round that may be playing: the newest one while it is unfinished, else the one the referee plays next
-    const open = last && last.status !== 'done' ? { round: last.round, id: last.ladderId ?? `arena-r${last.round}` } : { round: (last?.round ?? -1) + 1, id: `arena-r${(last?.round ?? -1) + 1}` };
+    const open = last && last.status !== 'done' ? { round: last.round, id: last.ladderId ?? ladderId(last.round) } : { round: (last?.round ?? -1) + 1, id: ladderId((last?.round ?? -1) + 1) };
     let playing = false;
     try {
         playing = now - fs.statSync(path.join(home.RESULTS, open.id, 'referee.lock')).mtimeMs < ROUND_LOCK_FRESH_MS;
@@ -183,9 +185,13 @@ const cards = gameCards(cardGetter(), [decks[0], decks[1]]);
 const bye = (code, msg) => { if (msg) process.stderr.write(msg + '\\n'); process.exit(code); };
 setTimeout(() => bye(1, 'no reply to hello within ' + ms + ' ms'), Number(ms));
 const client = new StdioClient(name, { cmd: /[\\\\/]/.test(cmd) ? require('path').join(dir, cmd) : cmd, args, cwd: dir });
-client.hello({ t: 'hello', protocol: 'swu-bot-stdio', v: 1, versions: [1, 2], bot: name, you: 'p1', seed: 1,
+client.hello({ t: 'hello', protocol: 'swu-bot-stdio', v: 1, versions: [2], bot: name, you: 'p1', seed: 1,
     players: [{ id: 'p1', name: 'p1', bot: name }, { id: 'p2', name: 'p2', bot: 'heuristic' }], deck: decks[0], opponent: decks[1], ms: Number(ms), cards })
-    .then((r) => r?.t === 'ready' && [1, 2].includes(r.v ?? 1) ? bye(0) : bye(1, 'expected {"t":"ready","v":2}, got ' + JSON.stringify(r).slice(0, 200)),
+    .then((r) => {
+        if (r?.t !== 'ready' || r.v !== 2) return bye(1, 'protocol v2 required: expected explicit {"t":"ready","v":2}, got ' + String(JSON.stringify(r)).slice(0, 200));
+        require('fs').writeSync(1, JSON.stringify({ negotiatedProtocol: r.v }) + '\\n');
+        bye(0);
+    },
           (e) => bye(1, e.message));
 `;
 
@@ -194,10 +200,15 @@ function startCheck(dir, version, bot, shownAs) {
     const r = spawnSync(process.execPath, ['-e', START_CHECK, path.join(__dirname, '..', 'stdio.js'), path.join(__dirname, '..', 'game-cards.js'),
         path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json'), dir, version, JSON.stringify({ cmd: bot.cmd, args: bot.args ?? [] }), String(START_CHECK_MS)], {
         env: checkEnv(),
-        stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8', timeout: START_CHECK_MS + 5000, killSignal: 'SIGKILL'
+        stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: START_CHECK_MS + 5000, killSignal: 'SIGKILL'
     });
     if (r.status === 0) {
-        return;
+        let result;
+        try {
+            result = JSON.parse(r.stdout);
+        } catch {} // a successful exit alone does not prove a handshake
+        need(result?.negotiatedProtocol === 2, 'bad_bot', `${version} failed the start check: no verified protocol v2 handshake`);
+        return { negotiatedProtocol: 2 };
     }
     const why = r.error?.code === 'ETIMEDOUT' ? `took more than ${START_CHECK_MS / 1000} s` : r.error ? r.error.message : r.signal ? `killed by ${r.signal}` : `exit code ${r.status}`;
     const lines = String(r.stderr ?? '').split(dir).join(shownAs).split('\n').filter((l) => l.trim()).slice(-8);
@@ -206,11 +217,18 @@ function startCheck(dir, version, bot, shownAs) {
     throw new ArenaError('bad_bot', `${version} failed the start check (start ${bot.label ?? bot.cmd}, send hello, expect ready): ${why}${lines.length ? `\n${lines.join('\n')}` : ''}${hint}`);
 }
 
+/** Frozen versions store the digest root verified on admission; a declaration alone is never compatible. */
+function versionCompatibility(version, meta) {
+    meta ??= version ? home.readJson(path.join(home.VERSIONS, version, 'SUBMISSION.json'), {}) : {};
+    return compatibilityStatus(meta.compatibility, { bundleSha256: meta.bundleSha256, ...(arenaId === 'v2' ? { context: comparisonContext() ?? null } : {}) });
+}
+
 const api = {
     status() {
         const r = home.roster();
         const st = home.readJson(path.join(home.HOME, 'standings.json'), { rounds: [], global: {} });
         return {
+            arenaId, requiredProtocol, context: comparisonContext() ?? null,
             ...clock(),
             thinkCapMs: r.thinkCapMs,
             placementMode: require('./placement').enabled() ? 'immediate' : 'cycle',
@@ -223,7 +241,8 @@ const api = {
                 ...(benched ? { benched: true, benchedAt: a.benchedAt ?? null } : {}),
                 ...(a.withdrawn?.length ? { withdrawn: a.withdrawn.map((v) => `${a.name}-v${v}`) } : {}),
                 latest: (() => { const v = home.versionsOf(a.name).pop(); return v === undefined ? null : `${a.name}-v${v}`; })(),
-                elo: (() => { const v = home.versionsOf(a.name).pop(); return v === undefined ? null : st.global?.[`${a.name}-v${v}`] ?? null; })()
+                elo: (() => { const v = home.versionsOf(a.name).pop(); return v === undefined ? null : st.global?.[`${a.name}-v${v}`] ?? null; })(),
+                compatibility: (() => { const v = home.versionsOf(a.name).pop(); return versionCompatibility(v === undefined ? null : `${a.name}-v${v}`); })()
             }))
         };
     },
@@ -278,7 +297,7 @@ const api = {
         return { name, dir, version: v.version, token, tokenNote: 'Keep this token; it is shown once. Pass it as `token` to submit, withdraw and rejoin on a hosted arena.' };
     },
 
-    submit({ name, note, bot = { kind: 'js' }, token, ref } = {}, { checked = false } = {}) {
+    submit({ name, note, bot = { kind: 'js' }, token, ref } = {}, { checked = false, compatibility = null } = {}) {
         // Atomic: the version is assembled and load-checked in versions/.staging-*, then renamed into place in one step,
         // so the referee never sees a half-copied or unloadable version. A benched competitor may submit too: its newest
         // version is rated once it rejoins. checked: the caller made the load or start check already, on these files,
@@ -324,11 +343,12 @@ const api = {
         }
         const { files, ...botMeta } = bot;
         const round = clock().round;
+        let verifiedCompatibility = null;
         // stamped just before the version is renamed into place, after its load check: a submit that finishes after the
         // round's deadline is late (lineup() rates it next round), however early it started
         // ref: what this version came from, e.g. a window submission (intake.js; not part of the API's own arguments)
         const meta = (n) => ({ name: `${name}-v${n}`, agent: name, version: n, note: note.trim(), bot: botMeta, files: files ? Object.keys(files) : undefined,
-                               ...(typeof ref === 'string' ? { ref } : {}), submittedAt: new Date().toISOString(), round, checked: true });
+                               ...(typeof ref === 'string' ? { ref } : {}), ...(verifiedCompatibility ? { bundleSha256: verifiedCompatibility.bundleSha256, compatibility: verifiedCompatibility } : {}), submittedAt: new Date().toISOString(), round, checked: true });
         const staging = home.stagingDir(name);
         try {
             if (home.exists(live) && bot.kind !== 'wasm') {
@@ -349,13 +369,27 @@ const api = {
             // a resident has no starter v0: its first version is v1, like a builder's first bot
             let n = (home.versionsOf(name).pop() ?? (entry.resident ? 0 : -1)) + 1;
             const check = () => {
+                const digest = bot.kind === 'wasm' ? bundleDigest(path.join(staging, 'bundle')) : null;
+                const checkerBuild = bot.kind === 'wasm' ? currentCheckerBuild() : null;
+                need(bot.kind !== 'wasm' || checkerBuild, 'bad_bot', 'the checker build identity is unavailable');
+                const context = arenaId === 'v2' ? comparisonContext() ?? null : undefined;
+                need(bot.kind !== 'wasm' || context !== null, 'bad_bot', 'the current comparison context is unavailable');
                 if (checked) {
+                    if (bot.kind === 'wasm') {
+                        const status = compatibilityStatus(compatibility, { bundleSha256: digest, checkerBuild, ...(context !== undefined ? { context } : {}) });
+                        need(status.compatible, 'bad_bot', `protocol v2 compatibility not verified: ${status.reason}`);
+                        verifiedCompatibility = compatibility;
+                    }
                     return;
                 }
                 if (bot.kind === 'js') {
                     loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
                 } else {
-                    startCheck(staging, `${name}-v${n}`, bot.kind === 'wasm' ? require('./registry').WASM_BOT : bot, upload ? `(uploaded) ${name}` : live); // hello names the version
+                    const handshake = startCheck(staging, `${name}-v${n}`, bot.kind === 'wasm' ? require('./registry').WASM_BOT : bot, upload ? `(uploaded) ${name}` : live); // hello names the version
+                    if (bot.kind === 'wasm') {
+                        need(bundleDigest(path.join(staging, 'bundle')) === digest, 'bad_bot', 'the bundle changed during its protocol v2 check');
+                        verifiedCompatibility = verification(handshake, digest, checkerBuild, context);
+                    }
                 }
             };
             check();
@@ -434,7 +468,11 @@ const api = {
 
     versions({ name } = {}) {
         competitor(name, { benched: true }); // a benched competitor's versions stay readable
-        return home.versionsOf(name).map((n) => home.readJson(path.join(home.VERSIONS, `${name}-v${n}`, 'SUBMISSION.json'), { name: `${name}-v${n}` }));
+        return home.versionsOf(name).map((n) => {
+            const version = `${name}-v${n}`;
+            const meta = home.readJson(path.join(home.VERSIONS, version, 'SUBMISSION.json'), { name: version });
+            return { ...meta, compatibilityStatus: versionCompatibility(version, meta) };
+        });
     },
 
     standings() {
@@ -485,7 +523,7 @@ function roundLadder(round) {
     need(k !== undefined, 'not_found', 'no rounds yet');
     need(Number.isInteger(k) && k >= 0, 'bad_request', 'round: an integer');
     const named = st.rounds.find((x) => x.round === k)?.ladderId;
-    return { k, id: typeof named === 'string' && /^arena-[\w-]+$/.test(named) ? named : `arena-r${k}` };
+    return { k, id: typeof named === 'string' && /^arena-[\w-]+$/.test(named) ? named : ladderId(k) };
 }
 
 /** Calls a method by name with an args object; resolves {result} or {error: {code, message}}. */

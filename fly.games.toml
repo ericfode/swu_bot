@@ -20,6 +20,7 @@ kill_timeout = "30s"
   ignorefile = "Dockerfile.games.dockerignore"
 
 [env]
+  ARENA_ID = "v2"
   SWU_WINDOW = "https://swu-arena.fly.dev"
   GAMES_DATA = "/data"
   PORT = "8080"

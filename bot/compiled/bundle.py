@@ -103,6 +103,8 @@ def load(folder):
     for field in ("protocol", "kind", "platform", "runtime", "run"):
         if field not in m:
             raise BundleError("%s: missing %r" % (path, field))
+    if type(m["protocol"]) is not int or m["protocol"] != 2:
+        raise BundleError("%s: protocol must be the integer 2; got %r" % (path, m["protocol"]))
     if KINDS.get(m["kind"]) != m["platform"]:
         raise BundleError("%s: kind %r with platform %r is not supported here" % (path, m["kind"], m["platform"]))
     run = m["run"]

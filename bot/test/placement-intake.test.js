@@ -80,8 +80,15 @@ test('queue failure leaves a valid submission pending; retry recovers its entere
     const w = memWindow({ [id]: submission() });
     const finished = new Set();
     home.writeJson(path.join(home.HOME, 'roster.json'), { thinkCapMs: 60000, baselines: [], agents: [{ name: 'kim', owner: 'github:kim' }] });
-    // Only metadata is needed for checkIsolated's existing-ref recovery path. No bundle or executable exists.
-    home.writeJson(path.join(home.VERSIONS, 'kim-v1', 'SUBMISSION.json'), { ref, checked: true });
+    // Recovery rehashes the already admitted canonical bytes; no bot or checker executes.
+    const bundle = path.join(home.VERSIONS, 'kim-v1', 'bundle');
+    home.writeJson(path.join(bundle, 'arena.json'), { schema: 'swu-arena-bot/1', protocol: 2, kind: 'wasm',
+        platform: 'wasm32-wasip1', runtime: 'wasi-p1', run: { cmd: './bot.wasm' } });
+    fs.writeFileSync(path.join(bundle, 'bot.wasm'), Buffer.from('0061736d0100000001040160000003020100070a01065f737461727400000a040102000b', 'hex'));
+    const { bundleDigest, verification, currentCheckerBuild } = require('../arena/compatibility');
+    const digest = bundleDigest(bundle);
+    home.writeJson(path.join(home.VERSIONS, 'kim-v1', 'SUBMISSION.json'), { ref, checked: true, bundleSha256: digest,
+        compatibility: verification({ negotiatedProtocol: 2 }, digest, currentCheckerBuild()) });
     let attempts = 0;
     let inserts = 0;
     const jobs = new Map();

@@ -5,10 +5,12 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { gunzipSync, gzipSync } from "node:zlib"
 import { after, test } from "node:test"
 import { Effect, Fiber } from "effect"
 import { readConfig, TIMING } from "../../src/games/Config.ts"
 import type { GamesConfig } from "../../src/games/Config.ts"
+import { bindComparison, bundlesForSeats, bundlesOfJob } from "../../src/games/Comparison.ts"
 import { PlayFailed } from "../../src/games/Executor.ts"
 import type { GamesctlService } from "../../src/games/Gamesctl.ts"
 import { loadArenaJs } from "../../src/games/Js.ts"
@@ -126,6 +128,90 @@ const deps = (c: GamesConfig, store: StoreService, o: {
 
 const readJson = (f: string) => JSON.parse(readFileSync(f, "utf8"))
 const endOf = (f: string) => JSON.parse(readFileSync(f, "utf8").trimEnd().split("\n").at(-1)!)
+
+test("v2 round: starts clean, propagates strict policy, preserves negotiation evidence and refuses legacy resume", async () => {
+  const legacy = newData()
+  const c = readConfig({ GAMES_DATA: legacy.data, GAMES_APP: repo, ARENA_ID: "v2", GAMES_BUILD: "a".repeat(40), GAMES_CARDS: "b".repeat(64) }, { ...TIMING, laneTickMs: 20, publishMs: 100 })
+  const spec = specOf(["a-v1", "b-v1"], { requiredProtocol: 2, context: c.context!, decks: null })
+  const { gamesctl } = fakeGamesctl(() => spec)
+  const strictPlay = fakePlay((job) => {
+    assert.equal(job.requiredProtocol, 2)
+    const played = playedJob(job)
+    const protocols = { p1: 2, p2: 2 }
+    const protocolPlayed = {
+      results: played.results.map((e) => ({ ...e, result: { ...e.result, requiredProtocol: 2 as const, protocols } })),
+      replays: Object.fromEntries(Object.entries(played.replays).map(([id, text]) => [id, text.trimEnd().split("\n").map((l) => {
+        const e = JSON.parse(l)
+        return JSON.stringify(e.t === "end" ? { ...e, requiredProtocol: 2, protocols } : e)
+      }).join("\n") + "\n"]))
+    }
+    const bound = protocolPlayed.results.map((e) => ({ id: e.id, ...bindComparison(e.result, protocolPlayed.replays[e.id], c.context!, bundlesForSeats(bundlesOfJob(job), job.games.find((g) => g.id === e.id)!)) }))
+    return Effect.succeed({ results: bound.map((e) => ({ id: e.id, result: e.result })), replays: Object.fromEntries(bound.flatMap((e) => e.replay === null ? [] : [[e.id, e.replay]])) })
+  })
+  const dir = path.join(c.paths.results, "arena-v2-r0")
+  mkdirSync(dir, { recursive: true })
+  // Even a finished legacy-looking result file in the new folder is never imported.
+  writeFileSync(path.join(dir, "ladder.json"), JSON.stringify({ config: {}, games: [{ id: "legacy", outcome: "won" }] }))
+  assert.deepEqual(await withStore(c, (store) => playRound(deps(c, store, { gamesctl, play: strictPlay.play }), 0, "changed", false)), { kind: "done" })
+  const ladder = readJson(path.join(dir, "ladder.json"))
+  assert.equal(ladder.config.arena, "v2")
+  assert.equal(ladder.config.requiredProtocol, 2)
+  assert.equal(strictPlay.jobs.flatMap((j) => j.games).length, 2)
+  assert.ok(ladder.games.every((g: any) => g.requiredProtocol === 2 && g.protocols.p1 === 2 && g.protocols.p2 === 2))
+  assert.equal((await withStore(c, (store) => store.round(0)))?.arena, "v2")
+  for (const g of ladder.games) {
+    const f = path.join(dir, "games", `${g.id}.jsonl`)
+    writeFileSync(`${f}.gz`, gzipSync(readFileSync(f)))
+    rmSync(f)
+  }
+  const noPlay = fakePlay(() => Effect.die(new Error("verified games should resume")))
+  assert.deepEqual(await withStore(c, (store) => playRound(deps(c, store, { gamesctl, play: noPlay.play }), 0, "resume", true)), { kind: "done" })
+  assert.equal(noPlay.jobs.length, 0)
+  // Corrupting a seat's persisted replay evidence invalidates the resume, even when its result claims v2.
+  const replay = path.join(dir, "games", `${ladder.games[0].id}.jsonl`)
+  const validReplay = gunzipSync(readFileSync(path.join(dir, "games", `${ladder.games[0].id}.jsonl.gz`))).toString("utf8")
+  writeFileSync(replay, validReplay.replace('"protocols":{"p1":2,"p2":2}', '"protocols":{"p1":1,"p2":2}'))
+  const before = strictPlay.jobs.length
+  const refused = await withStore(c, (store) => playRound(deps(c, store, { gamesctl, play: strictPlay.play }), 0, "resume", true))
+  assert.ok(refused.kind === "failed" && /evidence/.test(refused.why))
+  assert.equal(strictPlay.jobs.length, before)
+})
+
+test("v2 round: missing required policy or successful seat negotiation evidence fails closed", async () => {
+  const legacy = newData()
+  const c = readConfig({ GAMES_DATA: legacy.data, GAMES_APP: repo, ARENA_ID: "v2", GAMES_BUILD: "a".repeat(40), GAMES_CARDS: "b".repeat(64) }, { ...TIMING, laneTickMs: 20, publishMs: 100 })
+  const play = fakePlay()
+  const old = fakeGamesctl(() => specOf(["a-v1", "b-v1"], { decks: null }))
+  const refused = await withStore(c, (store) => playRound(deps(c, store, { gamesctl: old.gamesctl, play: play.play }), 0, "changed", false))
+  assert.equal(refused.kind, "failed")
+  assert.equal(play.jobs.length, 0)
+  const strict = fakeGamesctl(() => specOf(["a-v1", "b-v1"], { requiredProtocol: 2, context: c.context!, decks: null }))
+  const missing = await withStore(c, (store) => playRound(deps(c, store, { gamesctl: strict.gamesctl, play: play.play }), 0, "changed", false))
+  assert.equal(missing.kind, "failed")
+  assert.ok(missing.kind === "failed" && /requiredProtocol/.test(missing.why))
+})
+
+test("v2 reserved round: stale image/card context or changed bundle digest never dispatches or mutates its reservation", async () => {
+  const legacy = newData()
+  const c = readConfig({ GAMES_DATA: legacy.data, GAMES_APP: repo, ARENA_ID: "v2", GAMES_BUILD: "a".repeat(40), GAMES_CARDS: "b".repeat(64) })
+  const spec = specOf(["a-v1", "b-v1"], { requiredProtocol: 2, context: c.context!, decks: null })
+  const row = { k: 0, arena: "v2", spec, firstSeed: roundSeed(SECRET, 0, "v2"), keyId: keyId(runKey(SECRET, 0, "v2")), workers: 1,
+    state: "playing" as const, boot: "reserved", attempts: 0, why: "changed", createdAt: "2026-10-17T00:00:00Z", endedAt: null }
+  await withStore(c, (store) => store.createRound(row, []))
+  const play = fakePlay(() => Effect.die(new Error("a stale reservation must not play")))
+  const { gamesctl, calls } = fakeGamesctl(() => spec)
+  for (const overrides of [{ GAMES_BUILD: "c".repeat(40), GAMES_CARDS: c.cards }, { GAMES_BUILD: c.build, GAMES_CARDS: "d".repeat(64) }]) {
+    const changed = readConfig({ GAMES_DATA: c.data, GAMES_APP: repo, ARENA_ID: "v2", ...overrides })
+    const outcome = await withStore(c, (store) => playRound(deps(changed, store, { gamesctl, play: play.play }), 0, "resume", true))
+    assert.ok(outcome.kind === "failed" && /context/.test(outcome.why))
+  }
+  assert.equal(calls.round, 0, "context is checked before the Node round has side effects")
+  const replacement = fakeGamesctl(() => ({ ...spec, bundles: { ...spec.bundles, "a-v1": "e".repeat(64) } }))
+  const outcome = await withStore(c, (store) => playRound(deps(c, store, { gamesctl: replacement.gamesctl, play: play.play }), 0, "resume", true))
+  assert.ok(outcome.kind === "failed" && /bundle digest/.test(outcome.why))
+  assert.equal(play.jobs.length, 0)
+  assert.deepEqual(await withStore(c, (store) => store.round(0)), row)
+})
 
 test("round: schedule, entries and config as ladder.js made them for a lineup of deck lists; keys out once done", async () => {
   const c = newData()
