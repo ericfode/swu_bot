@@ -65,6 +65,8 @@ const fakeGamesctl = (spec: () => RoundSpec) => {
   const no = Effect.die(new Error("not in this test"))
   const gamesctl: GamesctlService = {
     setup: no, warm: no, plan: () => no, decks: () => no, intake: () => no, push: () => no,
+    // Metadata verification is faked here; canonical inert archive/admission controls live in resume-context.test.ts.
+    verifyRound: () => Effect.void,
     round: (k) => Effect.sync(() => {
       calls.round++
       return { ...spec(), round: k }
@@ -133,6 +135,8 @@ test("v2 round: starts clean, propagates strict policy, preserves negotiation ev
   const legacy = newData()
   const c = readConfig({ GAMES_DATA: legacy.data, GAMES_APP: repo, ARENA_ID: "v2", GAMES_BUILD: "a".repeat(40), GAMES_CARDS: "b".repeat(64) }, { ...TIMING, laneTickMs: 20, publishMs: 100 })
   const spec = specOf(["a-v1", "b-v1"], { requiredProtocol: 2, context: c.context!, decks: null })
+  mkdirSync(c.paths.bundles, { recursive: true })
+  for (const bot of spec.bots) writeFileSync(path.join(c.paths.bundles, `${spec.bundles[bot]}.tar`), bot)
   const { gamesctl } = fakeGamesctl(() => spec)
   const strictPlay = fakePlay((job) => {
     assert.equal(job.requiredProtocol, 2)
@@ -191,10 +195,12 @@ test("v2 round: missing required policy or successful seat negotiation evidence 
   assert.ok(missing.kind === "failed" && /requiredProtocol/.test(missing.why))
 })
 
-test("v2 reserved round: stale image/card context or changed bundle digest never dispatches or mutates its reservation", async () => {
+test("v2 reserved round: stale image/card context or altered frozen archive never dispatches or mutates its reservation", async () => {
   const legacy = newData()
   const c = readConfig({ GAMES_DATA: legacy.data, GAMES_APP: repo, ARENA_ID: "v2", GAMES_BUILD: "a".repeat(40), GAMES_CARDS: "b".repeat(64) })
   const spec = specOf(["a-v1", "b-v1"], { requiredProtocol: 2, context: c.context!, decks: null })
+  mkdirSync(c.paths.bundles, { recursive: true })
+  for (const bot of spec.bots) writeFileSync(path.join(c.paths.bundles, `${spec.bundles[bot]}.tar`), bot)
   const row = { k: 0, arena: "v2", spec, firstSeed: roundSeed(SECRET, 0, "v2"), keyId: keyId(runKey(SECRET, 0, "v2")), workers: 1,
     state: "playing" as const, boot: "reserved", attempts: 0, why: "changed", createdAt: "2026-10-17T00:00:00Z", endedAt: null }
   await withStore(c, (store) => store.createRound(row, []))
@@ -206,9 +212,9 @@ test("v2 reserved round: stale image/card context or changed bundle digest never
     assert.ok(outcome.kind === "failed" && /context/.test(outcome.why))
   }
   assert.equal(calls.round, 0, "context is checked before the Node round has side effects")
-  const replacement = fakeGamesctl(() => ({ ...spec, bundles: { ...spec.bundles, "a-v1": "e".repeat(64) } }))
-  const outcome = await withStore(c, (store) => playRound(deps(c, store, { gamesctl: replacement.gamesctl, play: play.play }), 0, "resume", true))
-  assert.ok(outcome.kind === "failed" && /bundle digest/.test(outcome.why))
+  writeFileSync(path.join(c.paths.bundles, `${spec.bundles["a-v1"]}.tar`), "changed frozen archive")
+  const outcome = await withStore(c, (store) => playRound(deps(c, store, { gamesctl, play: play.play }), 0, "resume", true))
+  assert.ok(outcome.kind === "failed" && /bundle.*digest/.test(outcome.why))
   assert.equal(play.jobs.length, 0)
   assert.deepEqual(await withStore(c, (store) => store.round(0)), row)
 })

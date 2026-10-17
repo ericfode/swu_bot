@@ -34,7 +34,8 @@ after(() => { identity.comparisonContext = originalComparisonContext; });
 const load = (file) => import(pathToFileURL(path.join(repo, 'server', 'src', 'games', `${file}.ts`)).href);
 const [{ readConfig, TIMING }, { GamesctlFailed }, { loadArenaJs }, { playRound }, scheduleApi, { Store }, { ladderConfig }] =
     await Promise.all(['Config', 'Gamesctl', 'Js', 'Round', 'Schedule', 'Store', 'Results'].map(load));
-const { buildSchedule, keyId, roundSeed, runKey } = scheduleApi;
+const { buildSchedule, jobFor, keyId, roundSeed, runKey } = scheduleApi;
+const { limitsFor } = await load('Types');
 const js = loadArenaJs(repo);
 const root = mkdtempSync(path.join(tmpdir(), 'arena-v2-resume-context-'));
 after(() => rmSync(root, { recursive: true, force: true }));
@@ -91,8 +92,8 @@ const replayOf = (game, result) => [
         by: null, faultKind: null, requiredProtocol: result.requiredProtocol, protocols: result.protocols, context: result.context, bundles: result.bundles }
 ].map((line) => JSON.stringify(line)).join('\n') + '\n';
 
-/** One durable placement pair with one finished seat, exactly as a cut after the first fake result leaves it. */
-const fixture = async ({ context = CURRENT, specProtocol = 2, protocols = { p1: 2, p2: 2 }, gzip = false, rowArena = 'v2' } = {}) => {
+/** One durable ordinary or placement pair, cut after its first inert fake result. */
+const fixture = async ({ context = CURRENT, specProtocol = 2, protocols = { p1: 2, p2: 2 }, gzip = false, rowArena = 'v2', placement = true, decks = null, reserved = true } = {}) => {
     const c = readConfig({ GAMES_DATA: mkdtempSync(path.join(root, 'case-')), GAMES_APP: repo, ARENA_ID: 'v2',
         GAMES_PLACEMENT_MODE: 'immediate', GAMES_BUILD: BUILD, GAMES_CARDS: CARDS },
     { ...TIMING, laneTickMs: 1, publishMs: 60000 });
@@ -103,8 +104,8 @@ const fixture = async ({ context = CURRENT, specProtocol = 2, protocols = { p1: 
         return [bot, digest];
     }));
     const spec = { round: K, arena: 'v2', requiredProtocol: specProtocol, context: structuredClone(context),
-        placement: { version: BOTS[0], ref: 'window:context-fixture', adaptive: true, excludedSeeds: [] },
-        bots: [...BOTS], gamesPerPair: 2, capMs: 1000, decks: null, bundles, botInfo: {} };
+        ...(placement ? { placement: { version: BOTS[0], ref: 'window:context-fixture', adaptive: true, excludedSeeds: [] } } : {}),
+        bots: [...BOTS], gamesPerPair: 2, capMs: 1000, decks, bundles, botInfo: {} };
     if (specProtocol === undefined) delete spec.requiredProtocol;
     const firstSeed = roundSeed(SECRET, K, 'v2'), key = runKey(SECRET, K, 'v2');
     const games = buildSchedule(js, spec, firstSeed), finished = games[0];
@@ -112,9 +113,9 @@ const fixture = async ({ context = CURRENT, specProtocol = 2, protocols = { p1: 
     const result = resultOf(finished, js.gameKey(key, firstSeed), { context, bundles, protocols });
     if (protocols === undefined) delete result.protocols;
     const row = { k: K, arena: rowArena, spec, firstSeed, keyId: keyId(key), workers: 1, state: 'playing',
-        boot: 'earlier-boot', attempts: 0, why: 'placement', createdAt: '2026-10-17T00:00:00.000Z', endedAt: null };
-    await withStore(c, (store) => store.createRound(row, games.map((game, ord) => ({
-        ...game, ord, decks: null, host: null, state: ord === 0 ? 'done' : 'todo',
+        boot: 'earlier-boot', attempts: 0, why: placement ? 'placement' : 'changed', createdAt: '2026-10-17T00:00:00.000Z', endedAt: null };
+    if (reserved) await withStore(c, (store) => store.createRound(row, games.map((game, ord) => ({
+        ...game, ord, decks: game.decks ?? null, host: null, state: ord === 0 ? 'done' : 'todo',
         result: ord === 0 ? result : null, key: null, endedAt: ord === 0 ? '2026-10-17T00:00:01.000Z' : null, started: ord === 0 ? 0 : null
     }))));
     const id = `arena-v2-r${K}`, dir = path.join(c.paths.results, id);
@@ -127,25 +128,27 @@ const fixture = async ({ context = CURRENT, specProtocol = 2, protocols = { p1: 
     const ladder = { schema: 'swu-ladder/1', id, createdAt: row.createdAt, status: 'running', engine: null, config,
         games: [entry], progress: { scheduled: 2, finished: 1, rated: 1, outcomes: { won: 1 } } };
     const ladderFile = path.join(dir, 'ladder.json');
-    writeFileSync(ladderFile, JSON.stringify(ladder));
+    if (reserved) writeFileSync(ladderFile, JSON.stringify(ladder));
     const replay = replayOf(finished, result), replayFile = path.join(dir, 'games', `${finished.id}.jsonl${gzip ? '.gz' : ''}`);
-    writeFileSync(replayFile, gzip ? gzipSync(replay) : replay);
+    if (reserved) writeFileSync(replayFile, gzip ? gzipSync(replay) : replay);
     return { c, spec, row, games, finished, result, dir, ladder, ladderFile, replayFile, firstSeed, key };
 };
 
-const resume = async (f) => {
-    const calls = { round: 0, verify: 0, publish: 0, play: [], mutations: [] };
+const resume = async (f, { currentSpec = f.spec, settings = {}, verifyError = null, secret = SECRET } = {}) => {
+    const calls = { round: 0, roundArgs: [], verify: 0, publish: 0, play: [], mutations: [], events: [] };
     const no = Effect.die(new Error('unexpected root child or executor command'));
     const gamesctl = { setup: no, warm: no, plan: () => no, decks: () => no, intake: () => no, push: () => no,
         // Metadata-only root verifier; actual immutable-folder transport has its own fixtures.
         verifyRound: (spec) => Effect.try({ try: () => {
             calls.verify++;
+            calls.events.push('verify');
             assert.deepEqual(spec, f.spec, 'verification receives the original frozen spec');
+            if (verifyError) throw new Error(verifyError);
             for (const [name, digest] of Object.entries(spec.bundles)) {
                 if (sha(readFileSync(path.join(f.c.paths.bundles, `${digest}.tar`))) !== digest) throw new Error(`${name}: frozen bundle digest differs`);
             }
         }, catch: (error) => new GamesctlFailed('verify-round', String(error.message)) }),
-        round: () => Effect.sync(() => { calls.round++; return structuredClone(f.spec); }),
+        round: (...args) => Effect.sync(() => { calls.round++; calls.roundArgs.push(args); calls.events.push('round'); return structuredClone(currentSpec); }),
         publish: () => Effect.sync(() => { calls.publish++; }) };
     const beforeFiles = tree(f.c.paths.results), beforeBundles = tree(f.c.paths.bundles);
     return withStore(f.c, (store) => Effect.gen(function* () {
@@ -153,15 +156,16 @@ const resume = async (f) => {
         const watched = { ...store };
         for (const name of MUTATIONS) watched[name] = (...args) => Effect.suspend(() => {
             calls.mutations.push(name);
+            calls.events.push(`mutation:${name}`);
             return store[name](...args);
         });
-        const outcome = yield* playRound({ config: f.c, store: watched, gamesctl, js, board: null, secret: SECRET, boot: 'new-boot',
+        const outcome = yield* playRound({ config: f.c, store: watched, gamesctl, js, board: null, secret, boot: 'new-boot',
             proc: { run: () => no, isStopping: () => false, running: () => [] },
-            settings: () => ({ gamesPerPair: 2, thinkCapSec: 1, workers: 1, roundGapMin: 0 }),
+            settings: () => ({ gamesPerPair: 2, thinkCapSec: 1, workers: 1, roundGapMin: 0, ...settings }),
             play: (job) => Effect.sync(() => {
                 calls.play.push(structuredClone(job));
                 const evidence = { context: CURRENT, bundles: Object.fromEntries([...new Set(job.games.flatMap((game) => [game.p1, game.p2]))]
-                    .map((name) => [name, f.spec.bundles[name]])) };
+                    .map((name) => [name, job.bots[name].bundle])) };
                 return { results: job.games.map((game) => ({ id: game.id, result: resultOf({ ...game, seed: job.seed }, job.key, evidence) })),
                     replays: Object.fromEntries(job.games.map((game) => [game.id, replayOf({ ...game, seed: job.seed }, resultOf({ ...game, seed: job.seed }, job.key, evidence))])) };
             }) }, K, 'resume', true);
@@ -170,8 +174,8 @@ const resume = async (f) => {
     }));
 };
 
-const refusedWithoutMutation = async (f, message) => {
-    const r = await resume(f);
+const refusedWithoutMutation = async (f, message, options = {}) => {
+    const r = await resume(f, options);
     assert.equal(r.calls.play.length, 0, `${message}: refused before any fake runner dispatch`);
     assert.equal(r.calls.publish, 0, `${message}: refused before publication`);
     assert.deepEqual(r.calls.mutations, [], `${message}: no DB reset, row update, result write, or attempt change`);
@@ -179,7 +183,8 @@ const refusedWithoutMutation = async (f, message) => {
     assert.deepEqual(r.afterFiles, r.beforeFiles, `${message}: existing result/replay files remain unchanged`);
     assert.deepEqual(r.afterBundles, r.beforeBundles, `${message}: canonical archives remain unchanged`);
     assert.equal(r.outcome.kind, 'failed', `${message}: explicit failure is exposed`);
-    assert.match(r.outcome.why, /context|protocol|bundle|digest|arena|engine|scope/i, `${message}: actionable boundary error`);
+    assert.match(r.outcome.why, /context|protocol|bundle|digest|arena|engine|scope|seed|key|rules|verification|admission|capMs/i, `${message}: actionable boundary error`);
+    return r;
 };
 
 test('stored placement fast resume rejects an old engine comparison context without touching state', async () => {
@@ -251,4 +256,94 @@ for (const gzip of [false, true]) test(`matching v2 context resumes only the unf
     assert.equal(completed.progress.finished, 2);
     assert.equal(completed.progress.rated, 2);
     assert.equal(completed.progress.outcomes.won, 2);
+});
+
+// Ordinary rounds must freeze the same reservation evidence as placements when later submissions arrive.
+const frozenDecks = {
+    file: 'fixture-decks.json', sha256: 'e'.repeat(64), names: ['Frozen A', 'Frozen B'], deal: 'seat', skipped: [],
+    lists: [{ metadata: { name: 'Frozen A' }, fixture: 'original A' }, { metadata: { name: 'Frozen B' }, fixture: 'original B' }]
+};
+const changedCurrentSpec = (f) => {
+    const name = 'later-v1', bytes = canonicalArchive('newly admitted inert competitor'), digest = sha(bytes);
+    writeFileSync(path.join(f.c.paths.bundles, `${digest}.tar`), bytes);
+    return { ...structuredClone(f.spec), bots: [...f.spec.bots, name], bundles: { ...f.spec.bundles, [name]: digest },
+        gamesPerPair: 4, capMs: 5000,
+        decks: { ...structuredClone(frozenDecks), file: 'new-decks.json', sha256: 'f'.repeat(64), names: ['Later A', 'Later B'],
+            lists: [{ metadata: { name: 'Later A' }, fixture: 'changed A' }, { metadata: { name: 'Later B' }, fixture: 'changed B' }] } };
+};
+
+for (const gzip of [false, true]) test(`ordinary v2 resume freezes the lineup, rules and unfinished job after roster growth (${gzip ? 'gzip' : 'plain'} evidence)`, async () => {
+    const f = await fixture({ placement: false, gzip, decks: structuredClone(frozenDecks) });
+    assert.equal(Object.hasOwn(f.spec, 'placement'), false, 'this is an ordinary round reservation');
+    const currentSpec = changedCurrentSpec(f);
+    const originalReplay = readFileSync(f.replayFile);
+    const r = await resume(f, { currentSpec, settings: { gamesPerPair: 4, thinkCapSec: 5, workers: 2 } });
+    assert.deepEqual(r.outcome, { kind: 'done' });
+    assert.equal(r.calls.round, 0, 'a stored ordinary v2 round never asks for the current roster or rules');
+    assert.equal(r.calls.verify, 1, 'current admissions and canonical bundles are verified for the frozen names');
+    assert.equal(r.calls.events[0], 'verify', 'verification precedes durable mutation');
+    assert.equal(r.calls.mutations.includes('replaceRound'), false);
+    assert.equal(r.calls.play.length, 1, 'only the unfinished mirrored seat is dispatched');
+    const expectedJob = jobFor(js, f.spec, f.key, [f.games[1]], limitsFor(f.spec.capMs));
+    assert.deepEqual(r.calls.play[0], expectedJob, 'seed/key, original deck bodies, limits, policy, context and exact bundles remain frozen');
+    assert.deepEqual(r.after.row.spec, r.before.row.spec);
+    assert.equal(r.after.row.firstSeed, r.before.row.firstSeed);
+    assert.equal(r.after.row.keyId, r.before.row.keyId);
+    assert.equal(r.after.row.workers, 2, 'runtime concurrency remains adjustable');
+    const finishedBefore = r.before.games.find(g => g.id === f.finished.id), finishedAfter = r.after.games.find(g => g.id === f.finished.id);
+    for (const field of ['result', 'endedAt', 'started', 'seed', 'p1', 'p2', 'decks']) assert.deepEqual(finishedAfter[field], finishedBefore[field], `finished ${field} is retained`);
+    if (gzip) assert.deepEqual(readFileSync(f.replayFile), originalReplay, 'archived gzip replay bytes remain intact');
+    else {
+        const oldLines = originalReplay.toString('utf8').trimEnd().split('\n').map(JSON.parse);
+        const newLines = readFileSync(f.replayFile, 'utf8').trimEnd().split('\n').map(JSON.parse);
+        const releasedKey = newLines.at(-1).key;
+        delete newLines.at(-1).key;
+        assert.deepEqual(newLines, oldLines, 'the completed replay evidence is unchanged apart from normal seed-key publication');
+        assert.equal(releasedKey, js.gameKey(f.key, f.firstSeed));
+    }
+    const completed = JSON.parse(readFileSync(f.ladderFile, 'utf8'));
+    for (const field of ['bots', 'bundles', 'context', 'requiredProtocol', 'gamesPerPair', 'capMs', 'maxSteps', 'hangMs', 'decks', 'keyId', 'firstSeed']) {
+        assert.deepEqual(completed.config[field], f.ladder.config[field], `published ${field} retains the frozen reservation`);
+    }
+    assert.equal(completed.progress.rated, 2);
+    assert.ok(completed.games.every(g => g.protocols.p1 === 2 && g.protocols.p2 === 2 && g.context.engineRevision === CURRENT.engineRevision));
+});
+
+for (const [label, mutate, options, expectedVerify] of [
+    ['changed canonical archive', f => writeFileSync(path.join(f.c.paths.bundles, `${f.spec.bundles[BOTS[0]]}.tar`), canonicalArchive('tampered ordinary archive')), {}, 0],
+    ['current admission verification refused', () => {}, { verifyError: 'current admission verification refused for frozen version' }, 1],
+    ['different round-seed secret', () => {}, { secret: '7'.repeat(64) }, 1],
+    ['changed frozen ladder cap', f => { f.ladder.config.capMs = 9000; writeFileSync(f.ladderFile, JSON.stringify(f.ladder)); }, {}, 0]
+]) test(`ordinary v2 resume refuses ${label} before mutation or dispatch`, async () => {
+    const f = await fixture({ placement: false });
+    mutate(f);
+    const r = await refusedWithoutMutation(f, label, options);
+    assert.equal(r.calls.round, 0, 'refusal does not regenerate or reserve a new current lineup');
+    assert.equal(r.calls.verify, expectedVerify);
+});
+
+for (const field of ['firstSeed', 'keyId']) test(`ordinary v2 resume refuses a changed durable ${field} instead of replacing the round`, async () => {
+    const f = await fixture({ placement: false });
+    await withStore(f.c, store => Effect.gen(function* () {
+        const { row, games } = yield* readState(store);
+        yield* store.replaceRound({ ...row, [field]: field === 'firstSeed' ? (row.firstSeed + 1) >>> 0 : 'unrelated-key' }, games);
+    }));
+    const r = await refusedWithoutMutation(f, `changed durable ${field}`);
+    assert.equal(r.calls.round, 0);
+});
+
+test('a new ordinary v2 round still selects the current expanded lineup and live rules', async () => {
+    const f = await fixture({ placement: false, reserved: false });
+    const currentSpec = changedCurrentSpec(f);
+    const r = await resume(f, { currentSpec, settings: { gamesPerPair: 4, thinkCapSec: 5 } });
+    assert.deepEqual(r.outcome, { kind: 'done' });
+    assert.equal(r.before.row, null);
+    assert.equal(r.calls.round, 1, 'new reservations ask Node for the current lineup');
+    assert.deepEqual(r.calls.roundArgs[0], [K, 4, 5000, false]);
+    assert.equal(r.calls.verify, 0, 'there is no prior frozen reservation to verify');
+    assert.deepEqual(r.after.row.spec, currentSpec);
+    const scheduled = buildSchedule(js, currentSpec, f.firstSeed);
+    assert.deepEqual(r.after.games.map(g => g.id), scheduled.map(g => g.id));
+    assert.ok(r.calls.play.some(job => Object.hasOwn(job.bots, 'later-v1')));
+    assert.ok(r.calls.play.every(job => job.capMs === 5000 && job.context.engineRevision === CURRENT.engineRevision));
 });
