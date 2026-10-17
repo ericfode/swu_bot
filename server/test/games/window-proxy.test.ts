@@ -14,6 +14,8 @@ interface Seen {
   readonly url: string
   readonly auth: string | undefined
   readonly contentType: string | undefined
+  readonly arena: string | string[] | undefined
+  readonly cookie: string | undefined
   readonly body: Buffer
 }
 
@@ -28,12 +30,14 @@ const window = http.createServer((req, res) => {
   const chunks: Array<Buffer> = []
   req.on("data", (c: Buffer) => chunks.push(c))
   req.on("end", () => {
-    seen.push({ method: req.method ?? "", url: req.url ?? "", auth: req.headers.authorization, contentType: req.headers["content-type"], body: Buffer.concat(chunks) })
+    seen.push({ method: req.method ?? "", url: req.url ?? "", auth: req.headers.authorization, contentType: req.headers["content-type"],
+      arena: req.headers["x-swu-arena"], cookie: req.headers.cookie, body: Buffer.concat(chunks) })
     answer(req, res)
   })
 })
 let windowUrl = ""
 let proxy: WindowProxy
+let v2Proxy: WindowProxy
 const logs: Array<string> = []
 
 before(async () => {
@@ -41,10 +45,12 @@ before(async () => {
   await new Promise<void>((r) => window.listen(0, "127.0.0.1", r))
   windowUrl = `http://127.0.0.1:${(window.address() as { port: number }).port}`
   proxy = await startWindowProxy({ window: windowUrl, token: () => TOKEN, nonces, port: 0 })
+  v2Proxy = await startWindowProxy({ window: windowUrl, arena: "v2", token: () => TOKEN, nonces, port: 0 })
 })
 
 after(async () => {
   await proxy.close()
+  await v2Proxy.close()
   await new Promise((r) => window.close(r))
 })
 
@@ -166,6 +172,54 @@ test("the token replaces whatever authorization came in, and the path goes on as
   assert.equal(s.url, "/api/docs/submissions/a%20b")
   assert.equal(s.body.toString(), "{}")
   assert.equal(s.contentType, "application/json")
+})
+
+test("the default legacy proxy injects open instead of trusting a child's arena header", async () => {
+  for (const headers of [{}, { "x-swu-arena": "v2" }]) {
+    const r = await call("PUT", push("/api/docs/arena/status"), "{}", headers)
+    assert.equal(r.status, 200)
+    assert.equal(seen.at(-1)!.arena, "open")
+  }
+})
+
+test("the configured v2 proxy scopes push and intake with trusted headers and preserves upstream responses", async () => {
+  answer = (req, res) => {
+    const accepted = req.headers["x-swu-arena"] === "v2" && req.headers.authorization === `Bearer ${TOKEN}`
+    res.writeHead(accepted ? 200 : 409, { "content-type": "application/json" })
+    res.end(JSON.stringify(accepted ? { result: "v2 scoped" } : { error: { code: "conflict", message: "v2 scope required" } }))
+  }
+  for (const [method, route, body] of [
+    ["PUT", push("/api/docs/arena/status"), "{\"arenaId\":\"v2\"}"],
+    ["GET", push("/api/replays/arena-v2-r4?sizes=1"), null],
+    ["GET", intake("/api/docs/submissions"), null],
+    ["PUT", intake("/api/docs/submissions/scope-fixture"), "{\"state\":\"accepted\"}"]
+  ] as const) {
+    for (const arena of [undefined, "open", "v2", "untrusted"]) {
+      const r = await request(`http://127.0.0.1:${v2Proxy.port}`, route, {
+        method, body: body === null ? null : Buffer.from(body), timeoutMs: 10_000,
+        headers: { ...(arena === undefined ? {} : { "x-swu-arena": arena }), authorization: "Bearer child-supplied",
+          "content-type": "application/json", cookie: "synthetic=child-cookie" }
+      })
+      assert.equal(r.status, 200, `${method} ${route}`)
+      assert.equal(r.contentType, "application/json")
+      assert.deepEqual(JSON.parse(r.body.toString()), { result: "v2 scoped" })
+      const upstream = seen.at(-1)!
+      assert.equal(upstream.arena, "v2")
+      assert.equal(upstream.auth, `Bearer ${TOKEN}`)
+      assert.equal(upstream.cookie, undefined, "child credentials remain outside the upstream header allow-list")
+      assert.equal(upstream.body.toString(), body ?? "")
+    }
+  }
+})
+
+test("configured v2 scope does not expand either role's paths or accepted nonces", async () => {
+  for (const route of [push("/api/docs/submissions"), intake("/api/docs/arena/status"), "/p/wrong-nonce/api/replays/arena-v2-r4?sizes=1"]) {
+    const before = seen.length
+    const r = await request(`http://127.0.0.1:${v2Proxy.port}`, route, { method: "GET", body: null,
+      headers: { "x-swu-arena": "v2" }, timeoutMs: 10_000 })
+    assert.equal(r.status, 403)
+    assert.equal(seen.length, before, "a forbidden request never reaches the window")
+  }
 })
 
 test("the query goes on unchanged, and a GET carries no body", async () => {

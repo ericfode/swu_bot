@@ -230,6 +230,8 @@ export const readBody = (req: IncomingMessage, limit: number, idleMs = BODY_IDLE
 export interface ProxyOptions {
   /** the window's address (no trailing slash); null off the machine: every forward answers 502 */
   readonly window: string | null
+  /** Trusted controller namespace; children cannot select another arena through request headers. */
+  readonly arena?: "open" | "v2"
   readonly token: () => string | null
   readonly nonces: { readonly push: string; readonly intake: string }
   readonly port: number
@@ -248,7 +250,7 @@ export interface WindowProxy {
 
 const forward = async (o: ProxyOptions, req: IncomingMessage, res: ServerResponse, t: Target, body: Buffer) => {
   const method = req.method ?? "GET"
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = { "x-swu-arena": o.arena ?? "open" }
   const type = req.headers["content-type"]
   if (typeof type === "string") headers["content-type"] = type
   const token = o.token()
