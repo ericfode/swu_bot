@@ -90,6 +90,12 @@ run (setup failed, no volume with `GAMES_REQUIRE_MOUNT=1`, no token, a bad setti
 The helper 0 when stopped, 1 when its token is refused or its setup is broken, 3 when the machine runs another build
 (helper.sh then pulls it).
 
+Every stored v2 round, including an ordinary cycle, resumes its original lineup, bundle digests, decks and time rules.
+A bot admitted while it is interrupted enters a later round. Resume verifies the frozen archives, current admissions,
+context, completed results and replay evidence before changing rows; stale or conflicting evidence is refused without
+resetting the round. Worker concurrency can still change. A new image changes the BUILD_SHA comparison context, so
+this guarantee does not permit reusing a previous image's evidence across the documented context rotation.
+
 ### Immediate placement (optional)
 
 Set `GAMES_PLACEMENT_MODE=immediate` on the games role to opt in; `cycle` preserves the usual changed-lineup,

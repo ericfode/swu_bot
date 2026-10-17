@@ -21,6 +21,7 @@ kill_timeout = "30s"
 
 [env]
   ARENA_ID = "v2"
+  GAMES_PLACEMENT_MODE = "immediate"
   SWU_WINDOW = "https://swu-arena.fly.dev"
   GAMES_DATA = "/data"
   PORT = "8080"
