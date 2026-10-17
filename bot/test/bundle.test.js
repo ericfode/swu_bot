@@ -20,6 +20,22 @@ const py = (...args) => spawnSync('python3', [BUNDLE, ...args], { maxBuffer: 80 
 let n = 0;
 const fresh = () => path.join(tmp, `out-${++n}`);
 
+test('bundle manifest requires protocol to be exactly the integer 2', () => {
+    const dir = fresh();
+    fs.mkdirSync(dir);
+    // Validation reads this placeholder; it is never executed.
+    fs.writeFileSync(path.join(dir, 'bot.wasm'), 'trusted nonexecuted fixture');
+    const manifest = { schema: 'swu-arena-bot/1', kind: 'wasm', platform: 'wasm32-wasip1', runtime: 'wasi-p1', run: { cmd: './bot.wasm' } };
+    for (const protocol of [undefined, 1, 3, '2', true, null, 2.5]) {
+        fs.writeFileSync(path.join(dir, 'arena.json'), JSON.stringify({ ...manifest, protocol }));
+        const r = py(dir);
+        assert.strictEqual(r.status, 2, String(r.stderr));
+        assert.match(String(r.stderr), protocol === undefined ? /missing 'protocol'/ : /protocol must be the integer 2/);
+    }
+    fs.writeFileSync(path.join(dir, 'arena.json'), JSON.stringify({ ...manifest, protocol: 2 }));
+    assert.strictEqual(py(dir).status, 0);
+});
+
 // writes a tar from a list of entries ({name, type: file|dir|symlink|hardlink, data, mode, mtime, pax}) in the given format
 const MAKE = `
 import io, json, sys, tarfile

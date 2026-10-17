@@ -104,9 +104,11 @@ What an app may do: read, as its person, with role friend (an admin's app is no 
 that person's bots; nothing else it does writes. Removing the person's invite cuts their apps off on the next call.
 Its tools: `whoami`, the arena reads (`arena_status`, `arena_standings`, `arena_report`, `arena_games`,
 `arena_versions`, `arena_panel`), `window_docs` (the friends' collections: arena, runs, evals, lens, meta; scrubbed),
-`window_replays` and `window_replay` (a game in slices of up to 100 KB), and three for building a bot:
+`window_replays` and `window_replay` (a game in slices of up to 100 KB), plus tools for building and testing a bot:
 
-- `arena_guide`: how to write and submit a bot (`BUILD.md`), or the whole bot protocol (`spec/protocol.md`).
+- `arena_guide`: how to write and submit a bot (`BUILD.md`), the whole bot protocol (`spec/protocol.md`), or structured local help (`topic:"local"`).
+- `arena_local_help`: local setup/build/check/test commands, v2 handshake, sandbox, reproducible seeds, results and troubleshooting; it reuses `npm run dev`.
+- `arena_opponents`, `arena_download_opponent`: list current-round authorized v2 bundles and return a pinned download descriptor. `GET /api/opponents` lists the same catalog; with `name` and `sha256` query parameters it returns the selected descriptor. `GET /api/opponents/<sha256>.tar` rechecks access, lineup, active context, observed v2 evidence, manifest and hash before sending bytes. These routes never run a bot. Tables modes/invites apply to the same cookie/OAuth GitHub identity; guests and project/helper credentials grant no download access. See `BUILD.md` for the download helper.
 - `arena_submit {kind: js|python|wasm, note, files, base64?, entry?, name?}`: stores the bot in the `submissions`
   collection as `<login>.<time>`, state `pending`. The default `name` is the person's builder name (their login,
   lowercase, `_` for `-`); another name must start with it and `_`, and may not be the builder name of anyone else who

@@ -58,7 +58,9 @@ export const loadArenaJs = (app: string): ArenaJs => {
 export const cleanResult = (r: Record<string, any>): GameResult => ({
   seed: r.seed, outcome: r.outcome, by: r.by ?? null, faultKind: r.faultKind ?? null, winner: r.winner ?? null, winnerSeat: r.winnerSeat ?? null,
   round: r.round, steps: r.steps, ms: r.ms, error: r.error == null ? null : String(r.error).slice(0, 500), timing: r.timing ?? null,
-  think: r.think ?? null, botStats: r.botStats ?? null, ...(r.key ? { key: r.key } : {}), ...(r.versions ? { versions: r.versions } : {})
+  think: r.think ?? null, botStats: r.botStats ?? null, ...(r.key ? { key: r.key } : {}), ...(r.versions ? { versions: r.versions } : {}),
+  ...(r.requiredProtocol === 2 ? { requiredProtocol: 2 as const } : {}), ...(r.protocols ? { protocols: r.protocols } : {}),
+  ...(r.context ? { context: r.context } : {}), ...(r.bundles ? { bundles: r.bundles } : {})
 })
 
 export type { RemoteStats }

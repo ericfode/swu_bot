@@ -18,7 +18,7 @@
  * (messages without an id) and responses are never answered. Tools carry MCP annotations (readOnlyHint etc.) from METHODS.
  */
 const readline = require('readline');
-const { call, METHODS } = require('./api');
+const { localHelp, HELP_DESCRIPTION } = require('./local-help');
 
 function arg(name, dflt) {
     const i = process.argv.indexOf(`--${name}`);
@@ -30,6 +30,10 @@ const path = require('path');
 
 const REMOTE = (arg('remote', process.env.ARENA_URL ?? null) || '').replace(/\/+$/, '') || null;
 const TOKEN = arg('token', process.env.ARENA_TOKEN ?? null);
+// The hosted arena uses v2. Select it before api/home/identity are loaded so reads and push share one namespace.
+if (REMOTE && !process.env.ARENA_ID) process.env.ARENA_ID = 'v2';
+const { call, METHODS } = require('./api');
+const identity = require('./identity');
 const TYPES = { string: { type: 'string' }, integer: { type: 'integer' }, object: { type: 'object' }, array: { type: 'array', items: {} } };
 
 /** MCP tool annotations: read-only tools are idempotent too; the others only add data, except submit (see METHODS). */
@@ -53,6 +57,11 @@ const WINDOW_TOOLS = {
     put_run: { desc: 'Upload a local results run folder (index.json, ladder.json, games/*.jsonl replays) to the window; only what the window lacks is sent. The run id is the folder name. Returns how many of its replays the window now has.', props: { path: 'string' }, required: ['path'] }
 };
 const windowTool = ([m, d]) => ({ ...arenaTool([m, d]), name: `window_${m}` });
+const LOCAL_TOOLS = {
+    local_help: { readOnly: true, desc: HELP_DESCRIPTION, props: {} },
+    opponents: { readOnly: true, desc: 'List authorized current-round v2 WASM opponent bundles from --remote. arena_local_help explains safe downloads and testing.', props: {} },
+    download_opponent: { readOnly: true, desc: 'Return an authorized download descriptor for an exact catalog name and canonical tar SHA256 from --remote. No files are executed. Use the command in arena_local_help to download locally.', props: { name: 'string', sha256: 'string' }, required: ['name', 'sha256'] }
+};
 
 // the window's arena reads when its GET /api cannot say (no valid token yet)
 const WINDOW_READS = ['status', 'standings', 'report', 'versions', 'panel', 'games'];
@@ -75,13 +84,13 @@ async function windowReads() {
 
 async function toolList() {
     if (!REMOTE) {
-        return Object.entries(METHODS).map(arenaTool);
+        return [...Object.entries(METHODS).map(arenaTool), ...Object.entries(LOCAL_TOOLS).map(arenaTool)];
     }
     const answered = await windowReads();
-    return [...Object.entries(METHODS).filter(([m]) => answered.includes(m)).map(arenaTool), ...Object.entries(WINDOW_TOOLS).map(windowTool)];
+    return [...Object.entries(METHODS).filter(([m]) => answered.includes(m)).map(arenaTool), ...Object.entries(LOCAL_TOOLS).map(arenaTool), ...Object.entries(WINDOW_TOOLS).map(windowTool)];
 }
 
-const auth = () => (TOKEN ? { authorization: `Bearer ${TOKEN}` } : {});
+const auth = () => ({ 'x-swu-arena': identity.id, ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}) });
 
 /**
  * One of the window's arena reads, as GET with query parameters (scalars only). A token argument never goes into the
@@ -167,6 +176,12 @@ async function windowCall(method, a = {}) {
 }
 
 async function invoke(method, args) {
+    if (method === 'local_help') return ok(localHelp());
+    if (method === 'opponents' || method === 'download_opponent') {
+        if (!REMOTE) return fail('unsupported', 'opponent downloads need --remote and your existing authorized OAuth token; see arena_local_help');
+        const q = method === 'download_opponent' ? new URLSearchParams({ name: args?.name ?? '', sha256: args?.sha256 ?? '' }) : null;
+        return fetch(`${REMOTE}/api/opponents${q ? `?${q}` : ''}`, { headers: auth(), redirect: 'error', signal: AbortSignal.timeout(120000) }).then((r) => r.json());
+    }
     return REMOTE ? remote(method, args) : call(method, args);
 }
 
@@ -180,7 +195,7 @@ async function handle(msg) {
             protocolVersion: params?.protocolVersion ?? '2025-06-18',
             capabilities: { tools: {} },
             serverInfo: { name: 'swu-arena', version: '1.0.0' },
-            instructions: 'SWU bot arena. Start with arena_status, and read the rules in bot/arena/README.md of the swu_bot repo.'
+            instructions: 'SWU bot arena. Start with arena_status and arena_local_help for local setup, the existing test runner, protocol 2 and safe opponent downloads. Read bot/arena/README.md for arena rules.'
         } });
     }
     if (method === 'ping') {

@@ -134,7 +134,7 @@ function pack({ root, out }) {
         }
     }
     // the swarm's own code that runs inside the runtime, and the resident WebAssembly bots (bundles, not the tools)
-    for (const f of ['bot/swarm/referee.js', 'bot/compiled/toolchain.json', 'bot/players/guard.js', 'bot/arena/play-seed.js', 'bot/decklists.js', 'bot/arena/registry.js', 'bot/arena/home.js', 'bot/game-pool.js']) {
+    for (const f of ['bot/swarm/referee.js', 'bot/compiled/toolchain.json', 'bot/players/guard.js', 'bot/arena/play-seed.js', 'bot/decklists.js', 'bot/arena/registry.js', 'bot/arena/home.js', 'bot/arena/identity.js', 'bot/game-pool.js']) {
         add(path.join(root, f));
     }
     // the play page's JEPA bot (vendor/jepa: the player; its models are MODELS) and the deck lists people pick from

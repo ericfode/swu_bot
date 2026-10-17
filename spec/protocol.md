@@ -77,7 +77,7 @@ referee                              bot
 | Field | Meaning |
 |---|---|
 | `protocol`, `v`, `bot` | Always `swu-bot-stdio`, `1`, and the name the bot is registered under. `hello` looks the same in every version so that any bot can read it. |
-| `versions` | Protocol versions the referee speaks: `[1, 2]`. |
+| `versions` | Versions offered for this game: `[2]` in the hosted arena; `[1, 2]` for local callers that allow legacy clients. |
 | `you` | Your seat this game, `p1` or `p2`. |
 | `seed` | Integer in `[0, 2^32)` for this game and seat. Seed your own RNG from it to make games reproducible. In a keyed game it tells you nothing about the hidden cards (see Fairness). |
 | `players` | Both seats: engine name and bot name. |
@@ -115,8 +115,14 @@ The labels of a "name a card" dropdown are titles of cards outside the game too:
 names one physical card of this game by its card id, and its `s`, `n` or the action's label finds its data here.
 
 Reply `{"t":"ready","v":2,"name":"rust-mcts","sim":true}`. `v` is the version you pick from `versions`; omitted means
-1, anything not offered is an error. `sim: true` asks for simulations (the referee then keeps a copy of the game to
+1 for legacy local callers. The hosted arena requires an explicit `"v":2`; v1, missing `v`, and native `choose()` bots
+are refused before the engine starts. Anything not offered is an error. `sim: true` asks for simulations (the referee then keeps a copy of the game to
 run them on). `name` is informational. Reset any per-game state here: one program plays many games.
+
+`playGame` enforces this with `requiredProtocol: 2`. Its result's `protocols` maps seats to the numeric version each
+successfully negotiated, independently of the optional build strings in `versions`. The replay end records the same
+map. A failed hello contributes no entry; an earlier accepted seat is still recorded. `requiredProtocol` records the
+policy in the result and replay header/end, including games that fail before any seat is accepted.
 
 `simEngine` (optional, with `sim: true`): `"rust"` asks for simulations on the Rust simulator, which is far faster
 (see [Simulations on the Rust engine](#simulations-on-the-rust-engine)). Leave it out for forceteki simulations.

@@ -5,13 +5,19 @@
 import { existsSync, readFileSync } from "node:fs"
 import { isIP } from "node:net"
 import path from "node:path"
+import type { ComparisonContext } from "./Comparison.ts"
+import { contextFor } from "./Comparison.ts"
 
 export type Role = "games" | "helper"
+export type ArenaId = "open" | "v2"
 
 export interface GamesConfig {
   readonly role: Role
   /** the volume (GAMES_DATA) */
   readonly data: string
+  /** Logical arena; open retains the historical paths for rollback and replay. */
+  readonly arena: ArenaId
+  readonly stateRoot: string
   /** the repo checkout with bot/ and forceteki/ (GAMES_APP) */
   readonly app: string
   /** the node binary children run */
@@ -24,6 +30,8 @@ export interface GamesConfig {
     readonly secret: string
     readonly arena: string
     readonly results: string
+    readonly intake: string
+    readonly dash: string
     readonly bundles: string
     readonly work: string
     readonly tmp: string
@@ -41,6 +49,8 @@ export interface GamesConfig {
   readonly proxyPort: number
   readonly idleMs: number
   readonly replayHours: number
+  /** Immediate placement shares the ordinary round lane; cycle is the existing default. */
+  readonly placementMode: "cycle" | "immediate"
   readonly roundCapMs: number
   /** defaults that Eric's arena settings override */
   readonly games: number
@@ -54,6 +64,7 @@ export interface GamesConfig {
   readonly helperImage: string
   readonly build: string
   readonly cards: string
+  readonly context: ComparisonContext | null
   /** helper role only */
   readonly helperUrl: string | null
   readonly helperSlots: number
@@ -104,8 +115,20 @@ export class ConfigError extends Error {}
 
 const BUILD_ID = /^[\w.-]{1,128}$/
 
-/** `GAMES_BUILD` when set, else the image's file (BUILD_SHA, CARDS_SHA) when it holds a usable id, else "unknown". */
-const identity = (value: string | undefined, file: string): string => {
+/** V2 uses the image's immutable identity; explicit overrides are only a source-fixture fallback when no file exists. */
+const identity = (value: string | undefined, file: string, strict = false): string => {
+  if (strict) {
+    let text: string | undefined
+    try {
+      text = readFileSync(file, "utf8").trim()
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw new ConfigError(`cannot read immutable image identity ${file}`)
+    }
+    if (text !== undefined) {
+      if (value && value !== text) throw new ConfigError(`${file} override conflicts with the immutable image identity`)
+      return BUILD_ID.test(text) ? text : "unknown"
+    }
+  }
   if (value) {
     if (!BUILD_ID.test(value)) throw new ConfigError(`${file} override is not an id`)
     return value
@@ -129,10 +152,15 @@ const int = (env: NodeJS.ProcessEnv, name: string, dflt: number): number => {
 const nodeBinary = () => process.execPath
 
 export const readConfig = (env: NodeJS.ProcessEnv = process.env, timing: Timing = TIMING): GamesConfig => {
+  const placementMode = env.GAMES_PLACEMENT_MODE || "cycle"
+  if (placementMode !== "cycle" && placementMode !== "immediate") throw new ConfigError("GAMES_PLACEMENT_MODE must be cycle or immediate")
   const role: Role = env.COORD_ROLE === "helper" ? "helper" : "games"
   const data = path.resolve(env.GAMES_DATA || "/data")
+  const arena = env.ARENA_ID || "open"
+  if (arena !== "open" && arena !== "v2") throw new ConfigError("ARENA_ID must be open or v2")
+  const stateRoot = arena === "open" ? data : path.join(data, "arenas", arena)
   const app = path.resolve(env.GAMES_APP || "/app")
-  const server = path.join(data, "server")
+  const server = path.join(stateRoot, "server")
   const roundHours = env.GAMES_ROUND_HOURS === undefined || env.GAMES_ROUND_HOURS === "" ? 6 : Number(env.GAMES_ROUND_HOURS)
   if (!Number.isFinite(roundHours) || roundHours <= 0) throw new ConfigError("GAMES_ROUND_HOURS must be a number above 0")
   const listen = env.GAMES_LISTEN || "::"
@@ -151,9 +179,13 @@ export const readConfig = (env: NodeJS.ProcessEnv = process.env, timing: Timing 
     if (helperSlots < 1 || helperSlots > 16) throw new ConfigError("GAMES_HELPER_SLOTS must be 1 to 16")
   }
   const hideExtra = (env.GAMES_HIDE || "").split(":").filter(Boolean)
+  const build = identity(env.GAMES_BUILD, path.join(app, "BUILD_SHA"), arena === "v2")
+  const cards = identity(env.GAMES_CARDS, path.join(app, "CARDS_SHA"), arena === "v2")
   return {
     role,
     data,
+    arena,
+    stateRoot,
     app,
     node: nodeBinary(),
     paths: {
@@ -161,22 +193,26 @@ export const readConfig = (env: NodeJS.ProcessEnv = process.env, timing: Timing 
       procs: path.join(server, "procs"),
       db: path.join(server, "games.db"),
       secret: path.join(data, "secret"),
-      arena: path.join(data, "arena"),
-      results: path.join(data, "results"),
+      arena: path.join(stateRoot, "arena"),
+      results: path.join(stateRoot, "results"),
+      intake: path.join(stateRoot, "intake"),
+      dash: path.join(stateRoot, "dash"),
       bundles: path.join(data, "bundles"),
-      work: path.join(data, "work"),
-      tmp: path.join(data, "tmp"),
-      home: path.join(data, "home"),
+      work: path.join(stateRoot, "work"),
+      tmp: path.join(stateRoot, "tmp"),
+      home: path.join(stateRoot, "home"),
       wasmCache: path.join(data, "wasm-cache"),
-      oldCoord: path.join(data, "coord"),
+      oldCoord: path.join(stateRoot, "coord"),
       swarm: path.join(app, "build", "swarm")
     },
-    hide: ["/.fly", path.join(data, "secret"), server, path.join(data, "coord"), ...hideExtra],
+    hide: ["/.fly", path.join(data, "secret"), server, path.join(data, "coord"),
+      ...(arena === "v2" ? ["server", "arena", "results", "dash", "intake", "work", "home", "tmp"].map((d) => path.join(data, d)) : []), ...hideExtra],
     port: int(env, "PORT", 8080),
     listen,
     proxyPort: int(env, "GAMES_PROXY_PORT", 8081),
     idleMs: int(env, "GAMES_IDLE_MIN", 10) * 60_000,
     replayHours: int(env, "GAMES_REPLAY_HOURS", 24),
+    placementMode,
     roundCapMs: Math.round(roundHours * 3_600_000),
     games: int(env, "GAMES_GAMES", 2),
     workers: int(env, "GAMES_WORKERS", 2),
@@ -186,8 +222,9 @@ export const readConfig = (env: NodeJS.ProcessEnv = process.env, timing: Timing 
     helperPort,
     helperListen,
     helperImage: env.GAMES_HELPER_IMAGE || "registry.fly.io/swu-arena-games",
-    build: identity(env.GAMES_BUILD, path.join(app, "BUILD_SHA")),
-    cards: identity(env.GAMES_CARDS, path.join(app, "CARDS_SHA")),
+    build,
+    cards,
+    context: contextFor({ arenaId: arena, build, cards }),
     helperUrl,
     helperSlots,
     arenaUser: env.ARENA_USER || "arena",

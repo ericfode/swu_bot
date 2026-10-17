@@ -295,6 +295,10 @@ function createTables({
         const login = github(who);
         return login && !who.blocked && (allows(on, who) || allows(botsOn, who)) ? login : null;
     };
+    // MCP clients identify the same GitHub person through OAuth instead of a browser cookie. Download access uses
+    // exactly the tables' current modes and invite roles; guests and project/helper credentials confer no access.
+    const mayDownload = (who) => !!who && ['cookie', 'oauth'].includes(who.via) && !who.guest && !who.blocked
+        && typeof who.login === 'string' && LOGIN.test(who.login) && (allows(on, who) || allows(botsOn, who));
     /** Whether this person may play other people here, not only the bots. */
     const withPeople = (who) => allows(on, who);
     const openTo = (next) => typeof next === 'string' && (/^\/tables\/logs(?:[?#]|$)/.test(next) || ((on === 'github' || botsOn === 'github') && /^\/tables(?:[/?#]|$)/.test(next)));
@@ -827,7 +831,7 @@ function createTables({
         return true;
     }
 
-    return { route, openRoute, openTo, mode: on, play: botsOn, lobby, close: () => lobby.close() };
+    return { route, openRoute, openTo, mayDownload, mode: on, play: botsOn, lobby, close: () => lobby.close() };
 }
 
 module.exports = { createTables, checkReplay, rowOf, isoWeek, pageOf, tarEntry, RUN };

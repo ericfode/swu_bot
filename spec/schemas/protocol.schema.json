@@ -160,7 +160,7 @@
           "items": {
             "type": "integer"
           },
-          "description": "Versions the referee speaks (v2 field)."
+          "description": "Versions offered for this game: [2] in the hosted arena, [1,2] when local callers allow legacy clients (v2 field)."
         },
         "bot": {
           "type": "string"
@@ -382,7 +382,7 @@
             1,
             2
           ],
-          "description": "Chosen version; omitted = 1."
+          "description": "Chosen version; the hosted arena requires explicit 2. Omitted = 1 only for legacy local callers."
         },
         "name": {
           "type": "string"

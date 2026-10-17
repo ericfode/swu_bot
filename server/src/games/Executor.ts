@@ -17,6 +17,8 @@ import {
 import path from "node:path"
 import { Effect } from "effect"
 import type { GamesConfig } from "./Config.ts"
+import { bindComparison, bundlesForSeats, bundlesOfJob, jobContextProblem } from "./Comparison.ts"
+import { protocolReplayError, protocolResultError } from "./Protocol.ts"
 import { scripts } from "./Config.ts"
 import * as Log from "./Log.ts"
 import type { ProcService, Result, RunOptions } from "./Proc.ts"
@@ -214,6 +216,8 @@ const readAnswer = (job: PlaySeedJob, out: string, owner: number | null, r: Resu
     if (!plain(e) || typeof e.id !== "string" || !want.has(e.id) || got.has(e.id)) return fail("its answer has a result for no game of the job, or two for one")
     const why = badResult(e.result)
     if (why) return fail(`${e.id}: its result is off (${why})`)
+    const protocolWhy = protocolResultError(e.result, job.requiredProtocol)
+    if (protocolWhy) return fail(`${e.id}: ${protocolWhy}`)
     got.set(e.id, e.result as GameResult)
   }
   const missing = job.games.filter((g) => !got.has(g.id)).map((g) => g.id)
@@ -238,6 +242,15 @@ const readAnswer = (job: PlaySeedJob, out: string, owner: number | null, r: Resu
       closeSync(f.fd)
     }
   }
+  for (const g of job.games) {
+    const why = protocolReplayError(replays[g.id], got.get(g.id), job.requiredProtocol)
+    if (why) return fail(`${g.id}: ${why}`)
+    if (job.requiredProtocol === 2 && job.context) {
+      const bound = bindComparison(got.get(g.id)!, replays[g.id], job.context, bundlesForSeats(bundlesOfJob(job), g))
+      got.set(g.id, bound.result)
+      if (bound.replay !== null) replays[g.id] = bound.replay
+    }
+  }
   return { results: job.games.map((g) => ({ id: g.id, result: got.get(g.id)! })), replays }
 }
 
@@ -246,6 +259,10 @@ const readAnswer = (job: PlaySeedJob, out: string, owner: number | null, r: Resu
  * or the run was stopped). Interrupted, it stops the child's whole group and removes the folder.
  */
 export const playLocal = (c: GamesConfig, proc: ProcService, job: PlaySeedJob, tag: string, opts: PlayOptions = {}): Effect.Effect<Played, PlayFailed> => {
+  if (c.arena === "v2" || job.requiredProtocol === 2) {
+    const why = jobContextProblem(job, c.context)
+    if (why) return Effect.fail(new PlayFailed(job.seed, why))
+  }
   const dir = workDir(c, tag)
   const out = path.join(dir, "out")
   return Effect.acquireUseRelease(
@@ -268,7 +285,7 @@ export const playLocal = (c: GamesConfig, proc: ProcService, job: PlaySeedJob, t
         tmp: path.join(dir, "tmp"),
         // play-seed keeps its own arena home in the work folder: the real one, the window's panels, the intake's checks
         // and other rounds' results are none of a game's business
-        hide: [c.paths.arena, path.join(c.data, "dash"), path.join(c.data, "intake"), c.paths.results],
+        hide: [c.paths.arena, c.paths.dash, c.paths.intake, c.paths.results],
         ...(job.gameMs > 0 ? { timeoutMs: job.gameMs + SLACK_MS } : {}),
         stdout: "capture",
         maxStdout: MAX_ANSWER_BYTES

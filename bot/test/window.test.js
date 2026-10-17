@@ -27,14 +27,14 @@ async function serve(w) {
     return { srv, go, close: () => new Promise((r) => srv.close(r)) };
 }
 
-function makeWindow(name, { fetchImpl, wakeGames, staleMs, env = ENV, githubHas, gameLinksLimits } = {}) {
+function makeWindow(name, { fetchImpl, wakeGames, staleMs, env = ENV, githubHas, gameLinksLimits, windowOptions = {} } = {}) {
     const home = path.join(tmp, name);
     const store = new Store(home);
     const auth = createAuth({ dir: path.join(home, 'auth'), env, fetch: fetchImpl, invites: () => JSON.parse(store.getDoc('admin', 'invites') ?? '{"logins":[]}').logins,
         blocked: () => JSON.parse(store.getDoc('admin', 'blocked') ?? '{"logins":[]}').logins, links: () => JSON.parse(store.getDoc('admin', 'links') ?? '{"links":[]}').links });
     const app = path.join(tmp, `${name}-app.html`);
     fs.writeFileSync(app, '<!doctype html><title>app</title>');
-    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs, githubHas, gameLinksLimits });
+    return createWindow({ home, auth, app, minMs: 0, wakeGames, staleMs, githubHas, gameLinksLimits, ...windowOptions });
 }
 
 test('store: a replay grows only at its current size, and reads back whole across gzip members', () => {
@@ -1090,7 +1090,7 @@ test('mcp: a token argument never goes into a URL, nothing but reads goes to the
     try {
         await remote.ask('initialize');
         const names = (await remote.ask('tools/list')).result.tools.map((t) => t.name);
-        assert.deepStrictEqual(names.filter((x) => x.startsWith('arena_')), ['arena_status', 'arena_versions'], 'the reads the window lists');
+        assert.deepStrictEqual(names.filter((x) => x.startsWith('arena_')), ['arena_status', 'arena_versions', 'arena_local_help', 'arena_opponents', 'arena_download_opponent'], 'the window reads plus local help and opponent discovery');
         await remote.tool('arena_status');
         await remote.tool('arena_versions', { name: 'aa', token: 'secret-token' });
         const status = seen.find((r) => r.url.startsWith('/api/status'));
@@ -1524,7 +1524,7 @@ test('mcp oauth: a person connects their MCP client with GitHub sign-in, reads a
         assert.strictEqual((await go('/mcp', { method: 'POST', token: tok.access_token, body: '{"jsonrpc":"2.0","method":"notifications/initialized"}' })).status, 202);
         const names = (await rpc(tok.access_token, 'tools/list')).result.tools.map((t) => t.name);
         assert.deepStrictEqual(names, ['whoami', 'arena_status', 'arena_standings', 'arena_report', 'arena_versions', 'arena_panel', 'arena_games', 'window_docs', 'window_replays', 'window_replay',
-            'arena_guide', 'arena_submit', 'arena_my_submissions']);
+            'arena_local_help', 'arena_opponents', 'arena_download_opponent', 'arena_guide', 'arena_submit', 'arena_my_submissions']);
         const call = async (t, name, args = {}) => {
             const r = (await rpc(t, 'tools/call', { name, arguments: args })).result;
             return { error: r.isError, value: JSON.parse(r.content[0].text) };
@@ -1614,4 +1614,86 @@ test('wakeGamesAt: posts to the games machine without waiting, and does nothing 
     // a machine that cannot be reached is only logged
     wakeGamesAt('http://nowhere.invalid/wake', { fetchImpl: () => Promise.reject(new Error('getaddrinfo ENOTFOUND')) });
     await new Promise((r) => setTimeout(r, 10));
+});
+
+// Synthetic canonical bundles only: listing and download never start a bot or the games machine.
+test('MCP local help and opponent downloads reuse current lineup and tables authorization', async () => {
+    const crypto = require('crypto');
+    const { spawnSync } = require('child_process');
+    const fixture = path.join(tmp, 'opponent-fixture');
+    fs.mkdirSync(fixture);
+    const wasm = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]);
+    fs.writeFileSync(path.join(fixture, 'bot.wasm'), wasm);
+    const manifest = { schema: 'swu-arena-bot/1', protocol: 2, kind: 'wasm', platform: 'wasm32-wasip1', runtime: 'wasi-p1', run: { cmd: './bot.wasm', args: [] }, network: 'none', entry_sha256: crypto.createHash('sha256').update(wasm).digest('hex'), build: { commit: 'a'.repeat(40), toolchain: 'fixture', token: 'never-listed' } };
+    fs.writeFileSync(path.join(fixture, 'arena.json'), JSON.stringify(manifest));
+    const built = spawnSync('python3', ['-I', path.join(__dirname, '..', 'compiled', 'bundle.py'), 'tar', fixture]);
+    assert.equal(built.status, 0, String(built.stderr));
+    const tar = built.stdout;
+    const hex = crypto.createHash('sha256').update(tar).digest('hex');
+    let current = true;
+    let reads = 0;
+    const swarm = { route: async () => false, lineup: async () => ({ round: 7, capMs: 60000, bots: current ? [{ name: 'sample-v2', bundle: hex, bytes: tar.length }] : [] }),
+        readBot: async () => { reads++; return tar; } };
+    const w = makeWindow('w-opponent-help', { windowOptions: { swarm } });
+    const context = { schema: 1, arenaId: 'v2', protocol: 2, engineRevision: 'c'.repeat(64), runnerRevision: 'swu-arena-v2/1' };
+    w.store.putDoc('arena', 'status', JSON.stringify({ context }));
+    w.store.putDoc('arena', 'versions-sample', JSON.stringify([{ name: 'sample-v2', compatibility: { schema: 'swu-arena-compatibility/1', negotiatedProtocol: 2, bundleSha256: hex, checkerBuild: 'd'.repeat(40), checkedAt: '2026-10-17T00:00:00.000Z', context } }]));
+    const { go, close } = await serve(w);
+    try {
+        const token = await mcpToken(w, go, 'pal');
+        const rpc = async (method, params) => (await (await go('/mcp', { method: 'POST', token, body: JSON.stringify({ jsonrpc: '2.0', id: 17, method, params }) })).json()).result;
+        const call = async (name, args = {}) => {
+            const r = await rpc('tools/call', { name, arguments: args });
+            return { value: JSON.parse(r.content[0].text), error: r.isError };
+        };
+        assert.match((await rpc('initialize', {})).instructions, /arena_local_help/);
+        const help = (await call('arena_local_help')).value;
+        assert.equal(help.protocol.version, 2);
+        assert.match(help.candidate.buildAndCheck, /--owner pal --games 0/);
+        assert.deepEqual((await call('arena_guide', { topic: 'local' })).value, help);
+        w.store.putDoc('submissions', 'private.secret.1', JSON.stringify({ state: 'pending', files: { 'bot.wasm': 'private bytes' }, token: 'private-token' }));
+        const listed = (await call('arena_opponents')).value;
+        assert.deepEqual(listed.opponents.map((x) => x.name), ['sample-v2']);
+        const descriptor = (await call('arena_download_opponent', { name: 'sample-v2', sha256: hex })).value;
+        assert.equal(descriptor.url, `/api/opponents/${hex}.tar`);
+        assert.equal(descriptor.protocol, 2);
+        assert.ok(!JSON.stringify(descriptor).includes('never-listed'));
+        assert.equal((await go('/api/opponents')).status, 401);
+        const before = reads;
+        assert.equal((await go('/api/opponents', { token: 'push-secret' })).status, 403);
+        assert.equal(reads, before, 'project credentials cannot probe bundles');
+        const q = new URLSearchParams({ name: 'sample-v2', sha256: hex });
+        assert.deepEqual((await (await go(`/api/opponents?${q}`, { token })).json()).result, descriptor);
+        const downloaded = await go(descriptor.url, { token });
+        assert.equal(downloaded.status, 200);
+        assert.equal(downloaded.headers.get('cache-control'), 'private, no-store');
+        assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), tar);
+        assert.equal((await go(`/api/opponents/${'b'.repeat(64)}.tar`, { token })).status, 404);
+        assert.equal((await call('arena_download_opponent', { name: 'wrong-v1', sha256: hex })).error, true);
+        current = false;
+        assert.equal((await go(descriptor.url, { token })).status, 404, 'an old catalog does not authorize an old bundle');
+        w.store.putDoc('admin', 'blocked', JSON.stringify({ logins: ['pal'] }));
+        assert.equal((await go('/api/opponents', { token })).status, 401, 'revocation applies immediately');
+    } finally { await close(); w.tables.close(); }
+});
+
+test('MCP opponents stay unavailable when tables access is off', async () => {
+    const w = makeWindow('w-opponents-off', { windowOptions: { tables: 'off', play: 'off', swarm: { route: async () => false, lineup: () => { throw new Error('must not inspect a private lineup'); } } } });
+    const { go, close } = await serve(w);
+    try {
+        const token = await mcpToken(w, go, 'pal');
+        assert.equal((await go('/api/opponents', { token })).status, 403);
+        assert.equal(w.tables.mayDownload({ via: 'oauth', login: 'pal', role: 'friend' }), false);
+        assert.equal(w.tables.mayDownload({ via: 'cookie', login: 'pal', role: 'friend' }), false);
+    } finally { await close(); w.tables.close(); }
+});
+
+test('stdio MCP discovers local help without remote access or credentials', async () => {
+    const s = await mcpSession([]);
+    try {
+        const listed = await s.ask('tools/list');
+        assert.ok(listed.result.tools.some((t) => t.name === 'arena_local_help' && t.annotations.readOnlyHint));
+        const h = await s.ask('tools/call', { name: 'arena_local_help', arguments: {} });
+        assert.equal(JSON.parse(h.result.content[0].text).protocol.version, 2);
+    } finally { s.close(); }
 });

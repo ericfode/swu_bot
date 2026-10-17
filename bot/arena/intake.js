@@ -30,6 +30,8 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync, spawn } = require('child_process');
+const { currentCheckerBuild, bundleDigest, compatibilityStatus, verification } = require('./compatibility');
+const { id: arenaId, comparisonContext, contextProblem } = require('./identity');
 
 const ROOT = path.join(__dirname, '..', '..');
 const COMPILED = path.join(ROOT, 'bot', 'compiled');
@@ -37,6 +39,8 @@ const TOOLCHAIN = require('../compiled/toolchain.json');
 const TOOLS = path.join(ROOT, 'build', 'compiled', '.tools');
 const NAME = /^[a-z][a-z0-9_]{0,31}$/;
 const LOGIN = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/;
+const BUNDLE_SHA256 = /^[0-9a-f]{64}$/;
+const SOURCE_DIGEST_MISMATCH = 'the checked bundle digest does not match the expected source bundle SHA-256';
 const HOUSE = '@arena'; // the owner of a house submission: the arena's own bots (residents)
 const KINDS = ['js', 'python', 'wasm'];
 const CHECK_MS = 5 * 60000; // packing (Javy) and the start check together
@@ -194,20 +198,27 @@ function admit(job) {
  * The checker's half (a child process, as the bots' user and isolated on the games machine, with no token and none of
  * the arena's folders): packs the submission, checks the bundle's manifest and files (bundle.py), starts it once in the
  * sandbox (hello, expect ready), and leaves its canonical tar as <work>/bundle.tar for root to enter. Returns
- * {sha256} or throws. job.checkAs names the version in the hello.
+ * {sha256, compatibility} or throws. job.checkAs names the version in the hello;
+ * job.checkerBuild and job.context are the trusted parent's identities, never submission fields.
  */
 function packAndCheck(job, { work }) {
+    need(arenaId !== 'v2' || !contextProblem(job.context, job.context), 'the current comparison context is unavailable');
     const { startCheck } = require('./api');
     const folder = pack(job, work);
     const bundlePy = path.join(COMPILED, 'bundle.py');
     // every kind, Python packs too: what is entered must pass what play-seed and the round's packing will ask of it
     const ok = spawnSync('python3', ['-I', bundlePy, folder], { encoding: 'utf8', timeout: 60000, env: toolEnv() });
     need(ok.status === 0, `not a valid bundle (bot/compiled/README.md):\n${tail(ok.stderr || ok.stdout || ok.error?.message, work)}`);
-    startCheck(work, job.checkAs, require('./registry').WASM_BOT, job.name);
+    const before = bundleDigest(folder);
+    const handshake = startCheck(work, job.checkAs, require('./registry').WASM_BOT, job.name);
     const tar = spawnSync('python3', ['-I', bundlePy, 'tar', folder], { timeout: 60000, env: toolEnv(), maxBuffer: MAX_TAR_BYTES });
     need(tar.status === 0, `the bundle cannot be packed:\n${tail(String(tar.stderr ?? '') || tar.error?.message, work)}`);
+    const sha256 = require('crypto').createHash('sha256').update(tar.stdout).digest('hex');
+    need(sha256 === before, 'the bundle changed during its protocol v2 check');
+    need(job.checkerBuild, 'the checker build identity is unavailable');
+    const compatibility = verification(handshake, sha256, job.checkerBuild, arenaId === 'v2' ? job.context : undefined);
     fs.writeFileSync(path.join(work, 'bundle.tar'), tar.stdout, { flag: 'wx' });
-    return { sha256: require('crypto').createHash('sha256').update(tar.stdout).digest('hex') };
+    return { sha256, compatibility };
 }
 
 /** A file the checker left, read without following a link: a plain file with no other names, of at most max bytes. */
@@ -227,22 +238,31 @@ function readLeft(file, max) {
     }
 }
 
+/** A retried submission reuses only an admitted version with proof for its exact frozen bundle. */
+function enteredResult(job, before, expectedBundleSha256) {
+    const home = require('./home');
+    const version = `${job.name}-v${before}`;
+    const meta = home.readJson(path.join(home.VERSIONS, version, 'SUBMISSION.json'), {});
+    const bundleSha256 = bundleDigest(path.join(home.VERSIONS, version, 'bundle'));
+    need(expectedBundleSha256 === undefined || bundleSha256 === expectedBundleSha256, SOURCE_DIGEST_MISMATCH);
+    const status = compatibilityStatus(meta.compatibility, { bundleSha256, ...(arenaId === 'v2' ? { context: comparisonContext() ?? null } : {}) });
+    need(status.compatible, `protocol v2 compatibility not verified for ${version}: ${status.reason}`);
+    return { ok: true, name: job.name, version, benched: !!home.roster().bench?.some((a) => a.name === job.name), compatibility: meta.compatibility };
+}
+
 /**
- * Root's half after a check that passed (no submitted code runs here): unpacks the tar the checker left in the job's
- * home folder with bundle.py unpack (which trusts nothing in it, follows no link and makes a fresh folder) into a
- * folder only root can reach, checks its manifest, and enters it: the builder's competitor the first time, then the
- * bundle as its next version (api.submit, told the start check was made). Name, owner and note come from the window's
- * submission, never from the checker. sha256: the tar's hash as the checker printed it, so a tar another process of the
- * bots' user changed after the check is not entered. Returns {ok, name, version, benched} or throws.
+ * Root's half after a check passed: validates its evidence and canonical tar, then enters it without running code.
+ * Name, owner and note come from the window, never the checker. sha256 and compatibility bind the checked bytes and
+ * handshake to this checker build. Returns {ok, name, version, benched, compatibility} or throws.
  */
-function enter(job, work, sha256) {
+function enter(job, work, sha256, compatibility) {
     const home = require('./home');
     const { api } = require('./api');
     const benched = () => !!home.roster().bench?.some((a) => a.name === job.name);
     // the roster as it is now (the check took a while)
     const { house, owner, entry, ref, before } = admit(job);
     if (before !== undefined) {
-        return { ok: true, name: job.name, version: `${job.name}-v${before}`, benched: benched() };
+        return enteredResult(job, before);
     }
     // the checker and everything it started are gone (its process group was killed, and on the games machine its PID
     // namespace with it), and its home folder's place in work/ is root's: the file read here stays what it is
@@ -250,6 +270,8 @@ function enter(job, work, sha256) {
     need(tar, 'the check left no bundle');
     const hex = require('crypto').createHash('sha256').update(tar).digest('hex');
     need(hex === sha256, 'the bundle changed after its check');
+    const status = compatibilityStatus(compatibility, { bundleSha256: hex, checkerBuild: currentCheckerBuild(), ...(arenaId === 'v2' ? { context: comparisonContext() ?? null } : {}) });
+    need(status.compatible, `protocol v2 compatibility not verified: ${status.reason}`);
     const mine = path.join(work, 'enter');
     fs.mkdirSync(mine, { mode: 0o700 });
     fs.writeFileSync(path.join(mine, 'bundle.tar'), tar, { flag: 'wx', mode: 0o600 });
@@ -262,7 +284,7 @@ function enter(job, work, sha256) {
     const files = bundleFiles(folder);
     const token = process.env.ARENA_ADMIN_TOKEN; // a hosted arena (ARENA_AUTH=1) takes the admin token for this
     // the checker made the start check; nothing here runs a bot (a builder's starter v0 is not loaded either)
-    const checked = { checked: true };
+    const checked = { checked: true, compatibility };
     if (!entry) {
         api.register(house
             ? { name: job.name, title: job.name, owner, resident: true, token, philosophy: 'One of the arena\'s own bots, played in every round with the builders\' bots.' }
@@ -287,7 +309,7 @@ function enter(job, work, sha256) {
         }
         throw e;
     }
-    return { ok: true, name: job.name, version: v.version, benched: benched() };
+    return { ok: true, name: job.name, version: v.version, benched: benched(), compatibility };
 }
 
 /** Root's halves around the check: a submission refused before or after it, as the window reads it. */
@@ -310,16 +332,26 @@ function refused(e) {
  * The checker's result comes back as the last line it prints, so the parent never opens a file the checker could
  * have replaced with a link; the one file it reads there (bundle.tar) it opens without following one.
  */
-async function checkIsolated(job) {
+async function checkIsolated(job, { requireIsolation = false, expectedBundleSha256 } = {}) {
     let admitted;
+    let checkerBuild;
+    let context;
+    const isolated = process.platform === 'linux' && process.getuid?.() === 0 && !process.env.ARENA_INTAKE_NO_ISOLATE;
     try {
+        need(expectedBundleSha256 === undefined || (typeof expectedBundleSha256 === 'string' && BUNDLE_SHA256.test(expectedBundleSha256)), 'expected source bundle SHA-256 must be 64 lowercase hexadecimal characters');
+        // V2 evidence must always come from the established isolated checker. A caller cannot opt out;
+        // only the historical/local arena retains the optional fallback.
+        need(!(arenaId === 'v2' || requireIsolation) || (isolated && process.env.ARENA_USER), 'isolated protocol v2 check unavailable: requires Linux, root, ARENA_USER and isolation enabled; no bot was run');
+        checkerBuild = currentCheckerBuild();
+        need(checkerBuild, 'the checker build identity is unavailable');
+        context = arenaId === 'v2' ? comparisonContext() ?? null : undefined;
+        need(context !== null, 'the current comparison context is unavailable');
         admitted = admit(job);
+        if (admitted.before !== undefined) {
+            return enteredResult(job, admitted.before, expectedBundleSha256);
+        }
     } catch (e) {
         return refused(e);
-    }
-    if (admitted.before !== undefined) {
-        // entered already (an intake that died, or could not write the result back, before it said so): that version
-        return { ok: true, name: job.name, version: `${job.name}-v${admitted.before}`, benched: !!require('./home').roster().bench?.some((a) => a.name === job.name) };
     }
     reapOrphan();
     fs.mkdirSync(WORK, { recursive: true });
@@ -331,15 +363,15 @@ async function checkIsolated(job) {
         const jobHome = path.join(work, 'home');
         fs.mkdirSync(jobHome, { mode: 0o700 });
         const jobFile = path.join(jobHome, 'job.json');
-        fs.writeFileSync(jobFile, JSON.stringify({ ...job, checkAs: `${job.name}-v${admitted.next}` }), { flag: 'wx' });
+        fs.writeFileSync(jobFile, JSON.stringify({ ...job, checkAs: `${job.name}-v${admitted.next}`, checkerBuild, context }), { flag: 'wx' });
         // only what the checker needs: no token, no proxy (the toolchain is fetched beforehand), none of the arena's
         // folders (it reads and writes only its job folder)
         const keep = ['PATH', 'HOME', 'LANG', 'TZ'];
         const env = Object.fromEntries(keep.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
+        env.ARENA_ID = arenaId; // trusted root identity, so the isolated checker enforces its context requirement too
         // compiled code of a bot that may be rejected stays with the job and goes with it; the ladders compile their own
         env.SWU_WASM_CACHE = path.join(jobHome, 'wasm-cache');
         const node = [process.execPath, __filename, '--check', jobFile, '-'];
-        const isolated = process.getuid?.() === 0 && !process.env.ARENA_INTAKE_NO_ISOLATE;
         // as root, the checker runs as ARENA_USER (the games machine: arena), which cannot undo isolate.sh's hiding: it
         // gets the job's home folder, as its HOME
         const user = isolated ? process.env.ARENA_USER : null;
@@ -398,11 +430,14 @@ async function checkIsolated(job) {
             // only its words: whether to try again is root's call
             return { ok: false, error: String(res.error ?? 'the check failed').slice(0, ERROR_CHARS) };
         }
+        if (expectedBundleSha256 !== undefined && (typeof res.sha256 !== 'string' || !BUNDLE_SHA256.test(res.sha256) || res.sha256 !== expectedBundleSha256)) {
+            return { ok: false, error: SOURCE_DIGEST_MISMATCH };
+        }
         if (stopping) {
             return { ok: false, retry: true, error: 'the intake stopped' };
         }
         try {
-            return enter(job, work, res.sha256);
+            return enter(job, work, res.sha256, res.compatibility);
         } catch (e) {
             return refused(e);
         }
@@ -533,7 +568,8 @@ function toolchainMissing() {
  * the window did not take (it was down), sent again first. Nothing is checked while the toolchain is missing. A check
  * that ends with no result (the arena's fault) leaves the submission pending, tried again later, RETRIES times at most.
  */
-async function intakeOnce({ window = require('./push'), finished = new Set(), unsent = new Map(), missing = toolchainMissing, checker = checkIsolated, stats = {}, current = {} } = {}) {
+async function intakeOnce({ window = require('./push'), finished = new Set(), unsent = new Map(), missing = toolchainMissing, checker = checkIsolated,
+    enqueuePlacement = (job) => require('./placement').enqueue(job), stats = {}, current = {} } = {}) {
     // for the games machine (gamesctl intake): how many submissions are still open after this pass, and how many it accepted
     stats.open = 0;
     stats.accepted = 0;
@@ -609,6 +645,19 @@ async function intakeOnce({ window = require('./push'), finished = new Set(), un
         if (stopping) {
             break; // the check was killed: no result to write
         }
+        let placement = null;
+        if (res.ok) {
+            try {
+                // The checked version is already entered. Queue it before acknowledging acceptance, including when
+                // checkIsolated recovered an entry by its window ref. A queue write is infrastructure work: a failure
+                // must never turn a valid bot into a rejection or cause its code to be checked again on recovery.
+                placement = await enqueuePlacement({ version: res.version, ref: `window:${id}`, benched: res.benched });
+            } catch (e) {
+                const { checkingAt, ...back } = claimed;
+                await window.putDoc('submissions', id, { ...back, state: 'pending' });
+                throw e;
+            }
+        }
         const tries = (claimed.tries ?? 0) + 1;
         if (res.retry && tries < RETRIES) {
             // the arena's fault: the submission waits, files and all, and is tried again later
@@ -620,7 +669,8 @@ async function intakeOnce({ window = require('./push'), finished = new Set(), un
         const { files, base64, checkingAt, ...rest } = claimed;
         const fileNames = Object.keys(files ?? {});
         const out = res.ok
-            ? { ...rest, fileNames, state: 'accepted', version: res.version, benched: res.benched, checkedAt: new Date().toISOString() }
+            ? { ...rest, fileNames, state: 'accepted', version: res.version, benched: res.benched,
+                ...(res.compatibility ? { compatibility: res.compatibility } : {}), ...(placement ? { placement } : {}), checkedAt: new Date().toISOString() }
             : { ...rest, fileNames, state: 'rejected', error: `${res.error}${res.retry ? ` (tried ${tries} times; submit it again later)` : ''}`.slice(0, ERROR_CHARS), checkedAt: new Date().toISOString() };
         try {
             await window.putDoc('submissions', id, out);
@@ -676,7 +726,7 @@ async function main(argv) {
     process.stdout.write(`${JSON.stringify(res)}\n`);
 }
 
-module.exports = { pack, admit, packAndCheck, enter, checkIsolated, intakeOnce, release, stopCheckers, toolchainMissing, toolsMissing, lastResult, bundleFiles, writeFiles, RETRIES, CHECK_MS };
+module.exports = { pack, admit, packAndCheck, enter, checkIsolated, intakeOnce, release, stopCheckers, toolchainMissing, toolsMissing, lastResult, bundleFiles, writeFiles, currentCheckerBuild, compatibilityStatus, RETRIES, CHECK_MS };
 if (require.main === module) {
     main(process.argv.slice(2)).catch((e) => {
         console.error(e.stack ?? e.message);

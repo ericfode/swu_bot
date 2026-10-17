@@ -5,6 +5,7 @@
 
 /** The arena's one rated arena so far (gamesctl.js ARENAS). */
 export const ARENA = "open"
+import type { ComparisonContext } from "./Comparison.ts"
 
 /** Eric's arena settings, as the window gives them (`GET /api/arena-settings`), ranges checked. */
 export interface WindowSettings {
@@ -21,7 +22,7 @@ export interface WindowSettings {
 export const DEFAULT_WINDOW_SETTINGS: WindowSettings = { gamesPerPair: 2, thinkCapSec: 60, workers: 2, roundGapMin: 0 }
 
 /** Why `gamesctl plan` names a round, or none. */
-export type PlanWhy = "changed" | "stale" | "resume" | "same" | "settling" | "no-competitor" | "no-opponent" | "?"
+export type PlanWhy = "changed" | "stale" | "resume" | "placement" | "same" | "settling" | "no-competitor" | "no-opponent" | "?"
 
 export type Plan =
   | { readonly round: number; readonly resume: boolean; readonly why: PlanWhy }
@@ -40,12 +41,25 @@ export interface RoundDecks {
   readonly lists: ReadonlyArray<DeckList>
 }
 
+/** Legacy frozen placements remain replayable; new adaptive placements reserve one fresh mirrored seed pair. */
+export type Placement = { readonly version: string; readonly ref: string } & (
+  | { readonly adaptive?: never; readonly excludedSeeds?: never }
+  | { readonly adaptive: true; readonly excludedSeeds: ReadonlyArray<number> }
+)
+
+/** Bounds the metadata crossing the root child boundary, not the number of informative placement steps. */
+export const MAX_PLACEMENT_EXCLUDED_SEEDS = 100000
+
 /**
  * What `gamesctl round` answers: round K's rules and lineup, as the Node side knows them (roster, versions, decks).
  * Seeds and keys are not in it: they come from the round-seed secret, which only the server reads.
  */
 export interface RoundSpec {
+  readonly requiredProtocol?: 2
+  readonly context?: ComparisonContext
   readonly round: number
+  /** A placement plays only pairs involving this accepted immutable version. */
+  readonly placement?: Placement
   /** the lineup's versions, in roster order (roundRobin pairs them in this order) */
   readonly bots: ReadonlyArray<string>
   readonly gamesPerPair: number
@@ -90,6 +104,8 @@ export type BotRef = { readonly kind: "wasm"; readonly bundle: string } | { read
 /** A job for `node bot/arena/play-seed.js`: some games of one seed (its header has the exact shape it checks). */
 export interface PlaySeedJob {
   readonly v: 1
+  readonly requiredProtocol?: 2
+  readonly context?: ComparisonContext
   readonly seed: number
   /** the seed's game key (rng.js gameKey of the run key), never the run key */
   readonly key: string | null
@@ -108,6 +124,11 @@ export interface PlaySeedJob {
  * fields. Kept as the referee gives it: the result files and the record take it field by field.
  */
 export interface GameResult {
+  readonly requiredProtocol?: 2
+  readonly context?: ComparisonContext
+  readonly bundles?: Readonly<Record<string, string>>
+  /** Only accepted ready replies are recorded; an early failure can leave seats absent. */
+  readonly protocols?: Partial<Record<"p1" | "p2", number>>
   readonly outcome: "won" | "ERROR" | "STEP_CAP" | "STUCK"
   readonly winner?: string | null
   readonly winnerSeat?: "p1" | "p2" | "draw" | null

@@ -6,14 +6,33 @@
 import { createHash } from "node:crypto"
 import type { ArenaJs } from "./Js.ts"
 import type { BotRef, Limits, PlaySeedJob, RoundSpec, ScheduledGame } from "./Types.ts"
+import { MAX_PLACEMENT_EXCLUDED_SEEDS } from "./Types.ts"
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex")
 
 /** referee.js roundSeed(secret, 'watch', k): round k's first seed */
-export const roundSeed = (secret: string, k: number): number => parseInt(sha256(`${secret}:watch:${k}`).slice(0, 8), 16)
+export const roundSeed = (secret: string, k: number, arena = "open"): number => parseInt(sha256(`${secret}:${arena === "open" ? "watch" : arena}:${k}`).slice(0, 8), 16)
+
+const uint32 = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= 0xffffffff
+
+/** The attempted seeds of this immutable pair, canonicalized by the root metadata reader. */
+export const validPlacementSeeds = (seeds: unknown): seeds is ReadonlyArray<number> => {
+  if (!Array.isArray(seeds) || seeds.length > MAX_PLACEMENT_EXCLUDED_SEEDS) return false
+  for (let i = 0; i < seeds.length; i++) if (!uint32(seeds[i]) || (i > 0 && seeds[i - 1] >= seeds[i])) return false
+  return true
+}
+
+/** Pick a fresh seed deterministically; the exclusion bound guarantees the uint32 space cannot be exhausted. */
+export const choosePlacementSeed = (firstSeed: number, excludedSeeds: ReadonlyArray<number>): number => {
+  if (!uint32(firstSeed) || !validPlacementSeeds(excludedSeeds)) throw new Error("invalid adaptive placement seeds")
+  const excluded = new Set(excludedSeeds)
+  let seed = firstSeed
+  while (excluded.has(seed)) seed = (seed + 1) >>> 0
+  return seed
+}
 
 /** referee.js roundKey(secret, 'watch', k): round k's run key, the secret every game's deal comes from */
-export const runKey = (secret: string, k: number): string => sha256(`${secret}:key:watch:${k}`).slice(0, 32)
+export const runKey = (secret: string, k: number, arena = "open"): string => sha256(`${secret}:key:${arena === "open" ? "watch" : arena}:${k}`).slice(0, 32)
 
 /** ladder.js keyId: names a run key without giving it away */
 export const keyId = (key: string): string => sha256(key).slice(0, 12)
@@ -28,10 +47,11 @@ export const evenGames = (perPair: number) => perPair + (perPair % 2)
  * The round's games in ladder.js order: roundRobin of the lineup from firstSeed, then the deck lists dealt by seat
  * (`--deal seat`) when the round has them.
  */
-export const buildSchedule = (js: ArenaJs, spec: Pick<RoundSpec, "bots" | "gamesPerPair" | "decks">, firstSeed: number): ReadonlyArray<ScheduledGame> => {
+export const buildSchedule = (js: ArenaJs, spec: Pick<RoundSpec, "bots" | "gamesPerPair" | "decks" | "placement">, firstSeed: number): ReadonlyArray<ScheduledGame> => {
   const plain = js.roundRobin(spec.bots, spec.gamesPerPair, firstSeed)
   const dealt = spec.decks ? js.dealDecks(plain, spec.decks.lists.length, firstSeed, { by: "seat" }) : plain
-  return dealt.map((s: { seed: number; p1: string; p2: string; decks?: [number, number] }) => ({
+  return dealt.filter((g) => !spec.placement || g.p1 === spec.placement.version || g.p2 === spec.placement.version)
+    .map((s: { seed: number; p1: string; p2: string; decks?: [number, number] }) => ({
     id: gameId(s),
     seed: s.seed,
     p1: s.p1,
@@ -58,7 +78,7 @@ export const bySeed = (games: ReadonlyArray<ScheduledGame>): Map<number, Array<S
  */
 export const jobFor = (
   js: ArenaJs,
-  spec: Pick<RoundSpec, "bundles" | "decks">,
+  spec: Pick<RoundSpec, "bundles" | "decks" | "requiredProtocol" | "context">,
   key: string | null,
   games: ReadonlyArray<ScheduledGame>,
   limits: Limits
@@ -76,6 +96,8 @@ export const jobFor = (
   }
   const base = {
     v: 1 as const,
+    ...(spec.requiredProtocol === 2 ? { requiredProtocol: 2 as const } : {}),
+    ...(spec.context ? { context: spec.context } : {}),
     seed,
     key: key === null ? null : js.gameKey(key, seed),
     maxSteps: limits.maxSteps,

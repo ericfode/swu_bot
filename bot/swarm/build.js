@@ -65,7 +65,7 @@ async function init(msg) {
     const t0 = performance.now();
     cfg = msg;
     const doc = msg.packBytes ? JSON.parse(new TextDecoder().decode(msg.packBytes)) : await (await fetch(msg.pack)).json();
-    host = createRefereeHost({ files: filesOf(doc), makeWorker: () => new Worker(msg.botWorker), cpus: navigator.hardwareConcurrency || 1, log: { log: () => undefined, error: (...a) => console.warn('[swarm]', ...a) } });
+    host = createRefereeHost({ files: filesOf(doc), build: doc.build, cards: doc.cards, makeWorker: () => new Worker(msg.botWorker), cpus: navigator.hardwareConcurrency || 1, log: { log: () => undefined, error: (...a) => console.warn('[swarm]', ...a) } });
     self.postMessage({ t: 'ready', ms: Math.round(performance.now() - t0), build: doc.build, cards: doc.cards });
 }
 // a Python bundle's interpreter: its library into the files, its WebAssembly compiled once per worker

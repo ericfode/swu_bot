@@ -19,7 +19,8 @@
  * Rounds keep Oban's rules: a round is queued once per boot (whatever became of it); a failed round is tried once
  * more 30 s later; two failures, or a round that runs past GAMES_ROUND_HOURS, hold it until the next boot (plan keeps
  * naming it, this warns once, and the machine may idle). A round cut by a stop is not an attempt: the next boot
- * resumes it at once.
+ * resumes it at once. A placement selection cancelled before reservation releases its unused round number and plans
+ * again without recording an attempt.
  */
 import { readFileSync } from "node:fs"
 import path from "node:path"
@@ -32,7 +33,6 @@ import type { ProcService } from "./Proc.ts"
 import type { RoundOutcome } from "./Round.ts"
 import type { StoreService } from "./Store.ts"
 import type { LeaseBoard, Plan, PlanWhy, WindowSettings } from "./Types.ts"
-import { ARENA } from "./Types.ts"
 
 export type Phase = "setup" | "warming" | "ready"
 export type Job = "intake" | "round"
@@ -88,7 +88,7 @@ export const afterIntake = (open: number | null, accepted: number) => ({
 
 export interface SchedulerOptions {
   readonly config: GamesConfig
-  readonly gamesctl: Pick<GamesctlService, "setup" | "warm" | "plan" | "intake">
+  readonly gamesctl: Pick<GamesctlService, "setup" | "warm" | "plan" | "intake" | "placementState">
   readonly proc: Pick<ProcService, "running">
   readonly store: Pick<StoreService, "get" | "set" | "updateRound">
   /** Eric's settings now (the wait between rounds is read at every plan answer) */
@@ -264,7 +264,10 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
       woken = false
     }
     const inc = incomplete()
-    if (planDue({ phase, incomplete: inc, planning: plan !== null })) startPlan()
+    // The intake can be checking another submission for minutes. Accepted placement intents are already durable,
+    // so look for those while it continues; ordinary cycle plans still wait for the pass to finish.
+    const forPlan = c.placementMode === "immediate" ? inc.filter((kind) => kind !== "intake") : inc
+    if (planDue({ phase, incomplete: forPlan, planning: plan !== null })) startPlan()
     if (plan === null) maybeStop(inc)
     if (!stopped) {
       timer = setTimeout(() => {
@@ -359,6 +362,7 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
           intakeWaiting = false
           startIntake()
         }
+        if (!stopping && c.placementMode === "immediate" && phase === "ready" && job === null && plan === null) startPlan()
       })
     }
   }
@@ -370,7 +374,7 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
     const since = settledWall
     plan = {
       abort,
-      done: run(o.gamesctl.plan(since), abort.signal).then((exit) => {
+      done: run(o.gamesctl.plan(since, intake !== null || intakeWaiting), abort.signal).then((exit) => {
         plan = null
         if (stopping || stopped) return
         if (Exit.isFailure(exit)) {
@@ -390,7 +394,7 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
       return
     }
     const k = p.round
-    const wait = p.resume || k === lastRan ? 0 : roundWait(roundEnd, o.settings().roundGapMin * 60_000, wall())
+    const wait = p.resume || p.why === "placement" || k === lastRan ? 0 : roundWait(roundEnd, o.settings().roundGapMin * 60_000, wall())
     if (wait > 0) {
       // a round that waits keeps the machine awake: nothing else would wake it when the wait is over
       if (waiting !== k) Log.info(`round ${k} waits ${Math.ceil(wait / 60_000)} min (the wait between rounds)`)
@@ -410,13 +414,13 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
   const queueRound = (k: number, why: PlanWhy, resume: boolean) => {
     if (queued.has(k)) {
       if (!warned.has(k)) {
-        Log.warn(`round ${k} of ${ARENA} already ran at this boot; it waits for the next boot`)
+        Log.warn(`round ${k} of ${c.arena} already ran at this boot; it waits for the next boot`)
         warned.add(k)
       }
       return
     }
     queued.add(k)
-    Log.info(`round ${k} of ${ARENA} queued (${why})`)
+    Log.info(`round ${k} of ${c.arena} queued (${why})`)
     job = { k, why, resume, attempts: 0, abort: null, retry: null, done: null }
     attempt(job)
   }
@@ -434,6 +438,15 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
   const hold = (j: RoundJob, why: string) => {
     Log.warn(`round ${j.k} waits for the next boot (${why})`)
     void store(`could not mark round ${j.k} held`, o.store.updateRound(j.k, { state: "held", boot: o.boot, attempts: j.attempts }))
+    placementState(j.k, "held", why)
+  }
+
+  const placementState = (k: number, state: "running" | "retrying" | "held", error?: string) => {
+    const effect = o.gamesctl.placementState?.(k, state, error)
+    if (effect) void run(effect).then((exit) => {
+      if (Exit.isFailure(exit)) Log.warn(`could not publish placement state for round ${k} (${failure(exit.cause)})`)
+      o.pusher.poke()
+    })
   }
 
   const ended = (j: RoundJob, exit: ExitT.Exit<RoundOutcome, Cause.TimeoutError>) => {
@@ -448,6 +461,15 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
       // not an attempt: the next boot resumes it
       Log.info(`round ${j.k} ended: stopped (shutdown)`)
       job = null
+      return
+    }
+    if (Exit.isSuccess(exit) && exit.value.kind === "replan") {
+      Log.info(`round ${j.k}: placement selection changed before reservation; planning again`)
+      queued.delete(j.k)
+      warned.delete(j.k)
+      job = null
+      o.pusher.poke()
+      tick()
       return
     }
     let kind: "done" | "cap" | "failed"
@@ -477,9 +499,11 @@ export const makeScheduler = (o: SchedulerOptions): Scheduler => {
       job = null
       hold(j, `it ran past ${capHours()} h`)
     } else if (j.attempts < 2) {
+      placementState(j.k, "retrying", what)
       void store(`could not count round ${j.k}'s attempts`, o.store.updateRound(j.k, { attempts: j.attempts }))
       j.retry = setTimeout(() => {
         j.retry = null
+        placementState(j.k, "running")
         attempt(j)
       }, retryMs)
       j.retry.unref()

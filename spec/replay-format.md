@@ -52,6 +52,9 @@ replays/                          (REPLAYS_DIR; gitignored)
 | `games[].faultKind` *(added, optional)* | With `by`, in runs on `bot/game-pool.js` (`ladder.js`, the arena): how the bot failed, `load` (could not be built), `error` (threw, crashed or answered wrong), `time` (over the time cap) or `hang` (stopped by the watchdog). `null` otherwise. |
 | `games[].rounds`, `steps`, `ms` | Final round number, decisions taken, wall time. `0` while running. |
 | `games[].timing` *(added)* | Per seat: `n` decisions, `ms` total, `p50`, `p95`, `max` per decision, in milliseconds, timed by the referee around each decision (for a program: the whole exchange, simulations included). |
+| `games[].protocols` *(added)* | Accepted numeric bot protocol by seat, such as `{ "p1": 2, "p2": 2 }`. A seat whose hello failed or a native local bot has no entry. Distinct from `versions`, the optional bot build strings. |
+| `games[].requiredProtocol` *(added, optional)* | Explicit protocol required for this game (`2` in the hosted arena). Present even when hello fails; older/local games may omit it. |
+| `games[].context`, `bundles` *(added, optional)* | Trusted executor evidence for the new arena: comparison descriptor `{ schema: 1, arenaId: "v2", protocol: 2, engineRevision, runnerRevision }` and the exact bot name → canonical bundle SHA-256 map for this game. `engineRevision` hashes the executor's build and card-data hashes together. A submitted bot does not attest these fields. |
 | `games[].key` *(added)* | The game's own secret, which its random streams were derived from (see [protocol.md](protocol.md#fairness)), written when the game ends; `bot/ladder.js` waits until every game on its seed has ended, since the seat-swapped games share it. Absent until then and in runs seeded from the seed alone. (Indexes written before this field have one top-level `key` for the run instead.) |
 
 ## Game file (`.jsonl`)
@@ -78,6 +81,7 @@ A game whose bot failed at `hello` has only the header and the end.
 | `header` | `v` | Format version, currently `1`. |
 | | `seed` | Game seed (number). The same seed, key, bots and engine reproduce the game. |
 | | `engine` | forceteki revision or `null`. |
+| | `requiredProtocol` *(added, optional)* | The game's explicit bot protocol requirement, as in `index.json`. Header `v` remains the replay format version. |
 | | `players[]` | `{ id: "p1"\|"p2", bot: <bot name>, deck: <deck metadata name>, lang? }`; `lang` *(added)* when the bot declares one. |
 | | `decks` *(added)* | `{ p1, p2 }`: both deck lists, `{ metadata, leader, base, deck: [{ id, count }], isPresentInDb }`, the format `Env.newGame` takes. |
 | `step` | `n` | Decision number; `0` is the opening board. |
@@ -89,7 +93,7 @@ A game whose bot failed at `hello` has only the header and the end.
 | | `label` | Only on step 0: `"Game start"`. |
 | | `state` | Board snapshot **after** the action and the engine's follow-up processing. |
 | `end` | `winner` | `"p1"`, `"p2"`, `"draw"` or `null`. |
-| | `round`, `steps`, `outcome`, `error`, `by`, `key` | As in `index.json` (`key` only in keyed games). `faultKind` too, where `index.json` has it. |
+| | `round`, `steps`, `outcome`, `error`, `by`, `key`, `protocols`, `requiredProtocol`, `context`, `bundles` | As in `index.json` (`key` only in keyed games). `faultKind` too, where `index.json` has it. |
 
 ### Snapshot (`state`)
 

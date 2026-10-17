@@ -34,14 +34,16 @@ import { parseArgs } from "node:util"
 import { gunzipSync } from "node:zlib"
 import { Cause, Effect, Option } from "effect"
 import { readConfig } from "./Config.ts"
+import type { ComparisonContext } from "./Comparison.ts"
+import { bundleMapProblem, contextProblem } from "./Comparison.ts"
 import { playLocal, warmBundles } from "./Executor.ts"
 import type { PlayFailed } from "./Executor.ts"
 import type { ArenaJs } from "./Js.ts"
 import { loadArenaJs } from "./Js.ts"
 import * as Log from "./Log.ts"
 import { makeProc } from "./Proc.ts"
-import { buildSchedule, bySeed, jobFor } from "./Schedule.ts"
-import type { DeckList, Limits, Played, PlaySeedJob, RoundDecks, ScheduledGame } from "./Types.ts"
+import { buildSchedule, bySeed, jobFor, validPlacementSeeds } from "./Schedule.ts"
+import type { DeckList, Limits, Played, PlaySeedJob, RoundDecks, RoundSpec, ScheduledGame } from "./Types.ts"
 
 /** The repo this server sits in: the default checkout to play with (the image's /app, or a local clone). */
 const REPO = path.resolve(import.meta.dirname, "..", "..", "..")
@@ -114,10 +116,15 @@ export const parseReplayArgs = (argv: ReadonlyArray<string>): ReplayArgs => {
 
 /** What ladder.json's config says about how the round was played (ladder.js config; the games role writes the same). */
 export interface RecordedRound {
+  readonly arena: string
+  readonly requiredProtocol?: 2
+  readonly context?: ComparisonContext
+  readonly bundles?: Readonly<Record<string, string>>
   readonly id: string
   readonly engine: string | null
   readonly bots: ReadonlyArray<string>
   readonly gamesPerPair: number
+  readonly placement?: RoundSpec["placement"]
   readonly firstSeed: number
   readonly maxSteps: number
   readonly capMs: number
@@ -135,13 +142,35 @@ export const readRound = (doc: unknown): RecordedRound => {
   }
   if (!plain(doc) || !plain(doc.config)) return no("no config")
   const c = doc.config
+  if (c.requiredProtocol !== undefined && c.requiredProtocol !== 2) no("requiredProtocol must be 2")
+  if (c.arena === "v2" && c.requiredProtocol !== 2) no("the v2 arena requires explicit protocol 2")
   if (!Array.isArray(c.bots) || c.bots.length < 2 || !c.bots.every((b: unknown) => typeof b === "string" && b.length > 0) || new Set(c.bots).size !== c.bots.length) {
     return no("its bots are not two or more names")
+  }
+  if (c.requiredProtocol === 2) {
+    const why = contextProblem(c.context, c.context)
+    if (why) no(why)
+    if (!plain(c.bundles)) no("no frozen bundle digests")
+    const bundles = Object.fromEntries(c.bots.map((name: string) => [name, c.bundles[name]]))
+    const wrong = bundleMapProblem(c.bundles, bundles)
+    if (wrong) no(wrong)
   }
   if (c.format !== undefined || c.vs !== undefined) no("a gauntlet, not a round robin")
   if (c.pool !== undefined && c.pool !== null) no("played from a card pool, which the arena never deals")
   if (!count(c.gamesPerPair) || c.gamesPerPair < 2 || c.gamesPerPair % 2 !== 0) no("games per pair is not an even number")
+  let placement: RoundSpec["placement"]
+  if (c.placement !== undefined) {
+    const p = c.placement
+    if (!plain(p) || typeof p.version !== "string" || !VERSION.test(p.version) || !c.bots.includes(p.version) ||
+      typeof p.ref !== "string" || !p.ref.startsWith("window:") || p.ref.length <= 7 || p.ref.length > 300 ||
+      c.bots.length > 5 || c.gamesPerPair > 10) no("invalid bounded placement")
+    if (p.adaptive !== undefined || p.excludedSeeds !== undefined) {
+      if (p.adaptive !== true || c.bots.length !== 2 || c.gamesPerPair !== 2 || !validPlacementSeeds(p.excludedSeeds)) no("invalid adaptive placement")
+      placement = { version: p.version, ref: p.ref, adaptive: true, excludedSeeds: [...p.excludedSeeds] }
+    } else placement = { version: p.version, ref: p.ref }
+  }
   if (!count(c.firstSeed)) no("no first seed")
+  if (placement?.adaptive && (c.firstSeed > 0xffffffff || placement.excludedSeeds.includes(c.firstSeed))) no("invalid adaptive first seed")
   if (!count(c.maxSteps) || c.maxSteps < 1) no("no step cap")
   if (!positive(c.capMs)) no("no time cap (every arena round has one)")
   if (!positive(c.hangMs)) no("no watchdog limit")
@@ -166,10 +195,14 @@ export const readRound = (doc: unknown): RecordedRound => {
     if (plain(g) && typeof g.id === "string") games.set(g.id, g)
   }
   return {
+    arena: typeof c.arena === "string" ? c.arena : "open",
+    ...(c.requiredProtocol === 2 ? { requiredProtocol: 2 as const } : {}),
+    ...(c.requiredProtocol === 2 ? { context: c.context as ComparisonContext, bundles: c.bundles as Record<string, string> } : {}),
     id: typeof doc.id === "string" ? doc.id : "?",
     engine: typeof doc.engine === "string" ? doc.engine : null,
     bots: c.bots,
     gamesPerPair: c.gamesPerPair,
+    ...(placement ? { placement } : {}),
     firstSeed: c.firstSeed,
     maxSteps: c.maxSteps,
     capMs: c.capMs,
@@ -199,7 +232,7 @@ export const roundDecks = (
 }
 
 /** The versions' tars: the names file, every lineup version in it, each tar in the folder with that sha256. */
-export const readNames = (text: string, bots: ReadonlyArray<string>, bundles: string): Record<string, string> => {
+export const readNames = (text: string, bots: ReadonlyArray<string>, bundles: string, frozen?: Readonly<Record<string, string>>): Record<string, string> => {
   let doc: unknown
   try {
     doc = JSON.parse(text)
@@ -212,6 +245,7 @@ export const readNames = (text: string, bots: ReadonlyArray<string>, bundles: st
     const hex = doc[b]
     if (!VERSION.test(b)) throw new Refused(`${b} is not a version (<agent>-v<N>), and the games role plays versions alone: leave its games out with --only`)
     if (typeof hex !== "string" || !HEX64.test(hex)) throw new Refused(`--names has no sha256 for ${b}`)
+    if (frozen && hex !== frozen[b]) throw new Refused(`${b}: --names differs from the round's original bundle digest`)
     const tar = path.join(bundles, `${hex}.tar`)
     if (!lstatSync(tar, { throwIfNoEntry: false })?.isFile()) throw new Refused(`${b}: no ${hex}.tar in ${bundles}`)
     if (sha256(readFileSync(tar)) !== hex) throw new Refused(`${b}: ${hex}.tar does not hash to its name`)
@@ -321,8 +355,13 @@ const FIELDS: ReadonlyArray<readonly [entry: string, result: string]> = [
   ["faultKind", "faultKind"],
   ["rounds", "round"],
   ["steps", "steps"],
-  ["key", "key"]
+  ["key", "key"],
+  ["requiredProtocol", "requiredProtocol"],
+  ["protocols", "protocols"],
+  ["context", "context"],
+  ["bundles", "bundles"]
 ]
+const OBSERVATION_FIELDS = ["protocols", "context", "bundles"] as const
 
 /** A game played here against its recorded entry and replay; [] when it came out the same. */
 export const compareGame = (
@@ -334,7 +373,11 @@ export const compareGame = (
   key: string | null
 ): Array<Difference> => {
   const out: Array<Difference> = []
+  const legacy = entry.requiredProtocol === undefined && result.requiredProtocol === undefined
   for (const [e, r] of FIELDS) {
+    // Old recordings predate these observations. Compare every field they did record;
+    // a v2 execution or recording always compares all evidence.
+    if (legacy && OBSERVATION_FIELDS.some((field) => field === e) && !Object.hasOwn(entry, e)) continue
     const want = entry[e] ?? null
     const got = result[r] ?? null
     if (JSON.stringify(want) !== JSON.stringify(got)) out.push({ id, field: e, want, got })
@@ -342,7 +385,22 @@ export const compareGame = (
   if ((recorded === null) !== (played === null)) {
     out.push({ id, field: "replay", want: recorded === null ? "no replay" : "a replay", got: played === null ? "no replay" : "a replay" })
   } else if (recorded !== null && played !== null) {
-    const d = compareReplays(id, replayLines(recorded, key), replayLines(played, key))
+    const want = replayLines(recorded, key)
+    const got = replayLines(played, key)
+    if (legacy && want.length && got.length) {
+      try {
+        const oldEnd = JSON.parse(want.at(-1)!)
+        const newEnd = JSON.parse(got.at(-1)!)
+        if (plain(oldEnd) && plain(newEnd) && oldEnd.t === "end" && newEnd.t === "end"
+            && oldEnd.requiredProtocol === undefined && newEnd.requiredProtocol === undefined) {
+          for (const field of OBSERVATION_FIELDS) if (!Object.hasOwn(oldEnd, field)) delete newEnd[field]
+          got[got.length - 1] = JSON.stringify(newEnd)
+        }
+      } catch {
+        // Malformed replay lines remain differences, as before.
+      }
+    }
+    const d = compareReplays(id, want, got)
     if (d) out.push(d)
   }
   return out
@@ -429,7 +487,7 @@ interface Prepared {
 }
 
 /** Everything checked and every job made before any game plays: a refusal never comes after games were played. */
-const prepare = (args: ReplayArgs, js: ArenaJs, app: string, loadDecks: NonNullable<ReplayOptions["loadDecks"]>): Prepared => {
+const prepare = (args: ReplayArgs, js: ArenaJs, app: string, loadDecks: NonNullable<ReplayOptions["loadDecks"]>, context: ComparisonContext | null, arena: string): Prepared => {
   let doc: unknown
   try {
     doc = JSON.parse(readFileSync(path.join(args.results, "ladder.json"), "utf8"))
@@ -437,6 +495,14 @@ const prepare = (args: ReplayArgs, js: ArenaJs, app: string, loadDecks: NonNulla
     throw new Refused(`cannot read ${path.join(args.results, "ladder.json")} (${firstLine((e as Error).message)})`)
   }
   const round = readRound(doc)
+  // The selected execution boundary is trusted; a legacy recording cannot opt out by omitting its policy.
+  if (arena === "v2" && (round.arena !== "v2" || round.requiredProtocol !== 2)) {
+    throw new Refused("v2 replay requires a v2 arena recording with explicit protocol 2 and verified comparison context")
+  }
+  if (round.requiredProtocol === 2) {
+    const why = contextProblem(round.context, context)
+    if (why) throw new Refused(why)
+  }
   let decks: RoundDecks | null = null
   if (round.decks) {
     const file = path.join(args.decksDir ?? path.join(app, "bot", "decks"), round.decks.file)
@@ -448,7 +514,8 @@ const prepare = (args: ReplayArgs, js: ArenaJs, app: string, loadDecks: NonNulla
     }
     decks = roundDecks(round.decks, loaded)
   }
-  const schedule = buildSchedule(js, { bots: round.bots, gamesPerPair: round.gamesPerPair, decks }, round.firstSeed)
+  const schedule = buildSchedule(js, { bots: round.bots, gamesPerPair: round.gamesPerPair, decks,
+    ...(round.placement ? { placement: round.placement } : {}) }, round.firstSeed)
   const chosen = selectGames(schedule, round.bots, args.only)
   // only the games the round finished can be compared; the others are named, not played
   const finished = (g: ScheduledGame) => {
@@ -464,7 +531,7 @@ const prepare = (args: ReplayArgs, js: ArenaJs, app: string, loadDecks: NonNulla
   } catch (e) {
     throw new Refused(`cannot read ${args.names} (${firstLine((e as Error).message)})`)
   }
-  const bundles = readNames(text, round.bots.filter((b) => names.has(b)), args.bundles)
+  const bundles = readNames(text, round.bots.filter((b) => names.has(b)), args.bundles, round.bundles)
   const limits: Limits = {
     maxSteps: round.maxSteps,
     capMs: round.capMs,
@@ -472,7 +539,7 @@ const prepare = (args: ReplayArgs, js: ArenaJs, app: string, loadDecks: NonNulla
     // game-pool.js DEFAULT_GAME_MS, as the round's ladder ran it
     gameMs: 4 * round.capMs + 600000
   }
-  const jobs = [...bySeed(toPlay).values()].map((games) => ({ job: jobFor(js, { bundles, decks }, round.key, games, limits), games }))
+  const jobs = [...bySeed(toPlay).values()].map((games) => ({ job: jobFor(js, { bundles, decks, ...(round.requiredProtocol === 2 ? { requiredProtocol: 2 as const } : {}), ...(round.context ? { context: round.context } : {}) }, round.key, games, limits), games }))
   const replays = new Map(toPlay.map((g) => [g.id, recordedFile(path.join(args.results, "games"), g.id)] as const))
   return { round, schedule, decks, jobs, missing, replays }
 }
@@ -580,7 +647,7 @@ export const runReplay = (argv: ReadonlyArray<string>, opts: ReplayOptions = {})
       const env = opts.env ?? process.env
       const config = readConfig({ ...env, GAMES_APP: env.GAMES_APP || REPO })
       const js = loadArenaJs(config.app)
-      prepared = prepare(args, js, config.app, opts.loadDecks ?? engineDecks(config.app))
+      prepared = prepare(args, js, config.app, opts.loadDecks ?? engineDecks(config.app), config.context, config.arena)
       if (opts.play) {
         play = opts.play
       } else {

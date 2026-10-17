@@ -9,7 +9,7 @@
  *
  * The job comes from the ladder's remote lane (bot/remote-lane.js):
  *   { v: 1, seed, key, maxSteps, capMs, hangMs, gameMs, games: [{ id, p1, p2, decks? }],
- *     bots: { <name>: { kind, bundle? } }, decks? }
+ *     bots: { <name>: { kind, bundle? } }, decks?, requiredProtocol?: 2, context? }
  * key is the seed's game key (rng.js gameKey), never the run key; null deals from the seed alone. In a round of deck
  * lists, decks holds the lists the games play (decklists.js normalizeDeck form) and every game's decks [i, j] the
  * indices of p1's and p2's (the shape ladder-worker.js takes); without them the games deal random decks. Only bots
@@ -17,7 +17,8 @@
  * this image still builds them (RESIDENTS, kind 'resident'; the arena's own bots are now submitted entries, played as
  * versions), and versions <agent>-v<N> of kind 'wasm' whose bundle, a
  * canonical tar (bot/compiled/bundle.py), is <bundles>/<bundle>.tar. Never another bot program, never a bot.js. The
- * whole job is checked before anything runs.
+ * whole job is checked before anything runs. New hosted jobs require protocol 2 and play only sandboxed versions;
+ * jobs without requiredProtocol retain the historical resident choices for local replay.
  *
  * ARENA_HOME is <work>/arena, so registry.js finds each version where this runner unpacks it:
  * <work>/arena/versions/<name>/bundle, beside a SUBMISSION.json of kind 'wasm'. The games play on game-pool.js as the
@@ -90,6 +91,16 @@ function checkJob(job, bundles) {
     if (job.v !== 1) {
         no(`job version ${JSON.stringify(job.v)}; this runner plays version 1`);
     }
+    if (Object.hasOwn(job, 'requiredProtocol') && job.requiredProtocol !== 2) {
+        no('requiredProtocol must be 2 when present');
+    }
+    if (job.requiredProtocol === 2 && Object.hasOwn(job, 'context')) {
+        const c = job.context;
+        if (!plain(c) || c.schema !== 1 || c.arenaId !== 'v2' || c.protocol !== 2 || typeof c.engineRevision !== 'string'
+            || !HEX.test(c.engineRevision) || typeof c.runnerRevision !== 'string' || !c.runnerRevision.length) {
+            no('context must be a v2 comparison descriptor with engine and runner revisions');
+        }
+    }
     if (!Number.isSafeInteger(job.seed) || job.seed < 0) {
         no('seed must be a non-negative integer');
     }
@@ -135,6 +146,9 @@ function checkJob(job, bundles) {
     }
     const here = residentsHere();
     for (const [name, b] of Object.entries(job.bots)) {
+        if (job.requiredProtocol === 2 && b?.kind !== 'wasm') {
+            no(`${name}: protocol v2 jobs require sandboxed WebAssembly versions; resident bots are not allowed`);
+        }
         if (plain(b) && sameKeys(b, ['kind']) && b.kind === 'resident' && (IN_PROCESS.includes(name) || here.includes(name))) {
             continue;
         }
@@ -157,6 +171,9 @@ function checkJob(job, bundles) {
 function checkResolved(job) {
     const { describeBot, programSpec } = require('../players');
     for (const [name, b] of Object.entries(job.bots)) {
+        if (job.requiredProtocol === 2 && b.kind !== 'wasm') {
+            throw new Refused(`${name}: protocol v2 jobs require sandboxed WebAssembly versions`);
+        }
         const d = describeBot(name);
         const ok = b.kind === 'wasm' ? d?.kind === 'arena' && d.lang === 'wasm'
             : name === 'heuristic' ? d?.kind === 'search' && d.profile === 'balanced' && d.depth === 1
@@ -233,14 +250,15 @@ async function play(job, { bundles, work }) {
     }
     checkResolved(job);
     const { runPool } = require('../game-pool');
-    const queue = job.games.map((g) => ({ id: g.id, seed: job.seed, p1: g.p1, p2: g.p2, key: job.key, ...(g.decks ? { decks: g.decks } : {}), replayFile: path.join(out, `${g.id}.jsonl`) }));
+    const policy = job.requiredProtocol === 2 ? { requiredProtocol: 2 } : {};
+    const queue = job.games.map((g) => ({ id: g.id, seed: job.seed, p1: g.p1, p2: g.p2, key: job.key, ...policy, ...(g.decks ? { decks: g.decks } : {}), replayFile: path.join(out, `${g.id}.jsonl`) }));
     const results = new Map();
     await runPool(queue, {
         workers: queue.length,
         hangMs: job.hangMs,
         gameMs: job.gameMs,
         // normalizeDeck puts the keys back in the order the games machine's lists have, so the replays match its own
-        workerData: { maxSteps: job.maxSteps, engineRev: null, capMs: job.capMs ?? Infinity, key: null, decks: job.decks ? job.decks.map((d) => normalizeDeck(d)) : null, pool: null },
+        workerData: { maxSteps: job.maxSteps, engineRev: null, capMs: job.capMs ?? Infinity, key: null, decks: job.decks ? job.decks.map((d) => normalizeDeck(d)) : null, pool: null, ...policy },
         onResult: ({ job: g, result }) => results.set(g.id, result)
     });
     const missing = job.games.filter((g) => !results.has(g.id)).map((g) => g.id);
@@ -336,7 +354,7 @@ if (require.main === module) {
  * ({kind: 'wasm', bundle} or {kind: 'resident'}, only the bots these games play are kept), and with deck lists (`decks`,
  * all of them) only the lists these games use, in first-use order, each game's indices pointing into them.
  */
-function seedJob(seed, games, { key, limits, bots, decks = null }) {
+function seedJob(seed, games, { key, limits, bots, decks = null, requiredProtocol, context }) {
     const named = {};
     for (const n of games.flatMap((g) => [g.p1, g.p2])) {
         if (!bots[n]) {
@@ -346,7 +364,8 @@ function seedJob(seed, games, { key, limits, bots, decks = null }) {
     }
     const job = {
         v: 1, seed, key, maxSteps: limits.maxSteps, capMs: limits.capMs, hangMs: limits.hangMs, gameMs: Math.round(limits.gameMs),
-        games: games.map((g) => ({ id: g.id, p1: g.p1, p2: g.p2 })), bots: named
+        games: games.map((g) => ({ id: g.id, p1: g.p1, p2: g.p2 })), bots: named,
+        ...(requiredProtocol === undefined ? {} : { requiredProtocol }), ...(context === undefined ? {} : { context })
     };
     if (decks && games.some((g) => g.decks)) {
         // the lists this seed plays, each once (a seed's games deal the same two)

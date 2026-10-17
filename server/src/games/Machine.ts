@@ -90,6 +90,7 @@ const protectFromOom = () => {
  * old coordinator's is carried over once (its boot id differs, so every submission is read again anyway).
  */
 const carryIntakeState = (c: GamesConfig) => {
+  if (c.arena !== "open") return
   const mine = path.join(c.paths.server, "intake.json")
   const old = path.join(c.paths.oldCoord, "intake.json")
   try {
@@ -143,7 +144,7 @@ export const lineupOf = async (store: StoreService): Promise<Lineup | null> => {
     const bundle = Object.hasOwn(bundles, name) ? bundles[name] : undefined
     if (typeof bundle === "string") bots.push({ name, bundle })
   }
-  return { round: row.k, capMs: row.spec.capMs, bots }
+  return { round: row.k, capMs: row.spec.capMs, bots, ...(row.spec.requiredProtocol === 2 ? { requiredProtocol: 2 as const } : {}), ...(row.spec.context ? { context: row.spec.context } : {}) }
 }
 
 /** Boots the machine; throws BootFailed when it cannot start. */

@@ -38,6 +38,8 @@ const { createArt } = require('./art');
 const { createStatic, matches } = require('./static');
 const { createOAuth } = require('./oauth');
 const { createMcpHttp } = require('./mcp-http');
+const { localHelp, HELP_DESCRIPTION } = require('./local-help');
+const { createOpponents } = require('./opponents');
 const { builderName, ownsName, notYours } = require('./api');
 const { createFeedback } = require('./feedback');
 const { createGameLinks } = require('./gamelinks');
@@ -211,8 +213,10 @@ function writeAtomic(file, data) {
  * append never rewrites the file; sizes and offsets are always of the uncompressed text.
  */
 class Store {
-    constructor(dir) {
-        this.dir = dir;
+    constructor(dir, { arenaId = 'open' } = {}) {
+        this.arenaId = require('./identity').arenaId(arenaId);
+        this.baseDir = dir;
+        this.dir = require('./identity').stateRoot(dir, this.arenaId);
         this.version = 0; // bumped by any change the app's model reads: a document, or a new replay file
         this.sizes = new Map();
     }
@@ -220,7 +224,12 @@ class Store {
     docFile(ns, id) {
         need(NS.has(ns), 'not_found', `unknown collection "${ns}" (known: ${[...NS].join(', ')})`);
         need(ID.test(id ?? ''), 'bad_request', 'id: 1-160 characters, letters, digits and . _ - # @ +, starting with a letter or digit');
-        return path.join(this.dir, 'docs', ns, `${id}.json`);
+        return path.join(this.docRoot(ns), 'docs', ns, `${id}.json`);
+    }
+
+    // Identity, access and research remain shared; rated data and submissions never do.
+    docRoot(ns) {
+        return ['admin', 'research', 'meta', 'lens', 'feedback'].includes(ns) ? this.baseDir : this.dir;
     }
 
     getDoc(ns, id) {
@@ -254,7 +263,7 @@ class Store {
 
     listDocs(ns) {
         need(NS.has(ns), 'not_found', `unknown collection "${ns}"`);
-        const dir = path.join(this.dir, 'docs', ns);
+        const dir = path.join(this.docRoot(ns), 'docs', ns);
         if (!fs.existsSync(dir)) {
             return [];
         }
@@ -683,7 +692,8 @@ function wakeGamesAt(url, { fetchImpl = fetch } = {}) {
 
 function createWindow(opts = {}) {
     const home = path.resolve(opts.home ?? process.env.WINDOW_HOME ?? '/data/window');
-    const store = new Store(home);
+    const store = new Store(home, { arenaId: opts.arenaId ?? require('./identity').id });
+    const historicalStore = new Store(home);
     const viewLinks = () => {
         const d = parseOr(store.getDoc('admin', 'links'), null);
         return Array.isArray(d?.links) ? d.links.filter((l) => l && typeof l.id === 'string' && typeof l.key === 'string') : [];
@@ -699,7 +709,7 @@ function createWindow(opts = {}) {
     // the third-party licenses of the packages bundled into the kit, which Holotable's build writes next to it
     const kitLicenses = path.join(path.dirname(kitFile), 'swu-viewer-kit.licenses.txt');
     // the browser swarm (spec/executor.md): /swarm and /api/swarm/*, relayed to the games machine for signed-in people
-    const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(home, 'swarm'), botDir: path.join(home, 'swarm-bots') });
+    const swarm = opts.swarm ?? createSwarmRelay({ cacheDir: path.join(store.dir, 'swarm'), botDir: path.join(store.dir, 'swarm-bots') });
     // files sent as they are (the app, the kit): compressed once, 304 when the browser has them (static.js)
     const statics = createStatic();
     // card art for the isolated play page (/tables), which cannot show the CDN's images itself (art.js); made smaller
@@ -715,6 +725,13 @@ function createWindow(opts = {}) {
         ...(opts.tablesFetch ? { fetchImpl: opts.tablesFetch } : {}),
         ...(opts.tablesLimits ?? {}) // tests: {perDay, maxRows}
     });
+    const opponents = createOpponents({ swarm, allowed: (who) => tables.mayDownload(who),
+        context: () => arenaDoc('status')?.context,
+        compatibility: (version) => {
+            const name = version.replace(/-v\d+$/, '');
+            const versions = arenaDoc(`versions-${name}`);
+            return Array.isArray(versions) ? versions.find((v) => v?.name === version)?.compatibility : null;
+        } });
     // the feedback button and key on every page (feedback.js): who may send follows who may use a page here
     const feedback = createFeedback({ store, origin: auth.origin, mayPlay: () => tables.play === 'github' || tables.mode === 'github', ...(opts.feedbackLimits ?? {}) }); // tests: {now, perDay, allPerDay}
     // every game's own page (gamelinks.js): /g/<run>/<game>, live or replay, for anyone with no sign-in
@@ -988,10 +1005,21 @@ function createWindow(opts = {}) {
                 const slice = buf.subarray(a, b);
                 return { run, game, size: buf.length, from: a, length: slice.length, text: slice.toString('utf8') };
             } },
+        { name: 'arena_local_help', annotations: RO, description: HELP_DESCRIPTION, inputSchema: schema({}),
+            call: ({ who }) => localHelp({ owner: who.login, competitor: who.agent }) },
+        { name: 'arena_opponents', annotations: RO,
+            description: 'List current-round WASM bundles already downloadable under your tables permissions. Only hash-verified protocol 2 manifests; no private submissions or arbitrary old versions. Downloading never runs a bot.',
+            inputSchema: schema({}), call: ({ who }) => opponents.list(who) },
+        { name: 'arena_download_opponent', annotations: RO,
+            description: 'Get the authenticated download URL, exact canonical tar SHA256, size and provenance for a selected current-round opponent. Returns a descriptor, not a local file; arena_local_help gives the safe download command. No execution.',
+            inputSchema: schema({ name: TYPE.string, sha256: TYPE.string }, ['name', 'sha256']),
+            call: ({ who }, args) => opponents.get(who, args) },
         { name: 'arena_guide', annotations: RO,
-            description: 'How to write a bot for the arena and submit it: the short guide (topic "build", default), or the full bot protocol (topic "protocol").',
-            inputSchema: schema({ topic: { type: 'string', enum: ['build', 'protocol'] } }),
+            description: 'How to write and submit a bot (topic "build", default), full protocol ("protocol"), or structured local setup/testing and opponent downloads ("local", also arena_local_help).',
+            inputSchema: schema({ topic: { type: 'string', enum: ['build', 'protocol', 'local'] } }),
             call: (ctx, { topic = 'build' }) => {
+                need(['build', 'protocol', 'local'].includes(topic), 'bad_request', 'topic: build, protocol or local');
+                if (topic === 'local') return localHelp({ owner: ctx.who.login, competitor: ctx.who.agent });
                 const file = topic === 'protocol' ? path.join(ROOT, 'spec', 'protocol.md') : path.join(__dirname, 'BUILD.md');
                 need(fs.existsSync(file), 'not_found', `${topic}: not in this build of the window`);
                 return { topic, text: fs.readFileSync(file, 'utf8') };
@@ -1008,15 +1036,27 @@ function createWindow(opts = {}) {
             }, ['kind', 'note', 'files']),
             call: ({ who }, a) => submit(who, a) },
         { name: 'arena_my_submissions', annotations: RO,
-            description: 'Your submissions (an agent\'s token: its competitor\'s), newest first: pending, checking, accepted (with the version the arena rates) or rejected (with what to fix).',
+            description: 'Your submissions (an agent\'s token: its competitor\'s), newest first: pending, checking, accepted (with the version the arena rates and any placement progress or failure) or rejected (with what to fix).',
             inputSchema: schema({}),
-            call: ({ who }) => mySubmissions(who.login).filter((x) => !who.agent || x.name === who.agent)
-                .map(({ files, base64, ...rest }) => ({ ...rest, ...(files ? { fileNames: Object.keys(files) } : {}) })) }
+            call: ({ who }) => {
+                const live = arenaMethods.status().placements;
+                const key = (version, ref) => JSON.stringify([version, ref]);
+                const placements = new Map((Array.isArray(live) ? live : [])
+                    .filter((p) => p && typeof p.version === 'string' && typeof p.ref === 'string')
+                    .map((p) => [key(p.version, p.ref), p]));
+                return mySubmissions(who.login).filter((x) => !who.agent || x.name === who.agent)
+                    .map(({ files, base64, ...rest }) => {
+                        // Status is a read-only overlay: only this exact accepted submission may receive its live
+                        // placement. Source records and their ownership/agent filters stay in the intake's collection.
+                        const placement = rest.state === 'accepted' ? placements.get(key(rest.version, `window:${rest.id}`)) : null;
+                        return { ...rest, ...(placement ? { placement } : {}), ...(files ? { fileNames: Object.keys(files) } : {}) };
+                    });
+            } }
     ];
     const MCP_CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS', 'access-control-allow-headers': 'authorization, content-type, mcp-protocol-version, mcp-session-id, last-event-id', 'access-control-expose-headers': 'www-authenticate, mcp-session-id' };
     const mcp = createMcpHttp({
         name: 'swu-arena', version: '1.0.0', tools: mcpTools, headers: MCP_CORS, maxBody: 5 << 20,
-        instructions: 'SWU Arena: Star Wars Unlimited bots playing each other and people. Start with whoami and arena_status; window_docs lists the runs, evaluations and research; window_replay reads a game move by move. To build a bot, read arena_guide, then submit it with arena_submit and follow it with arena_my_submissions: the arena runs every game itself, in a sandbox.'
+        instructions: 'SWU Arena: Star Wars Unlimited bots playing each other and people. Start with whoami and arena_status. Read arena_local_help before local testing: it explains the existing runner, v2 protocol, safe opponent downloads and reproducible seeds. arena_opponents lists eligible bundles; arena_download_opponent returns an authenticated download descriptor. arena_guide explains building/submitting; follow arena_submit with arena_my_submissions. The arena runs games in its sandbox.'
     });
     function mcpRoute(req, res) {
         if (req.method === 'OPTIONS') {
@@ -1238,6 +1278,41 @@ function createWindow(opts = {}) {
         });
         const q = Object.fromEntries(url.searchParams);
         const friend = !atLeast(who.role, 'project');
+        if (store.arenaId === 'v2' && who.via === 'bearer' && atLeast(who.role, 'project') &&
+            ((parts[0] === 'docs' && !['admin', 'research', 'meta', 'lens', 'feedback'].includes(parts[1])) || parts[0] === 'replays')) {
+            need(req.headers['x-swu-arena'] === store.arenaId, 'conflict', 'this is the v2 arena; the games controller must send x-swu-arena: v2');
+        }
+        // Explicit historical reads only: legacy standings and replays never enter the active model or intake.
+        if (parts[0] === 'arenas' && parts[1] === 'open') {
+            need(req.method === 'GET', 'unsupported', 'historical arenas are read-only');
+            let out = require('./history').read(historicalStore, parts.slice(2), q);
+            need(out !== null, 'not_found', 'no historical arena record at that path');
+            if (Buffer.isBuffer(out)) {
+                const doc = parseOr(historicalStore.getDoc('runs', parts[3]), null);
+                if (readsMasked(who) && peopleRun(parts[3], doc)) out = maskReplay(out, doc, parts[4]);
+                return sendText(res, req, 200, 'application/x-ndjson', out);
+            }
+            if (parts[2] === 'runs' && parts.length === 4) out = readerDoc('runs', parts[3], out, who);
+            return sendJson(res, 200, { result: friend ? scrub(out) : out }, req);
+        }
+        if (parts[0] === 'opponents') {
+            try {
+                need(req.method === 'GET', 'bad_request', 'opponent downloads are GET only');
+                if (parts.length === 1) {
+                    return sendJson(res, 200, { result: q.name !== undefined || q.sha256 !== undefined
+                        ? await opponents.get(who, q) : await opponents.list(who) }, req);
+                }
+                const match = parts.length === 2 && /^([0-9a-f]{64})\.tar$/.exec(parts[1]);
+                need(match, 'not_found', 'not an eligible opponent bundle');
+                const bytes = await opponents.bytes(who, match[1]);
+                res.writeHead(200, { 'content-type': 'application/x-tar', 'content-length': bytes.length,
+                    'content-disposition': `attachment; filename="${match[1]}.tar"`, 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' });
+                return res.end(bytes);
+            } catch (e) {
+                if (['bad_request', 'forbidden', 'not_found', 'unavailable'].includes(e.code)) throw new WindowError(e.code, e.message);
+                throw e;
+            }
+        }
         if (parts[0] === 'me' && parts.length === 1) {
             return sendJson(res, 200, { result: { login: who.login ?? null, role: who.role, signin: auth.fixed().signin ?? 'invited', ...(who.guest ? { guest: true } : {}) } }, req);
         }

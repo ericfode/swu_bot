@@ -33,6 +33,8 @@ import { createServer as createNetServer, isIPv6 } from "node:net"
 import path from "node:path"
 import { pipeline } from "node:stream/promises"
 import type { GamesConfig } from "./Config.ts"
+import type { ComparisonContext } from "./Comparison.ts"
+import { contextProblem } from "./Comparison.ts"
 import type { LeaseBoardImpl, LeaseOutcome } from "./Leases.ts"
 import { firstChars, tarSize } from "./Leases.ts"
 import * as Log from "./Log.ts"
@@ -43,6 +45,8 @@ import type { Secrets } from "./Secrets.ts"
  * round's time per bot per game (RoundSpec capMs).
  */
 export interface Lineup {
+  readonly requiredProtocol?: 2
+  readonly context?: ComparisonContext
   readonly round: number
   readonly capMs: number
   readonly bots: ReadonlyArray<{ readonly name: string; readonly bundle: string }>
@@ -382,13 +386,13 @@ const swarmFile = async (o: HelperApiOptions, req: Req, res: Res, file: string) 
  */
 const tableLineup = async (o: HelperApiOptions) => {
   const lineup = o.lineup ? await o.lineup() : null
-  if (!lineup) return { bots: [], capMs: null, round: null }
+  if (!lineup || (o.config.arena === "v2" && (lineup.requiredProtocol !== 2 || contextProblem(lineup.context, o.config.context)))) return { bots: [], capMs: null, round: null, ...(o.config.arena === "v2" ? { requiredProtocol: 2 } : {}) }
   const bots: Array<{ bundle: string; bytes: number; name: string }> = []
   for (const b of lineup.bots) {
     const bytes = tarSize(o.config.paths.bundles, b.bundle)
     if (bytes !== null) bots.push({ bundle: b.bundle, bytes, name: b.name })
   }
-  return { bots, capMs: lineup.capMs, round: lineup.round }
+  return { bots, capMs: lineup.capMs, round: lineup.round, ...(lineup.requiredProtocol === 2 ? { requiredProtocol: 2 } : {}), ...(lineup.context ? { context: lineup.context } : {}) }
 }
 
 /** swarm/lineup.json, its keys sorted as every other answer's */

@@ -20,6 +20,8 @@ import { MAX_JOB_GAMES } from "./Executor.ts"
 import type { ArenaJs } from "./Js.ts"
 import { cleanResult } from "./Js.ts"
 import * as Log from "./Log.ts"
+import { bundlesForSeats, comparisonReplayProblem, comparisonResultProblem } from "./Comparison.ts"
+import { protocolReplayError, protocolResultError } from "./Protocol.ts"
 import { bySeed, jobFor } from "./Schedule.ts"
 import type { GameResult, Host, LeaseBoard, Limits, PlaySeedJob, Played, RemoteStats, RoundSpec, ScheduledGame } from "./Types.ts"
 
@@ -42,7 +44,7 @@ export type LaneEnd =
 
 export interface LaneDeps {
   readonly js: ArenaJs
-  readonly spec: Pick<RoundSpec, "bundles" | "decks">
+  readonly spec: Pick<RoundSpec, "bundles" | "decks" | "requiredProtocol" | "context">
   /** the round's run key (helpers and jobs get each seed's game key from it, never the key itself) */
   readonly runKey: string | null
   readonly limits: Limits
@@ -211,9 +213,18 @@ export const makeLane = (deps: LaneDeps, todo: ReadonlyArray<ScheduledGame>): La
         lose(lease, `invalid result: ${why}`)
         return
       }
-      leases.delete(lease.id)
       const results = new Map((ans.results as Array<{ id: string; result: Record<string, any> }>).map((e) => [e.id, e.result]))
       const replays = (ans.replays ?? {}) as Record<string, string>
+      for (const g of lease.games) {
+        const r = results.get(g.id)
+        const why = protocolResultError(r, deps.spec.requiredProtocol) ?? protocolReplayError(replays[g.id], r, deps.spec.requiredProtocol) ??
+          (deps.spec.requiredProtocol === 2 ? comparisonResultProblem(r, deps.spec.context ?? null, bundlesForSeats(deps.spec.bundles, g)) ?? comparisonReplayProblem(replays[g.id], r, deps.spec.context ?? null, bundlesForSeats(deps.spec.bundles, g)) : null)
+        if (why) {
+          lose(lease, `invalid result: ${why}`)
+          return
+        }
+      }
+      leases.delete(lease.id)
       played += lease.games.length
       yield* deps.onResults(lease.games.map((g) => ({
         game: g,
@@ -269,6 +280,15 @@ export const makeLane = (deps: LaneDeps, todo: ReadonlyArray<ScheduledGame>): La
         onSuccess: (p) =>
           Effect.gen(function*() {
             const byId = new Map(p.results.map((e) => [e.id, e.result]))
+            for (const g of games) {
+              const r = byId.get(g.id)
+              const why = protocolResultError(r, deps.spec.requiredProtocol) ?? protocolReplayError(p.replays[g.id], r, deps.spec.requiredProtocol) ??
+                (deps.spec.requiredProtocol === 2 ? comparisonResultProblem(r, deps.spec.context ?? null, bundlesForSeats(deps.spec.bundles, g)) ?? comparisonReplayProblem(p.replays[g.id], r, deps.spec.context ?? null, bundlesForSeats(deps.spec.bundles, g)) : null)
+              if (why) {
+                end ??= { kind: "failed", why: `${g.id}: ${why}` }
+                return
+              }
+            }
             for (const g of games) localMs.push(byId.get(g.id)!.ms)
             yield* deps.onResults(games.map((g) => ({ game: g, result: byId.get(g.id)!, replay: p.replays[g.id] ?? null })), null)
           }),

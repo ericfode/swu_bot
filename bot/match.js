@@ -2,7 +2,7 @@
 
 const { gameStreams } = require('./rng');
 const { snapshot: boardSnapshot, placedRef, actionKey } = require('./view');
-const { seatFor, Shadow, BotError, TakeBack, withSplit, toEngine } = require('./protocol');
+const { seatFor, Shadow, BotError, TakeBack, withSplit, toEngine, VERSIONS } = require('./protocol');
 const { gameCards } = require('./game-cards');
 
 /**
@@ -16,6 +16,8 @@ const { gameCards } = require('./game-cards');
  * `pool` ({cards}, an arena card pool: cardpool.js) deals the two random decks from those cards only.
  * `key` (a secret string) makes every random stream unpredictable from the seed (rng.js gameStreams); without it a
  * bot that knows the seed could rebuild the hidden cards. `limits` overrides the reply budgets of protocol.js LIMITS.
+ * `requiredProtocol` requires an explicit ready.v of that version and refuses native bots. The hosted arena sets 2;
+ * absent, local callers may still play v1 clients and native bots. `protocols` records only accepted negotiations.
  * `watch` ({ pre(eg, pid, actions, step), post(eg, pid, action, split), end(eg, res), sim?(eg, pid) }) observes every
  * real move, and with `sim` every simulation (sim returns the same three hooks for one, or null): holocron's
  * bots/omni/rs/stress.js.
@@ -33,9 +35,12 @@ const { gameCards } = require('./game-cards');
  * watch.rewind?.(eg, null, why) says so.
  * playGame closes no bot: whoever started a bot program closes it.
  *
- * @returns {{seed, steps, outcome, winner, round, ms, error?, by?, key?, events, botStats, timing}}
+ * @returns {{seed, steps, outcome, winner, round, ms, error?, by?, key?, requiredProtocol?, protocols, events, botStats, timing}}
  */
-async function playGame(env, { seed, bots, decks: given = null, pool = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {}, watch = null, engine = {}, stop = null, undo = [] }) {
+async function playGame(env, { seed, bots, decks: given = null, pool = null, record = false, maxSteps = 6000, snapshot = boardSnapshot, onEvent = null, key = null, limits = {}, requiredProtocol = null, watch = null, engine = {}, stop = null, undo = [] }) {
+    if (requiredProtocol != null && !VERSIONS.includes(requiredProtocol)) {
+        throw new Error(`unsupported required protocol v${requiredProtocol}`);
+    }
     if (bots[0] === bots[1] && typeof bots[0]?.decide === 'function') {
         throw new Error(`${bots[0].name}: one protocol client cannot play both seats`);
     }
@@ -48,10 +53,11 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
     // each seat's setup; `cards` is filled in at the start of the game, below
     const setups = bots.map((b, i) => {
         const seat = `p${i + 1}`;
-        return { players, decks, cards: null, botSeed: streams.botSeed(seat), deals: (deal) => streams.sim(seat, deal), limits };
+        return { players, decks, cards: null, botSeed: streams.botSeed(seat), deals: (deal) => streams.sim(seat, deal), limits, requiredProtocol };
     });
     const seats = bots.map((b, i) => seatFor(b, `p${i + 1}`, setups[i]));
-    const res = { seed, steps: 0, outcome: '?', winner: null, round: 0, ms: 0, ...(key ? { key } : {}), events: [] };
+    const policy = requiredProtocol == null ? {} : { requiredProtocol };
+    const res = { seed, steps: 0, outcome: '?', winner: null, round: 0, ms: 0, ...(key ? { key } : {}), ...policy, protocols: {}, events: [] };
     const stopped = stop && Promise.resolve(stop).then((s) => {
         throw new BotError(s.seat, bots[s.seat === 'p2' ? 1 : 0].name, s.why ?? 'left the game');
     });
@@ -65,7 +71,7 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
     };
     // the header first, so a game that fails at hello still has one
     emit({
-        t: 'header', v: 1, seed, engine: env.engineRev ?? null,
+        t: 'header', v: 1, seed, engine: env.engineRev ?? null, ...policy,
         players: bots.map((b, i) => ({ id: `p${i + 1}`, bot: b.name, deck: decks[`p${i + 1}`].metadata.name, ...(b.lang ? { lang: b.lang } : {}) })),
         decks
     });
@@ -77,10 +83,12 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
         setups.forEach((s) => (s.cards = cards));
         for (const s of seats) {
             await s.hello();
-        }
-        const versions = Object.fromEntries(seats.filter((s) => s.version).map((s) => [s.seat, s.version]));
-        if (Object.keys(versions).length) {
-            res.versions = versions;
+            if (s.v !== undefined) {
+                res.protocols[s.seat] = s.v;
+            }
+            if (s.version) {
+                (res.versions ??= {})[s.seat] = s.version;
+            }
         }
         const setup = { ...engine, seed: streams.engine, deck1: decks.p1, deck2: decks.p2 };
         eg = env.newGame(setup);
@@ -215,7 +223,7 @@ async function playGame(env, { seed, bots, decks: given = null, pool = null, rec
     res.ms = Date.now() - t0;
     res.botStats = bots.map((b) => b.stats ?? null);
     res.timing = { p1: timingSummary(seats[0].times), p2: timingSummary(seats[1].times) };
-    emit({ t: 'end', winner: res.winner, round: res.round, steps: res.steps, outcome: res.outcome, error: res.error ?? null, by: res.by ?? null, ...(key ? { key } : {}) });
+    emit({ t: 'end', winner: res.winner, round: res.round, steps: res.steps, outcome: res.outcome, error: res.error ?? null, by: res.by ?? null, ...policy, protocols: res.protocols, ...(key ? { key } : {}) });
     return res;
 }
 

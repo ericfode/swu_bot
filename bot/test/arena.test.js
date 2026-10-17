@@ -892,6 +892,7 @@ function leftByCheck(name, { tar = null } = {}) {
 }
 // the hash the checker prints for the tar it left
 const shaOf = (file) => require('crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const checkedEvidence = (file) => require('../arena/compatibility').verification({ negotiatedProtocol: 2 }, shaOf(file), require('../arena/compatibility').currentCheckerBuild());
 
 test('intake enter: root enters what the check left without running it, with the name, owner and note of the window\'s submission', () => {
     const { enter } = require('../arena/intake');
@@ -899,12 +900,18 @@ test('intake enter: root enters what the check left without running it, with the
     const sub = { id: 'lee.1', owner: 'lee', name: 'lee', kind: 'wasm', note: 'first', files: {} };
     // bot.wasm here would fail any start check: entering it shows nothing ran it; its manifest names someone else
     const { work, tar } = leftByCheck('mallory');
-    assert.deepStrictEqual(enter(sub, work, shaOf(tar)), { ok: true, name: 'lee', version: 'lee-v1', benched: false });
+    const compatibility = checkedEvidence(tar); // trusted checker result fixture, no bot code runs in enter
+    assert.deepStrictEqual(enter(sub, work, shaOf(tar), compatibility), { ok: true, name: 'lee', version: 'lee-v1', benched: false, compatibility });
     assert.deepStrictEqual(versionsOf('lee'), [0, 1]);
     assert.deepStrictEqual(versionsOf('mallory'), []);
     assert.ok(!readJson(path.join(HOME, 'roster.json')).agents.some((a) => a.name === 'mallory'));
     const meta = readJson(path.join(HOME, 'versions', 'lee-v1', 'SUBMISSION.json'));
     assert.deepStrictEqual([meta.note, meta.ref, meta.bot.kind], ['first', 'window:lee.1', 'wasm']);
+    assert.deepStrictEqual(meta.compatibility, compatibility);
+    assert.strictEqual(meta.bundleSha256, shaOf(tar));
+    assert.strictEqual(require('../arena/api').api.status().competitors.find((x) => x.name === 'lee').compatibility.compatible, true);
+    assert.strictEqual(require('../arena/api').api.versions({ name: 'lee' }).at(-1).compatibilityStatus.compatible, true);
+    assert.strictEqual(require('../arena/api').api.versions({ name: 'lee' })[0].compatibilityStatus.compatible, false, 'a native starter with only checked:true has no v2 verification');
     assert.strictEqual(fs.readFileSync(path.join(HOME, 'versions', 'lee-v1', 'bundle', 'bot.wasm'), 'utf8'), 'not a program');
     assert.strictEqual(readJson(path.join(HOME, 'roster.json')).agents.find((a) => a.name === 'lee').owner, 'github:lee');
     // the same submission again: its version, not a new one
@@ -936,7 +943,13 @@ test('intake enter: a bundle.tar that is a link, has another name, changed after
     assert.throws(() => enter(sub(6), leftByCheck('lee').work, undefined), /the bundle changed after its check/, 'a checker that printed no hash');
     const gnu = leftByCheck('lee');
     require('child_process').execFileSync('tar', ['-cf', gnu.tar, '-C', path.join(gnu.work, 'src'), '.']);
-    assert.throws(() => enter(sub(4), gnu.work, shaOf(gnu.tar)), /the bundle did not unpack/);
+    assert.throws(() => enter(sub(4), gnu.work, shaOf(gnu.tar), checkedEvidence(gnu.tar)), /the bundle did not unpack/);
+    const unverified = leftByCheck('lee');
+    assert.throws(() => enter(sub(7), unverified.work, shaOf(unverified.tar)), /no verified protocol v2 handshake/);
+    const mismatch = leftByCheck('lee');
+    assert.throws(() => enter(sub(8), mismatch.work, shaOf(mismatch.tar), { ...checkedEvidence(mismatch.tar), bundleSha256: '0'.repeat(64) }), /bundle differs/);
+    const oldBuild = leftByCheck('lee');
+    assert.throws(() => enter(sub(9), oldBuild.work, shaOf(oldBuild.tar), { ...checkedEvidence(oldBuild.tar), checkerBuild: '0'.repeat(40) }), /another checker build/);
     assert.deepStrictEqual(versionsOf('lee'), before, 'nothing entered');
 });
 
@@ -978,7 +991,7 @@ test('api submit: checked skips the load and start checks for the caller that ma
     const files = { 'arena.json': JSON.stringify({ schema: 'swu-arena-bot/1', run: { cmd: './bot.wasm' } }), 'bot.wasm': { base64: Buffer.from('nope').toString('base64') } };
     const r = await call('submit', { name: 'chk', note: 'n', bot: { kind: 'wasm', files }, checked: true });
     assert.strictEqual(r.error?.code, 'bad_bot', 'call() runs the check whatever the arguments say');
-    assert.strictEqual(api.submit({ name: 'chk', note: 'n', bot: { kind: 'wasm', files } }, { checked: true }).version, 'chk-v0');
+    assert.throws(() => api.submit({ name: 'chk', note: 'n', bot: { kind: 'wasm', files } }, { checked: true }), /no verified protocol v2 handshake/, 'the old checked flag alone is not compatibility evidence');
 });
 
 test('api submit: a WebAssembly bundle that asks for the card data as files is refused before it runs; the intake enters only what it checked', async () => {
@@ -992,8 +1005,7 @@ test('api submit: a WebAssembly bundle that asks for the card data as files is r
     assert.match(r.error.message, /hello\.cards/);
     assert.doesNotMatch(r.error.message, /start check/, 'refused before the start check runs it');
     assert.deepStrictEqual(require('../arena/home').versionsOf('crd'), []);
-    // the intake refuses it while packing (intake.js pack), so a checked bundle is not looked at again here
-    assert.strictEqual(api.submit({ name: 'crd', note: 'n', bot: { kind: 'wasm', files } }, { checked: true }).version, 'crd-v0');
+    assert.throws(() => api.submit({ name: 'crd', note: 'n', bot: { kind: 'wasm', files } }, { checked: true }), /no verified protocol v2 handshake/);
 });
 
 test('intake: a check that ends with no result is the arena\'s fault: the submission waits and is tried again, three times at most', async () => {

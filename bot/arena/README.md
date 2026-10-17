@@ -1,5 +1,40 @@
 # Arena: the hosted bot arena
 
+The hosted configuration selects `ARENA_ID=v2`. Its roster, intake, rounds, replay cache and controller database
+start empty under `arenas/v2` on each app's existing volume; the original `open` arena remains in place. Protocol 2
+means an integer `protocol: 2` manifest and an explicit integer `ready.v: 2` from the isolated checker and every
+executed seat. The discovery envelope intentionally remains `hello.v: 1`, advertising only `[2]` in this arena.
+Changing a label or copying a manifest never establishes compatibility.
+
+Admission and execution evidence binds the exact canonical bundle SHA-256 to a comparison context. That context
+includes the immutable image's `BUILD_SHA` and `CARDS_SHA` through a conservative engine fingerprint, and the runner
+revision. Results require their own seat negotiation, context and bundle evidence before they affect ratings.
+Placement reservations, stored-round resumes, replays and opponent downloads check the same boundary. A stored
+placement with stale or missing evidence is refused without resetting its rows. Cycle scheduling remains the default;
+the optional immediate placement mode uses only compatible observations.
+
+## First v2 cutover and later image changes
+
+Merge the v2 runtime, scheduling and help changes as one candidate before the first games deployment. Existing open
+entries are candidates for fresh isolated checks, never implicitly admitted. On the existing Linux games machine,
+`ARENA_ID=v2 node bot/arena/provision.js --data /data --source-home /data/arena` gives a dry-run report;
+adding `--apply` initializes the new namespace and verifies candidates using the established isolated checker.
+The report records rejected and blocked entries. Linux root, the existing arena user, toolchain and immutable image
+identity are required; there is no unisolated fallback. A Mac or missing toolchain yields a blocker and an empty arena.
+The window's authenticated, read-only `/api/arenas/open/...` routes retain access to the old documents and replays.
+
+Every games image build changes the conservative context, including builds that only change unrelated application
+code. Provisioning deliberately refuses to reuse an occupied v2 namespace with a different context. Before such an
+upgrade, stop the games controller and window writes, take a consistent snapshot of both existing volumes, and archive
+each complete `arenas/v2` directory under a name containing its saved context fingerprint. Preserve the archived
+`ARENA.json`, roster, admissions, database, results and replays together; keep an immutable archive manifest identifying
+the games image and window snapshot. Retain the existing shared content-addressed bundle store and secret in place.
+Initialize a fresh `arenas/v2` with the new image, then revalidate candidates from the archived games `arena` directory
+through `provision.js --source-home <archive>/arena --apply`. Start the window and controller only after their fresh
+namespaces are selected, publish fresh status, and confirm the active context and admitted hashes. Archived evidence
+remains readable in the volume snapshots; the online historical route above exposes the original open arena only.
+Do not edit a saved context, reuse an old controller database, or restamp old proof to make an upgrade start.
+
 Invited people (builders) write Star Wars Unlimited bots on their own computers and submit them to the arena window.
 The games machine packs each bot into a WebAssembly bundle, rates it in rounds against the other builders' bots and
 the project's own bots, and sends the results back to the window, where friends watch them. Both run on Fly.
@@ -173,6 +208,13 @@ machine sends.
 
 The window mode is how the project's threads read and push window documents (`WINDOW.md`, "Through MCP"). Builders
 use the window's own `/mcp` instead.
+
+Both MCP transports discover `arena_local_help`: concise structured instructions for the existing local harness,
+protocol v2, verified opponent downloads and seeded testing. The hosted server also has `arena_opponents` and
+`arena_download_opponent` (download descriptor). `BUILD.md` explains the download-only helper; neither discovery nor
+download executes a bundle. A download is restricted to the current round, existing tables permissions and recorded
+v2 compatibility evidence matching the bundle and active comparison context. Roll this out with the v2 admission
+and namespace change; before that evidence is published, the catalog intentionally returns no eligible bundles.
 
 Readers (the app, research threads, friends' browsers) use these calls or the window's documents, never the arena's
 files (Eric, 2026-10-11: every edge goes through the API):

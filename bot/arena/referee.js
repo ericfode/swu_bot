@@ -94,6 +94,10 @@ const anchorsOf = (names) => names.filter((n) => roster.baselines.includes(n) ||
  * played-out game ('won') counts.
  */
 function cappedScore(g) {
+    // A rejected handshake is evidence of incompatibility, never a v2 rated game.
+    if (g.requiredProtocol === 2 && (g.protocols?.p1 !== 2 || g.protocols?.p2 !== 2)) {
+        return { score: null, forfeit: [false, false] };
+    }
     const forfeit = [g.outcome === 'ERROR' && g.by === 'p1', g.outcome === 'ERROR' && g.by === 'p2'];
     if (forfeit[0] || forfeit[1]) {
         return { score: forfeit[0] ? 0 : 1, forfeit };
@@ -157,7 +161,8 @@ function scoreRound(round, ladder) {
     // where the games ran: the games machine, or a helper computer by name (ladder.js host, remote-lane.js)
     const hosts = {};
     for (const g of ladder.games.filter((x) => x.outcome !== 'running')) {
-        const { score, forfeit } = cappedScore(g);
+        const trusted = ladder.config.requiredProtocol !== 2 || !require('./identity').observationProblem(g, ladder.config);
+        const { score, forfeit } = trusted ? cappedScore(g) : { score: null, forfeit: [false, false] };
         const h = (hosts[g.host ?? 'machine'] ??= { games: 0, decisions: 0, thinkMs: 0 });
         h.games++;
         for (const t of [g.timing?.p1, g.timing?.p2].filter(Boolean)) {
@@ -218,6 +223,8 @@ function scoreRound(round, ladder) {
     }
     const decks = ladder.config.decks;
     return { round, ladderId: ladder.id, ...(ladder.config.pool ? { pool: ladder.config.pool.kind, poolCards: ladder.config.pool.cards } : {}),
+             ...(ladder.config.requiredProtocol === 2 ? { arenaId: ladder.config.arena, requiredProtocol: 2, context: ladder.config.context, bundles: ladder.config.bundles } : {}),
+             ...(ladder.config.placement ? { placement: ladder.config.placement } : {}),
              ...(decks ? { decks: { file: decks.file, sha256: decks.sha256, lists: decks.names.length, deal: decks.deal ?? 'bot' } } : {}),
              seed: ladder.config.firstSeed, gamesPerPair: ladder.config.gamesPerPair, games: finished, rated: results.length, scheduled: ladder.progress.scheduled,
              status: ladder.status === 'done' ? 'done' : 'running', leader: elo ? bots.find((b) => b.agent)?.name ?? null : null, anchors, bots, results, hosts,
@@ -261,6 +268,21 @@ function helpersLine(remote) {
  * which keep anchoring the old rounds once the image has none, else the first round's own bots.
  */
 function globalElo(rounds) {
+    const identity = require('./identity');
+    if (identity.requiredProtocol === 2) {
+        const context = identity.comparisonContext();
+        rounds = rounds.filter((rd) => identity.contextMatches(rd.context, context) && rd.requiredProtocol === 2
+            && rd.bundles && (rd.bots ?? []).every((b) => /^[0-9a-f]{64}$/.test(rd.bundles[b.name] ?? '')));
+        const revisions = new Map();
+        for (const rd of rounds) for (const bot of rd.bots ?? []) {
+            if (!revisions.has(bot.name)) revisions.set(bot.name, new Set());
+            revisions.get(bot.name).add(rd.bundles[bot.name]);
+        }
+        const conflicting = new Set([...revisions].filter(([, hashes]) => hashes.size > 1).map(([name]) => name));
+        rounds = rounds.map((rd) => ({ ...rd, bots: (rd.bots ?? []).filter((b) => !conflicting.has(b.name)),
+            anchors: (rd.anchors ?? []).filter((n) => !conflicting.has(n)),
+            results: (rd.results ?? []).filter((g) => !conflicting.has(g.a) && !conflicting.has(g.b)) }));
+    }
     const results = rounds.filter((rd) => rd.pool !== 'holdout').flatMap((rd) => rd.results);
     const names = [...new Set(results.flatMap((x) => [x.a, x.b]))];
     return Object.fromEntries(Object.entries(anchoredBT(names, results, allRoundAnchors(rounds, roster.baselines))).map(([k, v]) => [k, Math.round(v)]));
@@ -314,7 +336,7 @@ function report(rd, g) {
  * <tournament id>-r<K>; standings.json names those (ladderId).
  */
 function ladderIdOf(round) {
-    return `arena-r${round}`;
+    return require('./identity').ladderId(round);
 }
 
 function publish(round, id = ladderIdOf(round)) {
@@ -323,8 +345,21 @@ function publish(round, id = ladderIdOf(round)) {
         return null;
     }
     const ladder = JSON.parse(fs.readFileSync(ladderFile, 'utf8'));
+    const identity = require('./identity');
+    if (identity.id === 'v2' && (ladder.config?.arena !== 'v2' || ladder.config?.requiredProtocol !== 2
+        || !identity.contextMatches(ladder.config.context, identity.comparisonContext()))) {
+        throw new Error('a v2 arena cannot publish results from another arena or protocol policy');
+    }
     const st = readJson(STANDINGS, { schema: 'swu-arena/1', startedAt: new Date().toISOString(), rounds: [] });
+    if (identity.id === 'v2' && st.rounds.length && st.arenaId !== 'v2') {
+        throw new Error('historical standings cannot enter the v2 arena');
+    }
+    if (identity.id === 'v2' && st.rounds.length && !identity.contextMatches(st.context, identity.comparisonContext())) {
+        throw new Error('the standings belong to another engine/card comparison context; provision a fresh arena');
+    }
+    if (identity.id === 'v2') Object.assign(st, { arenaId: 'v2', requiredProtocol: 2, context: identity.comparisonContext() });
     const rd = scoreRound(round, ladder);
+    rd.updatedAt = new Date().toISOString();
     st.rounds = [...st.rounds.filter((x) => x.round !== round), rd].sort((a, b) => a.round - b.round);
     st.global = globalElo(st.rounds);
     st.updatedAt = new Date().toISOString();
@@ -511,6 +546,9 @@ function releaseLock() {
 }
 
 async function runRound(round, bots, { games = Number(arg('games', 4)), seed, key, id = ladderIdOf(round) } = {}) {
+    if (require('./identity').requiredProtocol === 2) {
+        throw new Error('v2 rated games must run through the arena server games role; the legacy referee CLI cannot enforce its job context');
+    }
     const dir = path.join(RESULTS, id);
     const cap = Number(roster.thinkCapMs);
     // the watchdog waits 30 s past the wall cap (game-pool.js roundLimits), so a call the guard allows is never taken for a hang
