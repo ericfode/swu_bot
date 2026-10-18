@@ -36,6 +36,7 @@ test('play-seed sends the checked job policy to its queue and workerData', async
     let received;
     const play = load('arena/play-seed.js', {
         fs, os, path, child_process: { execFileSync() {} }, '../decklists': require('../decklists'),
+        './deck-choice': { ...require('../arena/deck-choice'), verifyRequested: () => null },
         '../players': { describeBot: () => ({ kind: 'arena', lang: 'wasm' }) },
         '../game-pool': { async runPool(queue, options) {
             received = { queue, options };

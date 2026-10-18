@@ -176,11 +176,12 @@ function loadCheck(dir, version, shownAs) {
 // hello the referee sends (two real deck lists, and their card data from the referee's card folder as game-cards.js
 // gives it to a game), then expects ready. Never resolves on its own: the timer ends it.
 const START_CHECK = `
-const [stdio, gameCardsFile, decksFile, dir, name, spec, ms] = process.argv.slice(1);
+const [stdio, gameCardsFile, decksFile, dir, name, spec, ms, chosen] = process.argv.slice(1);
 const { StdioClient } = require(stdio);
 const { gameCards, cardGetter } = require(gameCardsFile);
 const { cmd, args } = JSON.parse(spec);
 const decks = require(decksFile);
+if (chosen && chosen !== 'null') decks[0] = JSON.parse(chosen);
 const cards = gameCards(cardGetter(), [decks[0], decks[1]]);
 const bye = (code, msg) => { if (msg) process.stderr.write(msg + '\\n'); process.exit(code); };
 setTimeout(() => bye(1, 'no reply to hello within ' + ms + ' ms'), Number(ms));
@@ -196,9 +197,9 @@ client.hello({ t: 'hello', protocol: 'swu-bot-stdio', v: 1, versions: [2], bot: 
 `;
 
 /** Throws bad_bot unless the bot program in dir starts and answers hello with ready (same environment as a game). */
-function startCheck(dir, version, bot, shownAs) {
+function startCheck(dir, version, bot, shownAs, deck = null) {
     const r = spawnSync(process.execPath, ['-e', START_CHECK, path.join(__dirname, '..', 'stdio.js'), path.join(__dirname, '..', 'game-cards.js'),
-        path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json'), dir, version, JSON.stringify({ cmd: bot.cmd, args: bot.args ?? [] }), String(START_CHECK_MS)], {
+        path.join(__dirname, '..', 'decks', 'ash-meta-2026-09.json'), dir, version, JSON.stringify({ cmd: bot.cmd, args: bot.args ?? [] }), String(START_CHECK_MS), JSON.stringify(deck)], {
         env: checkEnv(),
         stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: START_CHECK_MS + 5000, killSignal: 'SIGKILL'
     });
@@ -224,6 +225,7 @@ function versionCompatibility(version, meta) {
 }
 
 const api = {
+    decks(args) { return require('./deck-choice').describe(args); },
     status() {
         const r = home.roster();
         const st = home.readJson(path.join(home.HOME, 'standings.json'), { rounds: [], global: {} });
@@ -297,7 +299,7 @@ const api = {
         return { name, dir, version: v.version, token, tokenNote: 'Keep this token; it is shown once. Pass it as `token` to submit, withdraw and rejoin on a hosted arena.' };
     },
 
-    submit({ name, note, bot = { kind: 'js' }, token, ref } = {}, { checked = false, compatibility = null } = {}) {
+    submit({ name, note, bot = { kind: 'js' }, token, ref, deck } = {}, { checked = false, compatibility = null } = {}) {
         // Atomic: the version is assembled and load-checked in versions/.staging-*, then renamed into place in one step,
         // so the referee never sees a half-copied or unloadable version. A benched competitor may submit too: its newest
         // version is rated once it rejoins. checked: the caller made the load or start check already, on these files,
@@ -306,6 +308,7 @@ const api = {
         const entry = owned(name, token, { benched: true });
         need(typeof note === 'string' && note.trim(), 'bad_request', 'note: one line saying what changed and why');
         need(bot && typeof bot === 'object' && ['js', 'stdio', 'wasm'].includes(bot.kind), 'bad_request', "bot.kind: 'js', 'stdio' or 'wasm'");
+        need(deck == null || bot.kind === 'wasm', 'bad_request', 'deck: the direct API accepts deck choices for WASM bundles; use arena_submit on the hosted /mcp or bot/dev.js to compile source bots');
         need(bot.kind !== 'wasm' || (bot.cmd === undefined && bot.args === undefined), 'bad_request', 'a wasm bundle says how it runs in its arena.json');
         const live = path.join(home.AGENTS, name);
         let upload = null;
@@ -344,11 +347,12 @@ const api = {
         const { files, ...botMeta } = bot;
         const round = clock().round;
         let verifiedCompatibility = null;
+        let frozenDeck = null;
         // stamped just before the version is renamed into place, after its load check: a submit that finishes after the
         // round's deadline is late (lineup() rates it next round), however early it started
         // ref: what this version came from, e.g. a window submission (intake.js; not part of the API's own arguments)
         const meta = (n) => ({ name: `${name}-v${n}`, agent: name, version: n, note: note.trim(), bot: botMeta, files: files ? Object.keys(files) : undefined,
-                               ...(typeof ref === 'string' ? { ref } : {}), ...(verifiedCompatibility ? { bundleSha256: verifiedCompatibility.bundleSha256, compatibility: verifiedCompatibility } : {}), submittedAt: new Date().toISOString(), round, checked: true });
+                               ...(typeof ref === 'string' ? { ref } : {}), ...(frozenDeck ? { deck: frozenDeck } : {}), ...(verifiedCompatibility ? { bundleSha256: verifiedCompatibility.bundleSha256, compatibility: verifiedCompatibility } : {}), submittedAt: new Date().toISOString(), round, checked: true });
         const staging = home.stagingDir(name);
         try {
             if (home.exists(live) && bot.kind !== 'wasm') {
@@ -366,10 +370,12 @@ const api = {
             } else if (bot.kind === 'stdio' && /[\\/]/.test(bot.cmd)) {
                 need(home.exists(path.join(staging, bot.cmd)), 'bad_request', `bot.cmd ${bot.cmd} is not in your folder`);
             }
+            if (bot.kind === 'wasm' && !checked) require('./deck-choice').prepareBundle(path.join(staging, 'bundle'), deck);
             // a resident has no starter v0: its first version is v1, like a builder's first bot
             let n = (home.versionsOf(name).pop() ?? (entry.resident ? 0 : -1)) + 1;
             const check = () => {
                 const digest = bot.kind === 'wasm' ? bundleDigest(path.join(staging, 'bundle')) : null;
+                frozenDeck = bot.kind === 'wasm' ? require('./deck-choice').verifyRequested(path.join(staging, 'bundle'), deck) : null;
                 const checkerBuild = bot.kind === 'wasm' ? currentCheckerBuild() : null;
                 need(bot.kind !== 'wasm' || checkerBuild, 'bad_bot', 'the checker build identity is unavailable');
                 const context = arenaId === 'v2' ? comparisonContext() ?? null : undefined;
@@ -385,7 +391,7 @@ const api = {
                 if (bot.kind === 'js') {
                     loadCheck(staging, `${name}-v${n}`, upload ? `(uploaded) ${name}` : live);
                 } else {
-                    const handshake = startCheck(staging, `${name}-v${n}`, bot.kind === 'wasm' ? require('./registry').WASM_BOT : bot, upload ? `(uploaded) ${name}` : live); // hello names the version
+                    const handshake = startCheck(staging, `${name}-v${n}`, bot.kind === 'wasm' ? require('./registry').WASM_BOT : bot, upload ? `(uploaded) ${name}` : live, frozenDeck?.list); // hello names the version
                     if (bot.kind === 'wasm') {
                         need(bundleDigest(path.join(staging, 'bundle')) === digest, 'bad_bot', 'the bundle changed during its protocol v2 check');
                         verifiedCompatibility = verification(handshake, digest, checkerBuild, context);
@@ -543,9 +549,10 @@ async function call(method, args = {}) {
 
 // readOnly: changes nothing (MCP readOnlyHint); destructive: may overwrite existing data (the live folder, on upload)
 const METHODS = {
+    decks: { readOnly: true, desc: 'Choose a deck for arena_submit: list catalog names, or with name read the full SWUDB list. Submit a catalog name or your own main-deck object; omit deck for the tournament-pool default.', props: { name: 'string' } },
     status: { readOnly: true, desc: 'Tournament clock (round, roundIndex of plannedRounds, phase work/ladder/done, deadline, minutes left; on the hosted arena the round playing now with phase ladder, else the newest round with phase idle), time cap, and every competitor with its latest version and Elo (benched ones marked benched, withdrawn versions listed).', props: {} },
     register: { desc: 'Register a new competitor with a starting bot; submits it as v0. harness says how the competitor works ({kind: codex|claude-code|human|script|other, model}); on a hosted arena it is a description only unless token is the admin token.', props: { name: 'string', title: 'string', philosophy: 'string', start: 'string', harness: 'object', owner: 'string', token: 'string' }, required: ['name'] },
-    submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout), or {kind:"wasm", files} for a WebAssembly bundle (arena.json and the files it names, binary ones as {"base64": "..."}; bot/compiled/README.md; no "cards" key, since every bot gets the card data in hello.cards), which plays in a sandbox. The bot must load (require bot.js, createBot), and a bot program must start and answer hello with ready, or the submit fails with code bad_bot and the error lines.', props: { name: 'string', note: 'string', bot: 'object' }, required: ['name', 'note'] },
+    submit: { token: true, destructive: true, desc: 'Freeze your bot as your next version; the referee rates your newest version at the end of each round. With no bot, freezes your live folder (agents/<name>/ in the arena folder). From another machine pass bot = {kind:"js", files:{"bot.js": source, ...}} (self-contained CommonJS, exports createBot(name); the files are laid over your live folder), or {kind:"stdio", cmd, args} for a bot program (spec/protocol.md: JSON lines on stdin and stdout), or {kind:"wasm", files} for a WebAssembly bundle (arena.json and the files it names, binary ones as {"base64": "..."}; bot/compiled/README.md; no "cards" key, since every bot gets the card data in hello.cards), which plays in a sandbox. The bot must load (require bot.js, createBot), and a bot program must start and answer hello with ready, or the submit fails with code bad_bot and the error lines.', props: { name: 'string', note: 'string', bot: 'object', deck: 'deck' }, required: ['name', 'note'] },
     withdraw: { token: true, destructive: true, desc: "Take yourself out of the tournament (benched): you play no ladder that starts from now on, this round's included if its ladder has not started. With version, stop rating one broken version the same way (the referee then rates your newest version that is not withdrawn). A ladder already running keeps its lineup. Your versions, games and ratings stay; rejoin undoes either.", props: { name: 'string', version: 'integer' }, required: ['name'] },
     rejoin: { token: true, desc: "Undo withdraw: rated again from the next ladder to start (this round's, if it has not started); or with version, rate that version again.", props: { name: 'string', version: 'integer' }, required: ['name'] },
     versions: { readOnly: true, desc: 'Your submitted versions and their notes.', props: { name: 'string' }, required: ['name'] },

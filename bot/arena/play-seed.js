@@ -234,6 +234,20 @@ function warmBundles(bundles, hexes) {
     return out;
 }
 
+/** Frozen bundle choices must agree with actual seat decks before any engine or bot is loaded. */
+function checkChosenDecks(job, choices) {
+    const { binding, digest } = require('./deck-choice');
+    for (const [name, value] of Object.entries(choices)) {
+        const chosen = binding(value);
+        if (!chosen) continue;
+        for (const g of job.games) for (const [seat, n] of [g.p1, g.p2].entries()) {
+            if (n === name && (!job.decks || !g.decks || !job.decks[g.decks[seat]] || digest(job.decks[g.decks[seat]]) !== chosen.sha256)) {
+                throw new Refused(`${name}: scheduled deck differs from the immutable bundle choice`);
+            }
+        }
+    }
+}
+
 /** Plays the job's games; {ok, results, replays}. */
 async function play(job, { bundles, work }) {
     const arena = path.join(work, 'arena');
@@ -248,6 +262,8 @@ async function play(job, { bundles, work }) {
     for (const [name, b] of Object.entries(job.bots).filter(([, x]) => x.kind === 'wasm')) {
         unpackVersion(arena, name, path.join(bundles, `${b.bundle}.tar`), b.bundle);
     }
+    checkChosenDecks(job, Object.fromEntries(Object.entries(job.bots).filter(([, b]) => b.kind === 'wasm').map(([name]) =>
+        [name, require('./deck-choice').verifyRequested(path.join(arena, 'versions', name, 'bundle'))])));
     checkResolved(job);
     const { runPool } = require('../game-pool');
     const policy = job.requiredProtocol === 2 ? { requiredProtocol: 2 } : {};
@@ -384,4 +400,4 @@ function gameDecks(job, g) {
     return g.decks ? { p1: normalizeDeck(job.decks[g.decks[0]]), p2: normalizeDeck(job.decks[g.decks[1]]) } : null;
 }
 
-module.exports = { RESIDENTS, IN_PROCESS, GAME_ID, residentsHere, checkJob, checkResolved, gameDecks, seedJob, Refused };
+module.exports = { RESIDENTS, IN_PROCESS, GAME_ID, residentsHere, checkJob, checkResolved, checkChosenDecks, gameDecks, seedJob, Refused };

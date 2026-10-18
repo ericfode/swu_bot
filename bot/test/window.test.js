@@ -1523,7 +1523,7 @@ test('mcp oauth: a person connects their MCP client with GitHub sign-in, reads a
         assert.strictEqual(init.result.protocolVersion, '2025-06-18');
         assert.strictEqual((await go('/mcp', { method: 'POST', token: tok.access_token, body: '{"jsonrpc":"2.0","method":"notifications/initialized"}' })).status, 202);
         const names = (await rpc(tok.access_token, 'tools/list')).result.tools.map((t) => t.name);
-        assert.deepStrictEqual(names, ['whoami', 'arena_status', 'arena_standings', 'arena_report', 'arena_versions', 'arena_panel', 'arena_games', 'window_docs', 'window_replays', 'window_replay',
+        assert.deepStrictEqual(names, ['whoami', 'arena_decks', 'arena_status', 'arena_standings', 'arena_report', 'arena_versions', 'arena_panel', 'arena_games', 'window_docs', 'window_replays', 'window_replay',
             'arena_local_help', 'arena_opponents', 'arena_download_opponent', 'arena_guide', 'arena_submit', 'arena_my_submissions']);
         const call = async (t, name, args = {}) => {
             const r = (await rpc(t, 'tools/call', { name, arguments: args })).result;

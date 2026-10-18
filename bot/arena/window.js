@@ -673,7 +673,7 @@ function appBuilder(store, { minMs = 10000, parts = null, staleMs = STALE_MS } =
 
 const STATUS = { bad_request: 400, unauthorized: 401, forbidden: 403, not_found: 404, conflict: 409, too_large: 413, internal: 500, unsupported: 501, unavailable: 503 };
 // the arena's methods a window answers from what the arena pushed; the rest need the arena itself (phase B)
-const ARENA_READ = new Set(['status', 'standings', 'report', 'versions', 'panel', 'games']);
+const ARENA_READ = new Set(['decks', 'status', 'standings', 'report', 'versions', 'panel', 'games']);
 
 /**
  * The window's request handler. opts: home (storage folder), auth (an auth.js instance; default from the environment),
@@ -737,6 +737,7 @@ function createWindow(opts = {}) {
     // every game's own page (gamelinks.js): /g/<run>/<game>, live or replay, for anyone with no sign-in
     const gameLinks = createGameLinks({ store, publicUrl: auth.publicUrl, kitFile, statics, replayFor, peopleRun, ...(opts.gameLinksLimits ?? {}) }); // tests: {zipMax}
     const arenaMethods = {
+        decks: (args) => require('./deck-choice').describe(args),
         status: () => arenaDoc('status') ?? { tournament: null, round: null, phase: 'idle', competitors: [] },
         standings: () => arenaDoc('standings') ?? { rounds: [], global: {} },
         report: ({ round }) => {
@@ -931,7 +932,7 @@ function createWindow(opts = {}) {
         return { now, fresh };
     }
 
-    async function submit(who, { kind, note, files, base64 = [], entry, name } = {}) {
+    async function submit(who, { kind, note, files, base64 = [], entry, name, deck } = {}) {
         need(who.login && LOGIN.test(who.login), 'forbidden', 'submitting takes a GitHub sign-in');
         const login = who.login.toLowerCase();
         // an agent's token (a person's Claude on their Sprite) submits as its one competitor, and only as that one
@@ -939,6 +940,9 @@ function createWindow(opts = {}) {
         need(SUBMIT_KINDS.includes(kind), 'bad_request', `kind: one of ${SUBMIT_KINDS.join(', ')}`);
         need(typeof note === 'string' && note.trim() && note.length <= 300, 'bad_request', 'note: one line (up to 300 characters) saying what this version changes');
         submitFiles({ files, base64, entry });
+        let chosenDeck;
+        try { chosenDeck = require('./deck-choice').selection(deck); }
+        catch (e) { throw new WindowError('bad_request', e.message); }
         const n = name ?? who.agent ?? builderName(login);
         need(typeof n === 'string' && /^[a-z][a-z0-9_]{0,31}$/.test(n), 'bad_request', 'name: 1-32 characters, lowercase letters, digits and _, starting with a letter');
         const problem = nameProblem(login, n);
@@ -955,11 +959,11 @@ function createWindow(opts = {}) {
         }
         const { now } = room(login, n, admin);
         const id = `${login}.${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
-        const doc = { id, owner: login, name: n, kind, note: note.trim(), files, ...(base64.length ? { base64 } : {}), ...(entry ? { entry } : {}),
+        const doc = { id, owner: login, name: n, kind, note: note.trim(), files, ...(chosenDeck ? { deck: chosenDeck } : {}), ...(base64.length ? { base64 } : {}), ...(entry ? { entry } : {}),
             state: 'pending', submittedAt: new Date(now).toISOString() };
         store.putDoc('submissions', id, JSON.stringify(doc));
         wakeGames();
-        return { id, name: n, kind, state: 'pending',
+        return { id, name: n, kind, state: 'pending', ...(chosenDeck ? { deck: chosenDeck } : {}),
             next: 'The arena packs it, starts it once in its sandbox and enters it; arena_my_submissions shows the version it rates, or what to fix. While the arena is not running, it waits.' };
     }
     const mcpTools = [
@@ -1026,12 +1030,13 @@ function createWindow(opts = {}) {
             } },
         { name: 'arena_submit',
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-            description: `Submit a bot as your next version. The arena packs it into a WebAssembly bundle, starts it once in its sandbox and, if it answers, rates it in its ladders under your builder name (whoami). kind "js": files with bot.js, a bot program speaking the protocol (require('./stdio') gives serve()); "python": files with bot.py; "wasm": a ready bundle with its arena.json (binary files listed in base64). arena_guide explains each. The check takes a minute or two while the arena runs: follow it with arena_my_submissions. Up to ${SUBMIT_PENDING} waiting at a time for each competitor; each person has at most ${BOTS_PER_PERSON} competitors and ${PERSON_PER_DAY} submissions a day. An agent's token (connected with a link for one competitor) submits only as that competitor.`,
+            description: `Submit a bot as your next version. Optional deck: an arena_decks catalog name or your own SWUDB main-deck object, kept with this version in both seats; omission uses the tournament pool. The arena packs it into a WebAssembly bundle, starts it once in its sandbox and, if it answers, rates it in its ladders under your builder name (whoami). kind "js": files with bot.js, a bot program speaking the protocol (require('./stdio') gives serve()); "python": files with bot.py; "wasm": a ready bundle with its arena.json (binary files listed in base64). arena_guide explains each. The check takes a minute or two while the arena runs: follow it with arena_my_submissions. Up to ${SUBMIT_PENDING} waiting at a time for each competitor; each person has at most ${BOTS_PER_PERSON} competitors and ${PERSON_PER_DAY} submissions a day. An agent's token (connected with a link for one competitor) submits only as that competitor.`,
             inputSchema: schema({
                 kind: { type: 'string', enum: SUBMIT_KINDS }, note: { type: 'string', description: 'one line: what this version changes and why' },
                 files: { type: 'object', description: 'path -> file content, e.g. {"bot.js": "..."}', additionalProperties: { type: 'string' } },
                 base64: { type: 'array', items: { type: 'string' }, description: 'the paths in files whose content is base64 (binary files of a wasm bundle)' },
                 entry: { type: 'string', description: 'the file that starts the bot, if not bot.js / bot.py' },
+                deck: { anyOf: [{ type: 'string' }, { type: 'object' }], description: 'Optional own deck: an exact arena_decks catalog name, or SWUDB {metadata:{name},leader:{id},base:{id},deck:[{id,count}]}. No sideboard. Validated against engine cards and bound into this immutable bundle/version; used by the checker and every match, including both seats. Omit for the existing tournament-pool default.' },
                 name: { type: 'string', description: 'the competitor to submit to: your builder name (the default; an agent\'s token: its competitor) or it with _ and a suffix, e.g. ana_fast. A new name makes a new competitor of yours' }
             }, ['kind', 'note', 'files']),
             call: ({ who }, a) => submit(who, a) },

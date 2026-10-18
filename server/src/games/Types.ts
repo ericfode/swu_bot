@@ -39,6 +39,8 @@ export interface RoundDecks {
   readonly deal: "seat"
   readonly skipped: ReadonlyArray<string>
   readonly lists: ReadonlyArray<DeckList>
+  readonly poolSize?: number
+  readonly choices?: Readonly<Record<string, number>>
 }
 
 /** Legacy frozen placements remain replayable; new adaptive placements reserve one fresh mirrored seed pair. */

@@ -34,7 +34,7 @@ const TOKEN = arg('token', process.env.ARENA_TOKEN ?? null);
 if (REMOTE && !process.env.ARENA_ID) process.env.ARENA_ID = 'v2';
 const { call, METHODS } = require('./api');
 const identity = require('./identity');
-const TYPES = { string: { type: 'string' }, integer: { type: 'integer' }, object: { type: 'object' }, array: { type: 'array', items: {} } };
+const TYPES = { deck: { anyOf: [{ type: 'string' }, { type: 'object' }], description: 'Optional catalog name from arena_decks, or SWUDB main deck. Bound into the immutable WASM bundle. Omit for the tournament-pool default.' }, string: { type: 'string' }, integer: { type: 'integer' }, object: { type: 'object' }, array: { type: 'array', items: {} } };
 
 /** MCP tool annotations: read-only tools are idempotent too; the others only add data, except submit (see METHODS). */
 const annotations = (d) => (d.readOnly
@@ -64,7 +64,7 @@ const LOCAL_TOOLS = {
 };
 
 // the window's arena reads when its GET /api cannot say (no valid token yet)
-const WINDOW_READS = ['status', 'standings', 'report', 'versions', 'panel', 'games'];
+const WINDOW_READS = ['decks', 'status', 'standings', 'report', 'versions', 'panel', 'games'];
 
 // a remote that accepts the connection and then never answers must not hold up tools/list
 const PROBE_MS = Number(process.env.ARENA_PROBE_MS) || 5000;
