@@ -3,10 +3,10 @@
  * - The rules and the lineup come from `gamesctl round` (the roster, the versions, the deck lists, each version's tar in
  *   the bundles folder); the first seed and the run key from the round-seed secret (referee.js roundSeed, roundKey),
  *   which no child sees. The schedule is ratings.js roundRobin dealt by decklists.js by seat (Schedule.ts).
- * - Every game and its result is in games.db as it ends. Round K again resumes it: its finished games are kept when its
- *   bots, games per pair, time limit, deck lists, first seed and key are the same, else it starts over (ladder.js
- *   --resume). A round with no row whose ladder.json the old coordinator's ladder left (a round cut by the switch to this
- *   server) keeps that ladder's finished games under the same test.
+ * - Every game and its result is in games.db as it ends. Stored v2 rounds resume their frozen lineup and rules even
+ *   after intake or settings change; invalid comparison or seed/key evidence is refused without resetting the round.
+ *   Open rounds retain ladder.js --resume's comparison/reset behavior. A round without a row can import a matching
+ *   ladder.json left by the old coordinator, retaining that ladder's finished games under the same test.
  * - The games play in the Lane (here, and on helpers); their entries and replays go to the round's folder (Results.ts),
  *   each seed's key once every game of it has ended; `gamesctl publish` turns the folder into standings, the round's
  *   report and the panels at the start, every 30 s and at the end; referee.lock says a round plays.
@@ -65,7 +65,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const plain = (x: unknown): x is Record<string, any> => !!x && typeof x === "object" && !Array.isArray(x)
 const count = (x: unknown) => Number.isSafeInteger(x) && (x as number) >= 0
 
-/** Read-only backstop before a saved placement asks Node to verify its immutable source versions. */
+/** Read-only backstop before a saved v2 round asks Node to verify its immutable source versions. */
 const storedComparisonProblem = (c: GamesConfig, row: RoundRow): string | null => {
   const file = path.join(c.paths.results, ladderId(row.k, c.arena), "ladder.json")
   const text = readRegular(file)
@@ -76,7 +76,12 @@ const storedComparisonProblem = (c: GamesConfig, row: RoundRow): string | null =
     if (!plain(doc?.config) || doc.config.arena !== c.arena) return "the stored ladder arena differs"
     const why = roundContextProblem(doc.config, c.context, row.spec.bundles)
     if (why) return `stored ladder: ${why}`
-    if (!same(doc.config.placement, row.spec.placement)) return "the stored ladder placement scope differs"
+    const expected = ladderConfig({ spec: row.spec, arena: c.arena, firstSeed: row.firstSeed, workers: row.workers,
+      limits: limitsFor(row.spec.capMs), keyId: row.keyId })
+    // Worker concurrency can change during a round; its lineup, rules and deal identity cannot.
+    for (const field of ["bots", "gamesPerPair", "firstSeed", "maxSteps", "capMs", "hangMs", "keyId", "record", "decks", "placement"]) {
+      if (!same(doc.config[field], expected[field])) return `the stored ladder ${field} differs`
+    }
   }
   for (const [name, digest] of Object.entries(row.spec.bundles)) {
     let fd: number | undefined
@@ -184,8 +189,9 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
       if (row && row.arena !== c.arena) return { kind: "failed", why: `round ${k}: the stored arena differs` } as const
     }
     const s = deps.settings()
-    // Placement retries keep the admitted version, opponents, bundle digests and rules already in the durable row.
-    if (c.arena === "v2" && row?.spec.placement) {
+    // Every stored v2 round keeps its original lineup and rules, including an ordinary cycle interrupted by intake.
+    const frozenSpec = row && (c.arena === "v2" || row.spec.placement) ? row.spec : null
+    if (c.arena === "v2" && row) {
       const why = storedComparisonProblem(c, row)
       if (why) return { kind: "failed", why: `round ${k}: ${why}` } as const
       if (!deps.gamesctl.verifyRound) return { kind: "failed", why: `round ${k}: frozen bundle verification is unavailable` } as const
@@ -195,8 +201,8 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
         return { kind: "failed", why: `round ${k}: ${verified.failure.why}` } as const
       }
     }
-    const asked = yield* Effect.result(row?.spec.placement
-      ? Effect.succeed(row.spec)
+    const asked = yield* Effect.result(frozenSpec
+      ? Effect.succeed(frozenSpec)
       : deps.gamesctl.round(k, s.gamesPerPair, Math.round(s.thinkCapSec * 1000), why === "placement"))
     if (asked._tag === "Failure") {
       deps.board?.reset()
@@ -246,7 +252,7 @@ export const playRound = (deps: RoundDeps, k: number, why: PlanWhy, resume: bool
       createdAt = row.createdAt
       yield* store.updateRound(k, { state: "playing", boot: deps.boot, workers })
     } else if (row) {
-      if (row.spec.placement) return { kind: "failed", why: `round ${k}: the frozen placement rules or seed identity differ` } as const
+      if (c.arena === "v2" || row.spec.placement) return { kind: "failed", why: `round ${k}: the frozen ${row.spec.placement ? "placement" : "round"} rules or seed identity differ` } as const
       Log.info(`round ${k}: its bots, games per pair, time limit, deck lists or seeds changed since it started; it starts over`)
       createdAt = new Date().toISOString()
       yield* store.replaceRound(fresh(createdAt), todoRows())
