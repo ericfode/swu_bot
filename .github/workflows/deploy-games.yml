@@ -113,7 +113,9 @@ jobs:
           git -c 'http.https://github.com/.extraheader=' -c "http.https://github.com/.extraheader=$auth" submodule update --init --depth 1 forceteki \
             || git -c 'http.https://github.com/.extraheader=' -c "http.https://github.com/.extraheader=$auth" submodule update --init forceteki
       - if: steps.changed.outputs.image == 'true'
-        run: docker build -f Dockerfile.games -t swu-arena-games:check .
+        # PR runners retain their original read-only credential boundary. Check the full public-base recipe;
+        # the exact private pinned-runtime image is built separately in build-only mode by an authorized operator.
+        run: docker build -f Dockerfile.games.fresh -t swu-arena-games:check .
 
   deploy:
     needs: [test, test-server]
@@ -143,4 +145,4 @@ jobs:
         uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
       # the image is tagged with the commit, so a helper pulls exactly what the machine runs (bot/arena/HELPER.md)
       - if: env.FLY_API_TOKEN != ''
-        run: flyctl deploy --remote-only -c fly.games.toml --build-arg GIT_SHA=${{ github.sha }} --image-label ${{ github.sha }}
+        run: flyctl deploy --remote-only -c fly.games.toml --build-arg GIT_SHA=${{ github.sha }} --build-arg FORCETEKI_SHA="$(git rev-parse HEAD:forceteki)" --image-label ${{ github.sha }}

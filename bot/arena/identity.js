@@ -36,8 +36,17 @@ function comparisonContext() {
             if (override && actual !== override) throw new Error(`${file} override conflicts with the immutable image`);
             return actual;
         };
-        return contextFor({ build: readIdentity('BUILD_SHA', process.env.GAMES_BUILD), cards: readIdentity('CARDS_SHA', process.env.GAMES_CARDS) });
+        return imageContext({ root, build: readIdentity('BUILD_SHA', process.env.GAMES_BUILD), cards: readIdentity('CARDS_SHA', process.env.GAMES_CARDS) });
     } catch { return null; }
+}
+/** Actual controller provenance stays BUILD_SHA. Only a sealed immutable runtime can retain its engine lineage. */
+function imageContext({ root, arenaId: selected = id, build, cards }) {
+    if (selected === 'open') return null;
+    if (fs.existsSync(path.join(root, 'ENGINE_IDENTITY.json'))) {
+        try { build = require('./runtime-identity').engineBuild(root, build, cards); }
+        catch { return null; }
+    }
+    return contextFor({ arenaId: selected, build, cards });
 }
 /** actual first, trusted expected second. Unknown or mixed context always fails closed. */
 function contextProblem(actual, expected) {
@@ -68,5 +77,5 @@ function observationProblem(game, config) {
     const bundles = Object.fromEntries([...new Set([game.p1, game.p2])].map((n) => [n, config.bundles?.[n]]));
     return bundleProblem(game.bundles, bundles);
 }
-module.exports = { id, arenaId, stateRoot, ladderId, requiredProtocol, contextFor, comparisonContext, contextProblem, contextMatches,
+module.exports = { id, arenaId, stateRoot, ladderId, requiredProtocol, contextFor, imageContext, comparisonContext, contextProblem, contextMatches,
     bundleProblem, observationProblem, RUNNER_REVISION };

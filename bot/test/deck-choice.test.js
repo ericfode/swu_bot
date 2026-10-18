@@ -66,7 +66,7 @@ test('selection stays with the version across seats and leaves the other seat de
     const d = choice.withChoices(base, { 'a-v1': frozen, 'b-v1': null });
     choice.checkChoices(d, ['a-v1', 'b-v1']);
     const original = dealDecks(games, base.lists.length, 0, { by: 'seat' });
-    const selected = dealDecks(games, d.poolSize, 0, { by: 'seat', choices: d.choices });
+    const selected = choice.applyChoices(dealDecks(games, d.poolSize, 0, { by: 'seat' }), d.choices);
     for (const [n, g] of selected.entries()) for (const [seat, bot] of [g.p1, g.p2].entries()) {
         if (bot === 'a-v1') assert.equal(choice.digest(d.lists[g.decks[seat]]), frozen.sha256);
         else assert.equal(g.decks[seat], original[n].decks[seat]);
@@ -78,7 +78,7 @@ test('selection stays with the version across seats and leaves the other seat de
 test('runner rejects substituted selected decks before any bot or engine starts; hello uses actual job decks', async () => {
     const frozen = choice.validate(deck('custom', 'SOR_006'), lookups);
     const d = choice.withChoices(base, { 'a-v1': frozen });
-    const selected = dealDecks(games.slice(0, 2), d.poolSize, 0, { by: 'seat', choices: d.choices });
+    const selected = choice.applyChoices(dealDecks(games.slice(0, 2), d.poolSize, 0, { by: 'seat' }), d.choices);
     const job = { games: selected, decks: d.lists };
     assert.doesNotThrow(() => checkChosenDecks(job, { 'a-v1': frozen }));
     assert.throws(() => checkChosenDecks({ ...job, games: [{ ...selected[0], decks: [0, 1] }] }, { 'a-v1': frozen }), /deck/);

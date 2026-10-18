@@ -114,4 +114,9 @@ function checkChoices(decks, bots) {
         if (!bots.includes(n) || !Number.isSafeInteger(i) || i < 0 || i >= decks.lists.length) throw new Error('deck: choice does not name a scheduled version and valid list');
     }
 }
-module.exports = { SCHEMA, catalog, describe, selection, validate, binding, digest, prepareBundle, verifyRequested, versionChoice, withChoices, checkChoices };
+/** Controller policy overlays a frozen version choice on the unchanged historical dealer. */
+function applyChoices(schedule, choices) {
+    if (!choices || !Object.keys(choices).length) return schedule;
+    return schedule.map((g) => ({ ...g, decks: [choices[g.p1] ?? g.decks[0], choices[g.p2] ?? g.decks[1]] }));
+}
+module.exports = { SCHEMA, catalog, describe, selection, validate, binding, digest, prepareBundle, verifyRequested, versionChoice, withChoices, checkChoices, applyChoices };

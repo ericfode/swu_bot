@@ -1099,7 +1099,7 @@ function createWindow(opts = {}) {
             need(req.method === 'GET', 'bad_request', 'GET, or POST {disconnect: id}');
         }
         // the tools a connected app gets, from the server's own list, so the Build a bot page cannot drift from it
-        const tools = mcpTools.map((t) => ({ name: t.name, does: String(t.description).split(/(?<=\.)\s/)[0], readOnly: t.annotations?.readOnlyHint === true }));
+        const tools = mcpTools.map((t) => ({ name: t.name, does: String(t.description).split(/(?<=\.)\s/)[0], readOnly: t.annotations?.readOnlyHint === true, inputSchema: t.inputSchema }));
         return sendJson(res, 200, { result: { mcp: `${auth.publicUrl}/mcp`, apps: oauth.grantsOf(who.login), tools } }, req);
     }
 

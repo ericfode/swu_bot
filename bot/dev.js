@@ -557,7 +557,7 @@ function schedule(bot, opponents, games, seed, nLists, choices = {}) {
     const { gauntlet } = require('./ratings');
     const { dealDecks } = require('./decklists');
     const plain = gauntlet(opponents, [bot], games, seed);
-    return dealDecks(plain, nLists, seed, { by: 'seat', choices }).map((g) => ({ ...g, id: `${g.p1}-vs-${g.p2}-${g.seed}` }));
+    return require('./arena/deck-choice').applyChoices(dealDecks(plain, nLists, seed, { by: 'seat' }), choices).map((g) => ({ ...g, id: `${g.p1}-vs-${g.p2}-${g.seed}` }));
 }
 
 /** One play-seed job per seed and opponent, in seed order, each checked by play-seed's own checkJob. */

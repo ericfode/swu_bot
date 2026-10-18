@@ -41,6 +41,8 @@ test('hosted and REST discovery expose the same complete deck catalog and submit
     const discovery = f.value(await f.rpc('arena_decks'));
     assert.ok(discovery.decks.length > 10);
     assert.deepEqual((await f.request('/api/decks')).json.result, discovery);
+    const apps = (await f.request('/api/apps')).json.result;
+    assert.deepEqual(apps.tools.find((t) => t.name === 'arena_submit').inputSchema, submit.inputSchema, 'the authenticated onboarding catalog carries the actual MCP schema');
     const name = discovery.decks[0].name;
     assert.deepEqual(f.value(await f.rpc('arena_decks', { name })).deck, choices.selection(name));
     assert.equal(f.wakes(), 0, 'discovery is read only');
