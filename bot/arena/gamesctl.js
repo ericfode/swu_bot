@@ -557,6 +557,8 @@ function roundSpec(k, { games, capMs = null, bots: chosen, placement }) {
     if (ROUND_DECKS) {
         const d = roundDeckLists();
         decks = { file: d.file, sha256: d.sha256, names: d.names, deal: 'seat', skipped: d.skipped, lists: d.lists };
+        const choice = require('./deck-choice');
+        decks = choice.withChoices(decks, Object.fromEntries(bots.map((n) => [n, choice.versionChoice(n)])));
     }
     fs.mkdirSync(DIRS.bundles, { recursive: true, mode: 0o755 });
     if (!fs.lstatSync(DIRS.bundles).isDirectory()) {

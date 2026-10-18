@@ -179,6 +179,7 @@ function admit(job) {
     need(NAME.test(job.name ?? ''), 'name: 1-32 characters, lowercase letters, digits and _, starting with a letter');
     need(KINDS.includes(job.kind), `kind: one of ${KINDS.join(', ')}`);
     need(typeof job.note === 'string' && job.note.trim(), 'note: one line saying what this version changes');
+    try { require('./deck-choice').selection(job.deck); } catch (e) { throw new IntakeError(e.message); }
     const { builderName, ownsName } = require('./api');
     need(house || ownsName(job.owner, job.name), `the name "${job.name}" is not yours: use your builder name ${builderName(job.owner)}, or it with _ and a suffix`);
     const owner = house ? 'arena' : `github:${job.owner}`;
@@ -205,12 +206,13 @@ function packAndCheck(job, { work }) {
     need(arenaId !== 'v2' || !contextProblem(job.context, job.context), 'the current comparison context is unavailable');
     const { startCheck } = require('./api');
     const folder = pack(job, work);
+    const chosenDeck = require('./deck-choice').prepareBundle(folder, job.deck);
     const bundlePy = path.join(COMPILED, 'bundle.py');
     // every kind, Python packs too: what is entered must pass what play-seed and the round's packing will ask of it
     const ok = spawnSync('python3', ['-I', bundlePy, folder], { encoding: 'utf8', timeout: 60000, env: toolEnv() });
     need(ok.status === 0, `not a valid bundle (bot/compiled/README.md):\n${tail(ok.stderr || ok.stdout || ok.error?.message, work)}`);
     const before = bundleDigest(folder);
-    const handshake = startCheck(work, job.checkAs, require('./registry').WASM_BOT, job.name);
+    const handshake = startCheck(work, job.checkAs, require('./registry').WASM_BOT, job.name, chosenDeck?.list);
     const tar = spawnSync('python3', ['-I', bundlePy, 'tar', folder], { timeout: 60000, env: toolEnv(), maxBuffer: MAX_TAR_BYTES });
     need(tar.status === 0, `the bundle cannot be packed:\n${tail(String(tar.stderr ?? '') || tar.error?.message, work)}`);
     const sha256 = require('crypto').createHash('sha256').update(tar.stdout).digest('hex');
@@ -243,6 +245,7 @@ function enteredResult(job, before, expectedBundleSha256) {
     const home = require('./home');
     const version = `${job.name}-v${before}`;
     const meta = home.readJson(path.join(home.VERSIONS, version, 'SUBMISSION.json'), {});
+    require('./deck-choice').verifyRequested(path.join(home.VERSIONS, version, 'bundle'), job.deck);
     const bundleSha256 = bundleDigest(path.join(home.VERSIONS, version, 'bundle'));
     need(expectedBundleSha256 === undefined || bundleSha256 === expectedBundleSha256, SOURCE_DIGEST_MISMATCH);
     const status = compatibilityStatus(meta.compatibility, { bundleSha256, ...(arenaId === 'v2' ? { context: comparisonContext() ?? null } : {}) });
@@ -281,6 +284,7 @@ function enter(job, work, sha256, compatibility) {
     need(unpacked.status === 0, `the bundle did not unpack:\n${tail(unpacked.stderr || unpacked.error?.message, work)}`);
     const ok = spawnSync('python3', ['-I', bundlePy, folder], { encoding: 'utf8', timeout: 60000, env: toolEnv() });
     need(ok.status === 0, `not a valid bundle (bot/compiled/README.md):\n${tail(ok.stderr || ok.error?.message, work)}`);
+    require('./deck-choice').verifyRequested(folder, job.deck);
     const files = bundleFiles(folder);
     const token = process.env.ARENA_ADMIN_TOKEN; // a hosted arena (ARENA_AUTH=1) takes the admin token for this
     // the checker made the start check; nothing here runs a bot (a builder's starter v0 is not loaded either)

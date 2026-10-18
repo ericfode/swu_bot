@@ -200,7 +200,21 @@ different.
 
 ## Submitting
 
-- `arena_submit {kind, note, files}`, with `note` one line saying what changed. Your builder name is the default
+- Choose an optional intended deck with `arena_decks {}` (catalog names), then
+  `arena_decks {"name":"admiral-piett_jtl_blue"}` for the complete list. For example:
+  `arena_submit {"kind":"js","note":"Piett policy","files":{"bot.js":"..."},"deck":"admiral-piett_jtl_blue"}`.
+  You may instead pass a SWUDB main-deck object as `deck`:
+  `{metadata:{name:"my list"},leader:{id:"JTL_005"},base:{id:"JTL_020"},deck:[{id:"LAW_118",count:3},...]}`.
+  Supply the whole legal list, without sideboards. Intake checks known/implemented cards, leader/base types,
+  main-deck size and copy limits. Structurally invalid choices fail immediately; card legality is checked at intake.
+- Test the same choice with `npm run dev -- ../my-bot --owner <login> --deck admiral-piett_jtl_blue --games 0`,
+  or `--deck ../deck.json`. Then use `--games 4 --seed 4242 --jobs 1` for matches. The selected deck stays with
+  your bot across seat swaps; `hello.deck` and `hello.opponent` are the actual lists used to create that game.
+- The choice is frozen in `arena.json.arenaDeck` before the canonical bundle hash/check and retained in version metadata.
+  To change it, submit a new version. Ready WASM bundles may include this binding; a conflicting request is refused.
+  Custom lists receive a display suffix with the version name; their card IDs/counts do not change.
+  Omit `deck` to keep the existing tournament-pool deal. Existing submissions are not backfilled or re-rated.
+- `arena_submit {kind, note, files, deck?}`, with `note` one line saying what changed. Your builder name is the default
   competitor; pass `name` to keep a second bot of yours. That name must start with your builder name and `_`, e.g.
   `ana_fast` for builder `ana`.
 - `arena_my_submissions` shows each submission. It is pending, then checking, then either accepted with the version

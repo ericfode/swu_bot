@@ -103,7 +103,8 @@ const pidns = (() => {
 /** ladder.js config.decks for a round's lists: the file, its sha256, the lists dealt, by seat, and those left out. */
 export const deckRule = (decks: RoundSpec["decks"]) =>
   decks
-    ? { file: decks.file, sha256: decks.sha256, names: [...decks.names], deal: "seat", ...(decks.skipped.length ? { skipped: [...decks.skipped] } : {}) }
+    ? { file: decks.file, sha256: decks.sha256, names: [...decks.names], deal: "seat", ...(decks.skipped.length ? { skipped: [...decks.skipped] } : {}),
+      ...(decks.choices ? { choices: { ...decks.choices }, poolSize: decks.poolSize, lists: structuredClone(decks.lists) } : {}) }
     : null
 
 /**

@@ -34,6 +34,7 @@ import { parseArgs } from "node:util"
 import { gunzipSync } from "node:zlib"
 import { Cause, Effect, Option } from "effect"
 import { readConfig } from "./Config.ts"
+import { checkDecks as checkRoundDecks } from "./Gamesctl.ts"
 import type { ComparisonContext } from "./Comparison.ts"
 import { bundleMapProblem, contextProblem } from "./Comparison.ts"
 import { playLocal, warmBundles } from "./Executor.ts"
@@ -130,7 +131,8 @@ export interface RecordedRound {
   readonly capMs: number
   readonly hangMs: number
   readonly key: string
-  readonly decks: { readonly file: string; readonly sha256: string; readonly names: ReadonlyArray<string>; readonly skipped: ReadonlyArray<string> } | null
+  readonly decks: { readonly file: string; readonly sha256: string; readonly names: ReadonlyArray<string>; readonly skipped: ReadonlyArray<string>;
+    readonly choices?: Readonly<Record<string, number>>; readonly poolSize?: number; readonly lists?: ReadonlyArray<DeckList> } | null
   /** the round's game entries by id (ladder.json games) */
   readonly games: ReadonlyMap<string, Record<string, any>>
 }
@@ -189,6 +191,12 @@ export const readRound = (doc: unknown): RecordedRound => {
     const skipped = d.skipped ?? []
     if (!Array.isArray(skipped) || !skipped.every((n: unknown) => typeof n === "string")) no("its skipped decks are not a list")
     decks = { file: d.file, sha256: d.sha256, names: d.names, skipped }
+    if (d.choices !== undefined) {
+      let frozen: RoundDecks | null
+      try { frozen = checkRoundDecks({ ...d, skipped }) } catch { return no("invalid frozen deck choices") }
+      if (!frozen?.choices || Object.keys(frozen.choices).some((n) => !c.bots.includes(n))) return no("a deck choice names another version")
+      decks = { ...decks, choices: frozen.choices, poolSize: frozen.poolSize!, lists: frozen.lists }
+    }
   }
   const games = new Map<string, Record<string, any>>()
   for (const g of Array.isArray(doc.games) ? doc.games : []) {
@@ -225,10 +233,15 @@ export const roundDecks = (
   const unknown = recorded.skipped.filter((n) => !all.includes(n))
   if (unknown.length) throw new Refused(`${recorded.file} has no list ${unknown.join(", ")} to leave out`)
   const lists = loaded.decks.filter((d) => !recorded.skipped.includes(d.metadata.name))
-  if (JSON.stringify(lists.map((d) => d.metadata.name)) !== JSON.stringify(recorded.names)) {
+  const defaultNames = recorded.choices ? recorded.names.slice(0, recorded.poolSize) : recorded.names
+  if (JSON.stringify(lists.map((d) => d.metadata.name)) !== JSON.stringify(defaultNames)) {
     throw new Refused(`${recorded.file} less the skipped lists is not the round's ${recorded.names.length} lists`)
   }
-  return { file: recorded.file, sha256: recorded.sha256, names: recorded.names, deal: "seat", skipped: recorded.skipped, lists }
+  if (recorded.choices && (!recorded.lists || JSON.stringify(recorded.lists.slice(0, recorded.poolSize)) !== JSON.stringify(lists))) {
+    throw new Refused("the recorded default deck pool differs from its validated catalog")
+  }
+  return { file: recorded.file, sha256: recorded.sha256, names: recorded.names, deal: "seat", skipped: recorded.skipped,
+    lists: recorded.lists ?? lists, ...(recorded.choices ? { choices: recorded.choices, poolSize: recorded.poolSize } : {}) }
 }
 
 /** The versions' tars: the names file, every lineup version in it, each tar in the folder with that sha256. */

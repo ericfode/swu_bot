@@ -111,6 +111,7 @@ rated rounds' deck lists by seat, under the rated games' time rules. It never se
   --all          play every game; without it the run stops once ${SAME_FAULT} of the bot's games went wrong the same way
   --out DIR      the run folder (default <folder>/.runs/<time>-s<seed>)
   --again FILE   send one game's messages (a run's transcript) to the folder as it is now, and compare its replies
+  --deck DECK    own catalog name (arena_decks), or ./deck.json in SWUDB format; fixed in both seats
   --view RUN     show a run's replays in the browser, on 127.0.0.1 (--port P picks the port)
 Exit 0: every game ended, none lost by the bot's own fault; 1: some were, a game had no result (such as one that
 reached the step cap), or one could not be played; 2: usage, or no sandbox; 3: the arena would refuse the bot.
@@ -128,9 +129,16 @@ const CWD = process.env.npm_lifecycle_event === 'dev' && process.env.INIT_CWD ? 
 const absolute = (p) => path.resolve(CWD, p);
 
 /** The command line as options; throws Usage. */
+function readDeckOption(value) {
+    try {
+        const input = /(?:\.json$|^[./])/.test(value) ? JSON.parse(fs.readFileSync(absolute(value), 'utf8')) : value;
+        return require('./arena/deck-choice').selection(input);
+    } catch (e) { usage(`--deck: ${e.message}`); }
+}
+
 function parseArgs(argv) {
     const o = { vs: 'heuristic,rush', games: '10', 'cap-sec': '60' };
-    const takes = new Set(['entry', 'vs', 'games', 'seed', 'cap-sec', 'jobs', 'out', 'name', 'owner', 'again', 'view', 'port']);
+    const takes = new Set(['entry', 'vs', 'games', 'seed', 'cap-sec', 'jobs', 'out', 'name', 'owner', 'again', 'view', 'port', 'deck']);
     const flags = new Set(['house', 'all']);
     const given = new Set();
     const rest = [];
@@ -191,7 +199,7 @@ function parseArgs(argv) {
         usage('--owner: a GitHub login (letters, digits and single hyphens)');
     }
     if (o.again !== undefined) {
-        const extra = ['vs', 'games', 'seed', 'jobs', 'all'].find((k) => given.has(k));
+        const extra = ['vs', 'games', 'seed', 'jobs', 'all', 'deck'].find((k) => given.has(k));
         if (extra) {
             usage(`--again plays no games: no --${extra}`);
         }
@@ -202,7 +210,8 @@ function parseArgs(argv) {
         games: games + (games % 2), seed: o.seed === undefined ? null : int('seed', 0, 2 ** 31), capSec: int('cap-sec', 10, 600),
         jobs: o.jobs === undefined ? Math.max(1, Math.floor((os.cpus().length - 1) / 2)) : int('jobs', 1, 32),
         out: o.out === undefined ? null : absolute(o.out), name: o.name ?? null, owner, house: Boolean(o.house), all: Boolean(o.all),
-        again: o.again === undefined ? null : absolute(o.again)
+        again: o.again === undefined ? null : absolute(o.again),
+        ...(o.deck !== undefined ? { deck: readDeckOption(o.deck) } : {})
     };
 }
 
@@ -544,11 +553,11 @@ async function packAndCheck(bot, run) {
  * The games: ratings.js gauntlet (each opponent against the bot, the same seeds for every opponent, every seed from
  * both seats), dealt by seat from `lists` (decklists.js dealDecks), with ladder.js game ids.
  */
-function schedule(bot, opponents, games, seed, nLists) {
+function schedule(bot, opponents, games, seed, nLists, choices = {}) {
     const { gauntlet } = require('./ratings');
     const { dealDecks } = require('./decklists');
     const plain = gauntlet(opponents, [bot], games, seed);
-    return dealDecks(plain, nLists, seed, { by: 'seat' }).map((g) => ({ ...g, id: `${g.p1}-vs-${g.p2}-${g.seed}` }));
+    return dealDecks(plain, nLists, seed, { by: 'seat', choices }).map((g) => ({ ...g, id: `${g.p1}-vs-${g.p2}-${g.seed}` }));
 }
 
 /** One play-seed job per seed and opponent, in seed order, each checked by play-seed's own checkJob. */
@@ -801,6 +810,7 @@ async function main(argv) {
         }
         try {
             b.doc = houseDoc(b.name, b.folder, { note: 'a dev harness run', entry: b.entry });
+            if (b === bot && o.deck !== undefined) b.doc.deck = o.deck;
         } catch (e) {
             // what the intake would say about the folder itself
             return refuse(b, 'the arena', e.message);
@@ -849,10 +859,7 @@ async function main(argv) {
 
     // 1. pack and check (the checkers run while this process loads the deck lists, which takes the engine a few seconds)
     const checking = new Map();
-    for (const b of packed) {
-        const same = packed.find((x) => x !== b && checking.has(x) && x.folder === b.folder && x.entry === b.entry && x.owner === b.owner);
-        checking.set(b, same ? checking.get(same) : packAndCheck(b, run));
-    }
+    for (const b of packed) checking.set(b, packAndCheck(b, run));
     let decks = null;
     if (o.games > 0 && !o.again) {
         decks = require('./arena/referee').roundDeckLists();
@@ -906,17 +913,21 @@ async function main(argv) {
     // 2. the deal
     const versions = (x) => (x.resident ? x.name : x.version);
     const opp = opponents.map(versions);
-    const games = schedule(bot.version, opp, o.games, seed, decks.lists.length);
+    const choice = require('./arena/deck-choice');
+    decks = choice.withChoices(decks, Object.fromEntries(packed.filter((b) => checks.get(b)?.ok).map((b) =>
+        [b.version, choice.verifyRequested(path.join(run, 'check', b.name, 'bundle'), b === bot ? o.deck : undefined)])));
+    const games = schedule(bot.version, opp, o.games, seed, decks.poolSize ?? decks.lists.length, decks.choices);
     const bots = Object.fromEntries([bot, ...opponents].map((x) => [versions(x), x.resident ? { kind: 'resident' } : { kind: 'wasm', bundle: checks.get(x).sha256 }]));
     const bundles = path.join(run, 'bundles');
     const jobs = jobsFor(games, bot.version, { runKey, limits, bots, lists: decks.lists, bundles });
     const seeds = [...new Set(games.map((g) => g.seed))];
     const { deckPairs } = require('./decklists');
-    const pairs = deckPairs(decks.lists.length);
+    const pairs = deckPairs(decks.poolSize ?? decks.lists.length);
     doc.status = 'running';
     doc.seeds = { first: seeds[0], last: seeds.at(-1), gamesPerOpponent: o.games, random: o.seed === null };
     doc.decks = {
         file: decks.file, sha256: decks.sha256, names: decks.names, skipped: decks.skipped, deal: 'seat',
+        ...(decks.choices ? { choices: decks.choices, poolSize: decks.poolSize, lists: decks.lists } : {}),
         pairs: seeds.map((s) => {
             const g = games.find((x) => x.seed === s);
             return { seed: s, pair: ((s % pairs.length) + pairs.length) % pairs.length, p1: decks.names[g.decks[0]], p2: decks.names[g.decks[1]] };
@@ -1160,7 +1171,7 @@ function finish(doc, { bot, packed, opponents, versions, games, results, cut, ca
     }));
     const config = {
         bots: names, gamesPerPair: o.games, firstSeed: doc.seeds.first, maxSteps: limits.maxSteps, workers: o.jobs, capMs, hangMs: limits.hangMs, keyId, record: true,
-        format: 'gauntlet', vs: [bot.version], decks: { file: decks.file, sha256: decks.sha256, names: decks.names, deal: 'seat', skipped: decks.skipped }
+        format: 'gauntlet', vs: [bot.version], decks: { file: decks.file, sha256: decks.sha256, names: decks.names, deal: 'seat', skipped: decks.skipped, ...(decks.choices ? { choices: decks.choices, poolSize: decks.poolSize, lists: decks.lists } : {}) }
     };
     const ladderGames = played.map((g) => ({ ...entry(g), think: results.get(g.id).think ?? null, botStats: results.get(g.id).botStats ?? null }));
     fs.writeFileSync(path.join(run, 'ladder.json'), JSON.stringify(summarize({

@@ -62,7 +62,7 @@ export const checkPlan = (doc: unknown): Plan => {
   throw new GamesctlFailed("plan", "plan printed something other than a round")
 }
 
-const checkDecks = (d: unknown): RoundDecks | null => {
+export const checkDecks = (d: unknown): RoundDecks | null => {
   if (d === null) return null
   if (!plain(d) || typeof d.file !== "string" || typeof d.sha256 !== "string" || !HEX64.test(d.sha256) ||
     !Array.isArray(d.names) || !d.names.every((n) => typeof n === "string") || d.deal !== "seat" ||
@@ -70,9 +70,13 @@ const checkDecks = (d: unknown): RoundDecks | null => {
     !d.lists.every((l, i) => plain(l) && plain(l.metadata) && l.metadata.name === (d.names as Array<string>)[i])) {
     throw new GamesctlFailed("round", "its deck lists are not what a round deals")
   }
+  const listCount = d.lists.length
+  if (d.choices !== undefined && (!plain(d.choices) || !Object.values(d.choices).every((i) => count(i) && i < listCount) ||
+    !count(d.poolSize) || d.poolSize < 2 || d.poolSize > d.lists.length)) throw new GamesctlFailed("round", "invalid selected deck indices or default pool")
   return {
     file: d.file, sha256: d.sha256, names: d.names as Array<string>, deal: "seat",
-    skipped: (d.skipped as Array<unknown>).map(String), lists: d.lists as Array<DeckList>
+    skipped: (d.skipped as Array<unknown>).map(String), lists: d.lists as Array<DeckList>,
+    ...(d.choices !== undefined ? { choices: d.choices as Record<string, number>, poolSize: d.poolSize as number } : {})
   }
 }
 
@@ -110,6 +114,8 @@ export const checkRound = (k: number, doc: unknown, requiredProtocol?: 2, contex
       placement = { version: p.version, ref: p.ref, adaptive: true, excludedSeeds: [...p.excludedSeeds] }
     } else placement = { version: p.version, ref: p.ref }
   }
+  const decks = checkDecks(doc.decks ?? null)
+  if (decks?.choices && Object.keys(decks.choices).some((n) => !(doc.bots as Array<string>).includes(n))) return no("a deck choice names a version outside this round")
   return {
     ...(doc.requiredProtocol === 2 ? { requiredProtocol: 2 as const } : {}),
     ...(doc.context ? { context: doc.context as unknown as ComparisonContext } : {}),
@@ -117,7 +123,7 @@ export const checkRound = (k: number, doc: unknown, requiredProtocol?: 2, contex
     bots: doc.bots as Array<string>,
     gamesPerPair: doc.gamesPerPair,
     capMs: doc.capMs,
-    decks: checkDecks(doc.decks ?? null),
+    decks,
     bundles: Object.fromEntries((doc.bots as Array<string>).map((b) => [b, String((doc.bundles as any)[b])])),
     botInfo: doc.botInfo as Record<string, Record<string, unknown>>,
     ...(placement ? { placement } : {})

@@ -15,7 +15,7 @@ export interface ArenaJs {
     schedule: ReadonlyArray<{ seed: number; p1: string; p2: string }>,
     nDecks: number,
     firstSeed: number,
-    opts: { by: "bot" | "seat" }
+    opts: { by: "bot" | "seat"; choices?: Readonly<Record<string, number>> }
   ) => Array<{ seed: number; p1: string; p2: string; decks: [number, number] }>
   /** rng.js: the seed's game key from the run key */
   readonly gameKey: (key: string, seed: number) => string

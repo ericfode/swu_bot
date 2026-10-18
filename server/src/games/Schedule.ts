@@ -49,7 +49,7 @@ export const evenGames = (perPair: number) => perPair + (perPair % 2)
  */
 export const buildSchedule = (js: ArenaJs, spec: Pick<RoundSpec, "bots" | "gamesPerPair" | "decks" | "placement">, firstSeed: number): ReadonlyArray<ScheduledGame> => {
   const plain = js.roundRobin(spec.bots, spec.gamesPerPair, firstSeed)
-  const dealt = spec.decks ? js.dealDecks(plain, spec.decks.lists.length, firstSeed, { by: "seat" }) : plain
+  const dealt = spec.decks ? js.dealDecks(plain, spec.decks.poolSize ?? spec.decks.lists.length, firstSeed, { by: "seat", ...(spec.decks.choices ? { choices: spec.decks.choices } : {}) }) : plain
   return dealt.filter((g) => !spec.placement || g.p1 === spec.placement.version || g.p2 === spec.placement.version)
     .map((s: { seed: number; p1: string; p2: string; decks?: [number, number] }) => ({
     id: gameId(s),

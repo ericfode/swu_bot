@@ -14,6 +14,10 @@ function localHelp({ owner = 'your-login', competitor } = {}) {
         candidate: {
             folder: '../my-bot holds only the files to submit: bot.py, bot.js, or a ready WASM bundle with arena.json. Replace this path with your bot folder.',
             buildAndCheck: `${run} --games 0`,
+            deck: 'arena_decks {} lists catalog names; arena_decks {"name":"<name>"} returns a complete SWUDB list. arena_submit accepts optional deck as that name or a SWUDB main-deck object. Omission uses the existing tournament pool.',
+            selectedDeckCheck: `${run} --deck <catalog-name> --games 0`,
+            customDeckTest: `${run} --deck ../deck.json --games 4 --seed 4242 --jobs 1`,
+            deckIdentity: 'The checker validates leader/base, known implemented cards, main-deck size and copy limits. No sideboards. The selected deck is bound inside arena.json before the bundle hash and kept with this version in both seats, including hello.deck. Changing it requires a new submission/version. A custom display name may include the immutable version; card IDs/counts stay fixed. Existing admissions keep their original default.',
             checkMeaning: 'Builds/packages and executes the candidate handshake in the established sandbox; no matches. Run only when you intend to test that candidate.',
             nativeWasmBuild: 'For a Rust WASI source project: rustup target add wasm32-wasip1; cargo build --release --target wasm32-wasip1. Copy the resulting .wasm into a bundle with arena.json; validate it with python3 -I bot/compiled/bundle.py <bundle-folder>. JS and Python are packaged by the harness.'
         },

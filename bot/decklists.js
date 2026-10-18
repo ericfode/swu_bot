@@ -193,7 +193,7 @@ function deckPairs(n) {
  * by: 'seat' deals by seat (see the header): seed s plays pair s mod P whatever firstSeed is, p1 gets the pair's first
  * deck on even passes and its second on odd ones, in every game of the seed.
  */
-function dealDecks(schedule, nDecks, firstSeed = 1, { by = 'bot' } = {}) {
+function dealDecks(schedule, nDecks, firstSeed = 1, { by = 'bot', choices = {} } = {}) {
     if (nDecks < 2) {
         throw new Error('dealDecks needs at least 2 decks');
     }
@@ -202,10 +202,11 @@ function dealDecks(schedule, nDecks, firstSeed = 1, { by = 'bot' } = {}) {
     }
     const pairs = deckPairs(nDecks);
     const P = pairs.length;
+    const chosen = (g, decks) => ({ ...g, decks: [choices[g.p1] ?? decks[0], choices[g.p2] ?? decks[1]] });
     if (by === 'seat') {
         return schedule.map((g) => {
             const [i, j] = pairs[((g.seed % P) + P) % P];
-            return { ...g, decks: Math.floor(g.seed / P) % 2 !== 0 ? [j, i] : [i, j] };
+            return chosen(g, Math.floor(g.seed / P) % 2 !== 0 ? [j, i] : [i, j]);
         });
     }
     const owner = new Map();
@@ -218,7 +219,7 @@ function dealDecks(schedule, nDecks, firstSeed = 1, { by = 'bot' } = {}) {
             owner.set(k, { [g.p1]: swap ? j : i, [g.p2]: swap ? i : j });
         }
         const own = owner.get(k);
-        return { ...g, decks: [own[g.p1], own[g.p2]] };
+        return chosen(g, [own[g.p1], own[g.p2]]);
     });
 }
 
