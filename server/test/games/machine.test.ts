@@ -94,6 +94,7 @@ const fakeApp = () => {
   for (const f of ["ratings.js", "decklists.js", "rng.js", "ladder-report.js", "remote-lane.js"]) {
     copyFileSync(path.join(REPO, "bot", f), path.join(app, "bot", f))
   }
+  copyFileSync(path.join(REPO, "bot", "arena", "deck-choice.js"), path.join(app, "bot", "arena", "deck-choice.js"))
   return app
 }
 
