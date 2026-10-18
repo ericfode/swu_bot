@@ -7,8 +7,10 @@ executed seat. The discovery envelope intentionally remains `hello.v: 1`, advert
 Changing a label or copying a manifest never establishes compatibility.
 
 Admission and execution evidence binds the exact canonical bundle SHA-256 to a comparison context. That context
-includes the immutable image's `BUILD_SHA` and `CARDS_SHA` through a conservative engine fingerprint, and the runner
-revision. Results require their own seat negotiation, context and bundle evidence before they affect ratings.
+includes an immutable engine build, `CARDS_SHA` and runner revision. Normally the engine build is `BUILD_SHA`.
+A sealed compatible controller image may retain its exact inherited engine build as described below; `BUILD_SHA`
+still records the actual new controller and remains the helper/checker provenance. Results require their own seat
+negotiation, context and bundle evidence before they affect ratings.
 Placement reservations, stored-round resumes, replays and opponent downloads check the same boundary. A stored
 placement with stale or missing evidence is refused without resetting its rows. Cycle scheduling remains the default;
 the optional immediate placement mode uses only compatible observations.
@@ -23,8 +25,8 @@ The report records rejected and blocked entries. Linux root, the existing arena 
 identity are required; there is no unisolated fallback. A Mac or missing toolchain yields a blocker and an empty arena.
 The window's authenticated, read-only `/api/arenas/open/...` routes retain access to the old documents and replays.
 
-Every games image build changes the conservative context, including builds that only change unrelated application
-code. Provisioning deliberately refuses to reuse an occupied v2 namespace with a different context. Before such an
+Without a verified engine lineage, every games image build changes the conservative context. Provisioning
+deliberately refuses to reuse an occupied v2 namespace with a different context. Before such an
 upgrade, stop the games controller and window writes, take a consistent snapshot of both existing volumes, and archive
 each complete `arenas/v2` directory under a name containing its saved context fingerprint. Preserve the archived
 `ARENA.json`, roster, admissions, database, results and replays together; keep an immutable archive manifest identifying
@@ -34,6 +36,30 @@ through `provision.js --source-home <archive>/arena --apply`. Start the window a
 namespaces are selected, publish fresh status, and confirm the active context and admitted hashes. Archived evidence
 remains readable in the volume snapshots; the online historical route above exposes the original open arena only.
 Do not edit a saved context, reuse an old controller database, or restamp old proof to make an upgrade start.
+
+### Compatible controller releases
+
+The current `Dockerfile.games` inherits the exact deployed image digest listed in
+`bot/arena/compatible-runtime.json`. It keeps that image's engine binaries, cards, Node/Python/Wasmtime,
+toolchain and dependency packages. It validates the complete historical source fingerprint, then permits only
+the exact reviewed controller adapters in the transition manifest to differ. All other historical components,
+including the original deck normalizer/dealer, are mandatory unchanged core. Unknown edits, additions, removals,
+dependency changes, card changes and a different forceteki pin stop the build. Deck selection is a controller
+overlay on the unchanged dealer; the per-game lists still enter the same match/protocol engine.
+
+The build seals `ENGINE_IDENTITY.json` into the image and verifies it again before the container starts.
+JS admission and TS config derive the same original engine context only when this immutable proof matches the
+actual controller build, cards and reviewed source. There is no environment alias or mutable-volume override.
+Existing `ARENA.json`, admissions, game results, standings and replays remain byte-for-byte unchanged; no historical
+context is relabeled. Helpers still must match the new actual `BUILD_SHA` and image, and new checks record that build.
+
+The PR image job checks the full fresh-image recipe with its existing read-only credentials. An authorized
+operator must also build the exact compatible image on the established Fly builder with `--build-only --push`
+and the existing app credential; this creates no production deployment and exposes no deploy credential to PR code. For a coupled rollout, deploy games first, verify full runtime proof and
+preservation hashes, then deploy the window and verify its authenticated MCP catalog and safe v2 deck fixtures.
+Keep immediate scheduling enabled and do not enqueue old admissions. A real engine/runtime change requires the
+fresh-image/generation procedure above (`Dockerfile.games.fresh` retains the full build); editing the transition
+manifest is not evidence that incompatible historical games became comparable.
 
 Invited people (builders) write Star Wars Unlimited bots on their own computers and submit them to the arena window.
 The games machine packs each bot into a WebAssembly bundle, rates it in rounds against the other builders' bots and

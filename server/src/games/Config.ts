@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { isIP } from "node:net"
 import path from "node:path"
 import type { ComparisonContext } from "./Comparison.ts"
-import { contextFor } from "./Comparison.ts"
+import { imageContext } from "./Comparison.ts"
 
 export type Role = "games" | "helper"
 export type ArenaId = "open" | "v2"
@@ -224,7 +224,7 @@ export const readConfig = (env: NodeJS.ProcessEnv = process.env, timing: Timing 
     helperImage: env.GAMES_HELPER_IMAGE || "registry.fly.io/swu-arena-games",
     build,
     cards,
-    context: contextFor({ arenaId: arena, build, cards }),
+    context: imageContext({ root: app, arenaId: arena, build, cards }),
     helperUrl,
     helperSlots,
     arenaUser: env.ARENA_USER || "arena",

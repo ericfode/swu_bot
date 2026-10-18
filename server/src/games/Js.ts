@@ -42,12 +42,13 @@ export const loadArenaJs = (app: string): ArenaJs => {
   const require = createRequire(path.join(app, "bot", "package.json"))
   const ratings = require(path.join(app, "bot", "ratings.js"))
   const decklists = require(path.join(app, "bot", "decklists.js"))
+  const deckChoice = require(path.join(app, "bot", "arena", "deck-choice.js"))
   const rng = require(path.join(app, "bot", "rng.js"))
   const report = require(path.join(app, "bot", "ladder-report.js"))
   const lane = require(path.join(app, "bot", "remote-lane.js"))
   return {
     roundRobin: ratings.roundRobin,
-    dealDecks: decklists.dealDecks,
+    dealDecks: (schedule, n, first, opts) => deckChoice.applyChoices(decklists.dealDecks(schedule, n, first, { by: opts.by }), opts.choices),
     gameKey: rng.gameKey,
     summarize: report.summarize,
     checkDone: lane.checkDone

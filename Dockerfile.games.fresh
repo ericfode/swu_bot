@@ -1,0 +1,86 @@
+# The games machine: what the Fly app swu-arena-games runs (fly.games.toml). It takes the bots people submit on the
+# window (swu-arena.fly.dev), plays them against each other and the arena's own bots (also submitted, as resident
+# entries: bot/arena/README.md), and sends the results back to the window. It builds no bot of its own. The arena
+# server's games role runs it (server/src/main-games.ts, server/README.md "The games machine"): it plays every game with
+# bot/arena/play-seed.js and calls Node's bot/arena/gamesctl.js for the rest of the arena's work. Built from the repo,
+# forceteki submodule included, by .github/workflows/deploy-games.yml on Fly's builders (never from a thread's
+# container). The build context is filtered by Dockerfile.games.dockerignore.
+# No stage installs system packages: each takes what it needs from an official image (node, python).
+# The Rust simulator that serves Rust simulations (Kessel, "simEngine": "rust" in spec/protocol.md) comes prebuilt from
+# vendor/kessel (vendor/README.md), so no stage builds it.
+
+# the engine: forceteki built at the commit this repo pins, its card data fetched, only its runtime packages kept
+FROM node:22-bookworm AS engine
+WORKDIR /src/forceteki
+COPY forceteki/package.json forceteki/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY forceteki/ ./
+# tsc needs more than Node's default heap: it ran out at about 2 GB on Fly's builder (README.md, "memory")
+RUN export NODE_OPTIONS=--max-old-space-size=4096 && npm run get-cards && npm run build \
+ && npm prune --omit=dev --no-audit --no-fund
+
+# the Python package bot/compiled pins (toolchain.json): wasmtime runs the bundles
+FROM python:3.12-slim-bookworm AS pydeps
+COPY bot/compiled/toolchain.json /toolchain.json
+RUN pip install --no-cache-dir --target /opt/py "wasmtime==$(python3 -c "import json; print(json.load(open('/toolchain.json'))['python']['wasmtime'])")"
+
+# the tools the intake packs submissions with: Javy and CPython for WASI (pinned in toolchain.json, checked by sha256)
+FROM python:3.12-slim-bookworm AS tools
+WORKDIR /src
+COPY bot/compiled bot/compiled
+RUN python3 bot/compiled/build.py --tools && rm -rf build/compiled/.tools/downloads
+
+# the arena server (server/): its runtime packages only, from its lockfile. Node runs the TypeScript as it is (type
+# stripping), so there is nothing to build; TypeScript itself is a dev package, checked in CI. The final image has no
+# npm, hence this stage. The packages are plain JavaScript (node:sqlite is Node's own), so the files work on any CPU.
+FROM node:22-bookworm-slim AS server
+WORKDIR /src/server
+COPY server/package.json server/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+COPY server/src src
+
+# python3 runs bundles under wasmtime (bot/compiled/run.py); bash, unshare and setpriv run isolate.sh; the bots and the
+# intake's checker run as the user arena, and on a helper slot k plays as arena<k> (1 to 16, GAMES_HELPER_SLOTS' most),
+# so what one play leaves running is killed without stopping another slot's
+FROM python:3.12-slim-bookworm
+COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=pydeps /opt/py /usr/local/lib/python3.12/site-packages
+RUN for u in arena $(seq -f 'arena%g' 1 16); do \
+      useradd --system --user-group --no-create-home --home-dir /data/home --shell /usr/sbin/nologin "$u" || exit 1; \
+    done
+# NODE_ENV=production is for the server and the build steps below: the server builds each child's environment from
+# nothing, and the games themselves (play-seed) get no NODE_ENV, as every hosted game did (the engine's text depends
+# on it)
+ENV NODE_ENV=production GAMES_DATA=/data PORT=8080
+WORKDIR /app
+COPY package.json ./
+COPY bot bot
+# Kessel's adapter and its WebAssembly package for Node (bot/sims/rust-sims.js loads them); without them a bot that
+# asks for Rust simulations silently gets forceteki ones
+COPY vendor/kessel vendor/kessel
+# the JEPA bot in JavaScript and its models (bot/table/jepa.js): the play page's bot, packed for the browser below
+COPY vendor/jepa vendor/jepa
+COPY --from=engine /src/forceteki/package.json forceteki/package.json
+COPY --from=engine /src/forceteki/build forceteki/build
+COPY --from=engine /src/forceteki/node_modules forceteki/node_modules
+COPY --from=engine /src/forceteki/test/json forceteki/test/json
+COPY --from=tools /src/build/compiled build/compiled
+COPY --from=server /src/server server
+# The Elixir coordinator's entry point, kept for one release: a helper.sh from before the TypeScript server runs
+# `docker run ... /app/coord/bin/coord start`, and this starts the same server (COORD_ROLE says which role)
+RUN mkdir -p /app/coord/bin \
+ && printf '%s\n' '#!/bin/sh' 'exec /usr/local/bin/node --disable-warning=ExperimentalWarning /app/server/src/main-games.ts "$@"' > /app/coord/bin/coord \
+ && chmod 755 /app/coord/bin/coord
+# the server starts here: Node strips its types, its packages resolve, node:sqlite (games.db) loads
+RUN cd /app/server && node --disable-warning=ExperimentalWarning --input-type=module -e 'await import("node:sqlite"); await import("@effect/platform-node"); await import("@effect/sql-sqlite-node"); await import("./src/games/Config.ts"); await import("./src/games/Store.ts")'
+# What a helper must match to play this machine's games (bot/arena/HELPER.md): the commit the image was built from
+# (deploy-games.yml passes it) and a hash of the card data fetched above. Last, so a new commit rebuilds only this.
+ARG GIT_SHA=unknown
+RUN printf '%s\n' "$GIT_SHA" > /app/BUILD_SHA \
+ && (cd /app/forceteki/test/json && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1) > /app/CARDS_SHA
+# The browser swarm's files (bot/swarm, spec/executor.md), made from this image as it is so they carry its BUILD_SHA
+# and CARDS_SHA: the engine and bots as one pack, Python's interpreter, the tab's workers (the play page's and the
+# open tables' too). The window serves them through the helper API (GET /v1/swarm/<file>).
+RUN node bot/swarm/pack.js --root /app --out /app/build/swarm && node bot/swarm/build.js --out /app/build/swarm
+EXPOSE 8080
+CMD ["node", "--disable-warning=ExperimentalWarning", "/app/server/src/main-games.ts"]

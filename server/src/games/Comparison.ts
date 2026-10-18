@@ -12,9 +12,11 @@ export interface ComparisonContext {
 
 const identity = createRequire(import.meta.url)("../../../bot/arena/identity.js") as {
   contextFor: (o: { arenaId: string; build: string; cards: string }) => ComparisonContext | null
+  imageContext: (o: { root: string; arenaId: string; build: string; cards: string }) => ComparisonContext | null
   contextProblem: (actual: unknown, expected: unknown) => string | null
 }
 export const contextFor = identity.contextFor
+export const imageContext = identity.imageContext
 export const contextProblem = identity.contextProblem
 const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x)
 const HEX = /^[0-9a-f]{64}$/

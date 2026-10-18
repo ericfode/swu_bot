@@ -93,8 +93,11 @@ The helper 0 when stopped, 1 when its token is refused or its setup is broken, 3
 Every stored v2 round, including an ordinary cycle, resumes its original lineup, bundle digests, decks and time rules.
 A bot admitted while it is interrupted enters a later round. Resume verifies the frozen archives, current admissions,
 context, completed results and replay evidence before changing rows; stale or conflicting evidence is refused without
-resetting the round. Worker concurrency can still change. A new image changes the BUILD_SHA comparison context, so
-this guarantee does not permit reusing a previous image's evidence across the documented context rotation.
+resetting the round. Worker concurrency can still change. A new image normally changes the comparison context.
+The sealed compatible-controller build can retain the same exact inherited engine/card runtime after verifying
+every preserved source component and reviewed adapter; actual controller/helper provenance remains the new BUILD_SHA.
+See `bot/arena/README.md`, "Compatible controller releases". Without that proof, the documented context rotation is
+required and old evidence cannot be reused across the new context.
 
 ### Immediate placement (optional)
 
